@@ -48,6 +48,9 @@ SOFTWARE.
 
 #if (defined(__clang__) && __clang_major__ >= 14) || (defined(__GNUC__) && __GNUC__ >= 14 && __BITINT_MAXWIDTH__ && __BITINT_MAXWIDTH__ >= 128)
 typedef unsigned _BitInt(128) u128;
+#elif defined(_MSC_VER)
+/* MSVC has no 128-bit integer type: src/compat/core_math_msvc.hpp supplies one. */
+typedef sq8l_u128 u128;
 #else
 typedef unsigned __int128 u128;
 #endif

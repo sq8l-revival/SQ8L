@@ -10,7 +10,7 @@
 #include "Env.h"
 #include "ModFollower.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 namespace {
 

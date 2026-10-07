@@ -34,6 +34,28 @@ inline int32_t fistp32(double x) {
     return static_cast<int32_t>(r);
 }
 
+// Exact division of a 128-bit value by a divisor that fits in 32 bits, as 32-bit limbs
+// with 64-bit intermediates: rem < d, so (rem << 32) | limb never overflows. Spelled out
+// rather than with unsigned __int128, which cl.exe does not have and for which clang
+// calls compiler-rt helpers (__udivti3) that are not linked in MSVC-ABI builds.
+struct U128 {
+    uint64_t hi, lo;
+};
+
+U128 divBy32(U128 n, uint32_t d, bool& remNonZero) {
+    const uint32_t limb[4] = {static_cast<uint32_t>(n.lo), static_cast<uint32_t>(n.lo >> 32),
+                              static_cast<uint32_t>(n.hi), static_cast<uint32_t>(n.hi >> 32)};
+    uint32_t q[4];
+    uint64_t rem = 0;
+    for (int i = 3; i >= 0; i--) {
+        const uint64_t cur = (rem << 32) | limb[i];
+        q[i] = static_cast<uint32_t>(cur / d);
+        rem = cur % d;
+    }
+    remNonZero = rem != 0;
+    return {(static_cast<uint64_t>(q[3]) << 32) | q[2], (static_cast<uint64_t>(q[1]) << 32) | q[0]};
+}
+
 // x87 "FLD tbyte K; FDIV dword r" at 53-bit precision: the exact quotient of the
 // 80-bit constant K = mant * 2^exp by a float, rounded once to a double with the
 // current rounding mode. (Computing hi/r + lo/r in double could round differently.)
@@ -45,15 +67,19 @@ double divExtByFloat(uint64_t mant, int exp, float r) {
     const double f = std::frexp(static_cast<double>(std::fabs(r)), &e);  // |r| = f * 2^e
     const uint64_t rm = static_cast<uint64_t>(std::ldexp(f, 24));       // 24-bit integer
     const int rexp = e - 24;
-    const unsigned __int128 num = static_cast<unsigned __int128>(mant) << 40;
-    unsigned __int128 q = num / rm;
-    const bool remNonZero = (num % rm) != 0;
+    const U128 num = {mant >> 24, mant << 40};  // mant * 2^40, 104 bits
+    bool remNonZero = false;
+    const U128 q = divBy32(num, static_cast<uint32_t>(rm), remNonZero);
     int bits = 0;
-    for (unsigned __int128 t = q; t; t >>= 1) bits++;
-    const int drop = bits - 53;  // q >= 2^79, so drop > 0
-    const unsigned __int128 low = q & ((static_cast<unsigned __int128>(1) << drop) - 1);
-    const unsigned __int128 half = static_cast<unsigned __int128>(1) << (drop - 1);
-    uint64_t m = static_cast<uint64_t>(q >> drop);
+    for (uint64_t t = q.hi; t; t >>= 1) bits++;
+    if (bits)
+        bits += 64;
+    else
+        for (uint64_t t = q.lo; t; t >>= 1) bits++;
+    const int drop = bits - 53;  // mant has bit 63 set, so q is in (2^79, 2^81) and drop is 27 or 28
+    const uint64_t low = q.lo & ((UINT64_C(1) << drop) - 1);
+    const uint64_t half = UINT64_C(1) << (drop - 1);
+    uint64_t m = (q.hi << (64 - drop)) | (q.lo >> drop);
     const bool negative = std::signbit(r);
     const bool inexact = low != 0 || remNonZero;
     switch (std::fegetround()) {

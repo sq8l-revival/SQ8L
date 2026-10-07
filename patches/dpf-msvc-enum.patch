@@ -1,0 +1,24 @@
+Give PredefinedPortGroupsIds a fixed underlying type.
+
+The enumerators are written as (uint32_t)-1 .. -3 and are compared against
+uint32_t group ids. With the Itanium ABI the implementation picks unsigned
+int as the underlying type and that works, but under the Microsoft ABI an
+unscoped enum without a fixed type is int, so the values wrap to -1 .. -3
+and every "switch (uint32_t groupId) { case kPortGroupNone: }" is rejected:
+"case value evaluates to -1, which cannot be narrowed to type uint32_t".
+
+Spelling the underlying type makes the intended values ABI-independent.
+
+diff --git a/distrho/DistrhoDetails.hpp b/distrho/DistrhoDetails.hpp
+index 34affacb..12e0d644 100644
+--- a/distrho/DistrhoDetails.hpp
++++ b/distrho/DistrhoDetails.hpp
+@@ -260,7 +260,7 @@ namespace ParameterDesignationSymbols {
+ 
+    @see PortGroup
+  */
+-enum PredefinedPortGroupsIds {
++enum PredefinedPortGroupsIds : uint32_t {
+    /**
+      Null or unset port group.
+     */

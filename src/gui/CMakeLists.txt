@@ -8,6 +8,4 @@ add_library(sq8l_gui STATIC ${SQ8L_GUI_SOURCES})
 target_include_directories(sq8l_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Knob arithmetic mirrors the original's x87 code: same strict FP flags as the engine.
 target_compile_options(sq8l_gui PRIVATE ${SQ8L_FP_FLAGS})
-if(NOT MSVC)
-  target_compile_options(sq8l_gui PRIVATE -Wall -Wextra)
-endif()
+target_compile_options(sq8l_gui PRIVATE ${SQ8L_WARN_FLAGS})

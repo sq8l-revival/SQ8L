@@ -13,7 +13,7 @@
 #include "Fpu.h"
 #include "Master.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 namespace sq8l {
 

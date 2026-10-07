@@ -12,6 +12,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# True for cl.exe and for clang in MSVC-ABI mode (clang-cl, or clang --target=*-windows-msvc).
+if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+  set(SQ8L_MSVC_ABI TRUE)
+endif()
+
 # Bit-faithful floating point: no FMA contraction, honor the dynamic rounding
 # mode (the engine switches to round-toward-zero like the original x87 code).
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -22,6 +27,24 @@ elseif(MSVC)
   set(SQ8L_FP_FLAGS /fp:strict)
 endif()
 
+# Keyed on the command-line flavour, not the compiler: clang-cl parses -Wall as MSVC's
+# /Wall, which is -Weverything (thousands of warnings), and rejects -Wextra outright.
+# /W4 is what it maps to -Wall -Wextra.
+if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  set(SQ8L_WARN_FLAGS /W4)
+else()
+  set(SQ8L_WARN_FLAGS -Wall -Wextra)
+endif()
+
+if(SQ8L_MSVC_ABI)
+  # windows.h min/max macros break std::min/max; the CRT deprecates fopen and friends.
+  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    # Sources are UTF-8; the engine data tables exceed the default section limit.
+    add_compile_options(/utf-8 /bigobj)
+  endif()
+endif()
+
 file(GLOB SQ8L_ENGINE_SOURCES CONFIGURE_DEPENDS src/engine/*.cpp src/engine/data/*.cpp)
 # Correctly rounded exp/log/sin/cos/tan (identical results on every platform).
 set(SQ8L_CRMATH_SOURCES third_party/core-math/exp.c third_party/core-math/log.c third_party/core-math/sin.c
@@ -29,9 +52,17 @@ set(SQ8L_CRMATH_SOURCES third_party/core-math/exp.c third_party/core-math/log.c 
 if(WIN32)
   list(APPEND SQ8L_CRMATH_SOURCES third_party/core-math/roundeven_shim.c)
 endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+  # cl.exe has no 128-bit integer type, which core-math needs for its 64x64 -> 128
+  # products, and none of the GCC builtins it calls. src/compat/core_math_msvc.hpp
+  # supplies both; it needs operator overloading, so these C sources are compiled as
+  # C++ (C++20 for the designated initialisers in their tables).
+  set_source_files_properties(${SQ8L_CRMATH_SOURCES} PROPERTIES LANGUAGE CXX
+      COMPILE_OPTIONS "/std:c++20;/FI${CMAKE_SOURCE_DIR}/src/compat/core_math_msvc.hpp")
+endif()
 add_library(sq8l_engine STATIC ${SQ8L_ENGINE_SOURCES} ${SQ8L_CRMATH_SOURCES})
 target_include_directories(sq8l_engine PUBLIC src/engine)
-target_compile_options(sq8l_engine PRIVATE ${SQ8L_FP_FLAGS} -Wall -Wextra)
+target_compile_options(sq8l_engine PRIVATE ${SQ8L_FP_FLAGS} ${SQ8L_WARN_FLAGS})
 add_subdirectory(src/gui)
 add_subdirectory(src/gui/logic)
 
@@ -45,7 +76,7 @@ target_compile_options(sq8l_testapi PRIVATE ${SQ8L_FP_FLAGS})
 option(SQ8L_BUILD_PLUGIN "Build the SQ8L plugin (VST2/VST3/AU/CLAP)" ON)
 if(SQ8L_BUILD_PLUGIN)
   # Local DPF patches (kept out of the submodule): apply once if not yet applied.
-  foreach(patch dpf-vst2-compat.patch)
+  foreach(patch dpf-vst2-compat.patch dpf-msvc-enum.patch)
     execute_process(COMMAND git apply --reverse --check ${CMAKE_SOURCE_DIR}/patches/${patch}
                     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/third_party/DPF
                     RESULT_VARIABLE already OUTPUT_QUIET ERROR_QUIET)
@@ -58,7 +89,37 @@ if(SQ8L_BUILD_PLUGIN)
       endif()
     endif()
   endforeach()
+
+  # The Windows SDK ships GL/gl.h but not GL/glext.h, which DGL includes. DPF downloads
+  # the Khronos headers itself but ignores download failures (and the khronos.org ->
+  # registry.khronos.org redirect loses khrplatform.h), so fetch them here and check.
+  # DPF gitignores third_party/DPF/khronos and puts it on the include path for MSVC.
+  if(SQ8L_MSVC_ABI)
+    set(SQ8L_KHRONOS_DIR ${CMAKE_SOURCE_DIR}/third_party/DPF/khronos)
+    foreach(entry "GL/glext.h=OpenGL" "KHR/khrplatform.h=EGL")
+      string(REPLACE "=" ";" entry "${entry}")
+      list(GET entry 0 header)
+      list(GET entry 1 registry)
+      if(NOT EXISTS ${SQ8L_KHRONOS_DIR}/${header})
+        message(STATUS "Downloading ${header} (not in the Windows SDK)")
+        file(DOWNLOAD https://registry.khronos.org/${registry}/api/${header}
+             ${SQ8L_KHRONOS_DIR}/${header} STATUS status TLS_VERIFY ON)
+        list(GET status 0 code)
+        if(NOT code EQUAL 0)
+          file(REMOVE ${SQ8L_KHRONOS_DIR}/${header})
+          list(GET status 1 reason)
+          message(FATAL_ERROR "could not download ${header}: ${reason}")
+        endif()
+      endif()
+    endforeach()
+  endif()
+
   add_subdirectory(third_party/DPF)
+  if(SQ8L_MSVC_ABI AND TARGET dgl-system-libs-definitions)
+    # Idempotent: DPF adds this itself when CMake's MSVC is set, but not for the
+    # GNU-driver clang that merely targets the MSVC ABI.
+    target_include_directories(dgl-system-libs-definitions INTERFACE ${SQ8L_KHRONOS_DIR})
+  endif()
   dpf_add_plugin(sq8l
     TARGETS vst2 vst3 au clap
     UI_TYPE opengl

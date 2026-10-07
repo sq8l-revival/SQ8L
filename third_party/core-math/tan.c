@@ -42,6 +42,9 @@ SOFTWARE.
 
 #if (defined(__clang__) && __clang_major__ >= 14) || (defined(__GNUC__) && __GNUC__ >= 14 && __BITINT_MAXWIDTH__ && __BITINT_MAXWIDTH__ >= 128)
 typedef unsigned _BitInt(128) u128;
+#elif defined(_MSC_VER)
+/* MSVC has no 128-bit integer type: src/compat/core_math_msvc.hpp supplies one. */
+typedef sq8l_u128 u128;
 #else
 typedef unsigned __int128 u128;
 #endif
@@ -192,7 +195,7 @@ add_dint (dint64_t *r, const dint64_t *a, const dint64_t *b) {
        where n is the bit-width of x. See for example
        https://developer.arm.com/documentation/den0024/a/The-A64-instruction-set/Data-processing-instructions/Shift-operations
        where it is said that k is interpreted modulo n. */
-    B = (k < 128) ? B >> k : 0;
+    B = (k < 128) ? B >> k : (u128)0;
   }
 
   u128 C;

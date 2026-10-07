@@ -22,7 +22,7 @@
 #include "Settings.h"
 #include "SoundLibrary.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 using namespace sq8l;
 using namespace sq8l::gui;

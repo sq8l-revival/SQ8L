@@ -4,7 +4,7 @@
 
 #include "MidiParser.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 namespace {
 struct Recorder : sq8l::MidiListener {

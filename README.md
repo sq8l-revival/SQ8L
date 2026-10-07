@@ -76,7 +76,7 @@ The manual of the original (`readme.txt` in the SQ8L 0.91b archive) applies unch
 
 ## Building from source
 
-Requirements: CMake ≥ 3.22, Ninja, a C++17 compiler (Clang or GCC), Git.
+Requirements: CMake ≥ 3.22, Ninja, a C++17 compiler (Clang, GCC or MSVC), Git.
 
 ```sh
 git clone --recursive <this repository>
@@ -88,6 +88,19 @@ cmake --build build
 - Windows x64 from macOS/Linux with MinGW-w64:
   `-DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake` (Linux: use the `-posix` compilers).
 - Plug-ins are written to `build/bin/`.
+
+On Windows, build natively with Visual Studio 2022 instead (`cl.exe` or `clang-cl`, both
+x64) through the presets in `CMakePresets.json`, which write to `build/<preset>/bin/`:
+
+```sh
+cmake --preset msvc        # or: clang-cl, msvc-debug, clang-cl-debug
+cmake --build --preset msvc
+```
+
+In VS Code, pick the preset in the status bar and press F7; the CMake Tools extension
+supplies the x64 developer environment. Run the presets from a Developer Command Prompt
+otherwise. Building `third_party/core-math` with `cl.exe` needs `src/compat/core_math_msvc.hpp`,
+which supplies the 128-bit integer type and the GCC builtins MSVC lacks.
 
 Check that the engine still reproduces the original (no original files needed):
 

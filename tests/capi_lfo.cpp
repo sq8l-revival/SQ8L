@@ -12,7 +12,7 @@
 #include "Lfo.h"
 #include "WaveRom.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 namespace {
 

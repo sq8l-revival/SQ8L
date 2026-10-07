@@ -3,7 +3,7 @@
 
 #include "WaveRom.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 SQ8L_API const uint8_t* sq8l_waverom_data() { return sq8l::data::kWaveRom; }
 

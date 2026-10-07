@@ -4,7 +4,7 @@
 
 #include "Synth.h"
 
-#define SQ8L_API extern "C" __attribute__((visibility("default")))
+#include "capi_export.h"
 
 SQ8L_API void* sq8l_synth_new(float sampleRate) { return new sq8l::Synth(sampleRate); }
 SQ8L_API void sq8l_synth_free(void* s) { delete static_cast<sq8l::Synth*>(s); }

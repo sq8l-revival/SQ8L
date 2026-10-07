@@ -1,0 +1,86 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "clang-cl",
+      "displayName": "Windows x64 - clang-cl - Release",
+      "description": "Native Windows build with clang-cl that ships with Visual Studio.",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "clang-cl-debug",
+      "displayName": "Windows x64 - clang-cl - Debug",
+      "description": "As clang-cl, but without optimizations and with full debug info.",
+      "inherits": "clang-cl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "msvc",
+      "displayName": "Windows x64 - MSVC (cl.exe) - Release",
+      "description": "Native Visual Studio compiler.",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "Windows x64 - MSVC (cl.exe) - Debug",
+      "description": "As msvc, but without optimizations and with full debug info.",
+      "inherits": "msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "unix",
+      "displayName": "Default (Clang/GCC) - Release",
+      "description": "Primarily for macOS and Linux, and MinGW-w64 cross-compiled builds when a toolchain file is added.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "unix-debug",
+      "displayName": "Default (Clang/GCC) - Debug",
+      "description": "As unix, but without optimizations and with full debug info.",
+      "inherits": "unix",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "clang-cl", "configurePreset": "clang-cl" },
+    { "name": "clang-cl-debug", "configurePreset": "clang-cl-debug" },
+    { "name": "msvc", "configurePreset": "msvc" },
+    { "name": "msvc-debug", "configurePreset": "msvc-debug" },
+    { "name": "unix", "configurePreset": "unix" },
+    { "name": "unix-debug", "configurePreset": "unix-debug" }
+  ]
+}

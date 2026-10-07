@@ -8,7 +8,7 @@
 //       Compares with full golden renders (tests/export_golden_raw.py, needs the original).
 #include <cstdio>
 #include <cstring>
-#include <dirent.h>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -101,15 +101,16 @@ int regression(const std::string& dir) {
 }
 
 int golden(const std::string& dir) {
-    DIR* d = opendir(dir.c_str());
-    if (!d) {
+    std::error_code ec;
+    std::filesystem::directory_iterator it(dir, ec);
+    if (ec) {
         std::fprintf(stderr, "no %s\n", dir.c_str());
         return 2;
     }
     int files = 0, bad = 0;
     long long samples = 0;
-    while (dirent* de = readdir(d)) {
-        std::string name = de->d_name;
+    for (const std::filesystem::directory_entry& de : it) {
+        const std::string name = de.path().filename().string();
         if (name.size() < 5 || name.substr(name.size() - 4) != ".bin") continue;
         const std::vector<uint8_t> buf = readAll(dir + "/" + name);
         size_t p = 0;
@@ -125,7 +126,6 @@ int golden(const std::string& dir) {
             std::printf("DIFF %s\n", name.c_str());
         }
     }
-    closedir(d);
     std::printf("%d/%d renders bit-exact (%lld samples per channel)\n", files - bad, files, samples);
     return bad ? 1 : 0;
 }

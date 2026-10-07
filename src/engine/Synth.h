@@ -104,10 +104,13 @@ public:
     int32_t setChunk(const uint8_t* data, size_t size);   // effSetChunk (CSynth_v019): 0 ok, -1 error
 
     Master& master() { return *master_; }
-    // (port) OPTIONS -> Polyphony: playable voices, 8 (the original) to 32, plus the 8 fade
-    // slots. Changing it resets the synth like the original's voice set-up (notes stop).
-    void setPolyphony(int voices);
-    int polyphony() const { return master_->playableVoices(); }
+    // (port) Playable voices. The program's (EMU -> VOICES, ofs::Polyphony) unless this
+    // instance overrides them with OPTIONS -> Polyphony: 1..64, 0 = set by the program. The
+    // override belongs to the instance, so the plugin saves it in its own state, not in
+    // SQ8L.ini. Nothing resets: the value is a limit read at the next note on.
+    void setPolyphonyOverride(int voices);
+    int polyphonyOverride() const;
+    int polyphony() const;
     EditBuffer& editBuffer() { return *edit_; }
     SoundLibrary& library() { return *library_; }
     SynthModules& modules() { return *modules_; }

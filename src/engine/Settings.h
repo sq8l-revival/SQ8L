@@ -15,7 +15,6 @@
 #include <string_view>
 
 #include "Program.h"
-#include "VoiceSlots.h"
 
 namespace sq8l {
 
@@ -35,10 +34,13 @@ struct Settings {
     int synth[kNumSynth] = {2, 0, 0, 0, 0};
 
     // [port]: options added by the port (not in the original, which ignores the section).
-    static constexpr int kNumPort = 2;
-    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "polyphony"};
-    static constexpr int kPortDefaults[kNumPort] = {1, kOriginalPlayableVoices};
-    int port[kNumPort] = {1, kOriginalPlayableVoices};
+    // NOTE: polyphony is not here. It belongs to the program (EMU -> VOICES) and, as a
+    // per-instance override, to the plugin's own state: a global would not be recalled with
+    // a project and would be shared by every instance in it.
+    static constexpr int kNumPort = 1;
+    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad"};
+    static constexpr int kPortDefaults[kNumPort] = {1};
+    int port[kNumPort] = {1};
     // Ask before loading a library, a bank or a SysEx bank over existing programs.
     bool confirmLoading() const { return port[0] > 0; }
     // [port] zoom: size of the editor window in percent (OPTIONS -> Zoom), 100 = the original's
@@ -49,12 +51,6 @@ struct Settings {
     // [port] hd: the editor drawn at the window's resolution (OPTIONS -> HD graphics) instead
     // of the original's pixels enlarged. Off by default.
     bool hd = false;
-    // Playable voices (OPTIONS -> Polyphony), 8 like the original up to 32.
-    int polyphony() const {
-        return port[1] < kOriginalPlayableVoices ? kOriginalPlayableVoices
-               : port[1] > kMaxPlayableVoices    ? kMaxPlayableVoices
-                                                 : port[1];
-    }
 
     // [gui] (only the editor uses these). getGuiBool = value > 0.
     bool restoreMouseAfterMenu() const { return gui[0] > 0; }

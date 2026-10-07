@@ -7,9 +7,12 @@
 //   sq8l_render_check tests/golden_raw
 //       Compares with full golden renders (tests/export_golden_raw.py, needs the original).
 //   sq8l_render_check --polyphony tests/regression
-//       More voices (OPTIONS -> Polyphony, a port addition): every regression case renders
-//       identically with 12/16/24/32 voices when it never takes over a sounding voice with the
-//       original's 8; then a stress test (40 held notes, 32 voices) on programs of every bank.
+//       Playable voices (EMU -> VOICES and OPTIONS -> Polyphony, port additions): a program
+//       without the parameter renders exactly like one asking for the original's 8; every
+//       regression case renders identically with 12..64 voices when it never takes over a
+//       sounding voice with 8; 1 and 4 voices stay finite; the instance override renders like
+//       the same value in the program; then a stress test (40 held notes, 64 voices) on
+//       programs of every bank.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -31,9 +34,11 @@ std::vector<uint8_t> readAll(const std::string& path) {
 }
 
 // Renders a case (golden_raw / regression format); returns L then R, p = end of MIDI data.
-// `voices`: playable voices (8 = the original); `steals`: notes that took a sounding voice.
+// `voices`: playable voices (8 = the original), set in the program (EMU -> VOICES) or, with
+// `viaOverride`, as this instance's override (OPTIONS -> Polyphony); both must render the
+// same. `steals`: notes that took a sounding voice.
 void render(const std::vector<uint8_t>& buf, size_t& p, std::vector<float>& L, std::vector<float>& R,
-            int voices = 8, uint32_t* steals = nullptr, bool menu = false) {
+            int voices = 8, uint32_t* steals = nullptr, bool viaOverride = false) {
     auto rd = [&](void* dst, size_t k) {
         std::memcpy(dst, buf.data() + p, k);
         p += k;
@@ -41,12 +46,13 @@ void render(const std::vector<uint8_t>& buf, size_t& p, std::vector<float>& L, s
     int32_t prog, nblocks;
     rd(&prog, 4);
     rd(&nblocks, 4);
-    sq8l::Settings settings;
-    settings.port[1] = menu ? 8 : voices;  // menu: set later, like OPTIONS -> Polyphony
-    sq8l::Synth synth(44100.0f, nullptr, &settings);
+    sq8l::Synth synth(44100.0f);
     synth.setSampleRate(44100.0f);
-    if (menu) synth.setPolyphony(voices);
     synth.setProgram(prog);
+    if (viaOverride)
+        synth.setPolyphonyOverride(voices);
+    else
+        synth.editBuffer().current().setU8(sq8l::ofs::Polyphony, unsigned(voices));
     for (int b = 0; b < nblocks; b++) {
         int32_t frames, nev;
         rd(&frames, 4);
@@ -158,7 +164,8 @@ int polyphony(const std::string& dir) {
         std::fprintf(stderr, "no %s/expected.txt\n", dir.c_str());
         return 2;
     }
-    const int counts[] = {12, 16, 24, 32};
+    const int more[] = {12, 16, 24, 32, 48, 64};  // more than the original's 8
+    const int fewer[] = {1, 4};                   // fewer: these do change the render
     int cases = 0, free = 0, bad = 0, stealing = 0;
     std::string line;
     while (std::getline(exp, line)) {
@@ -175,7 +182,18 @@ int polyphony(const std::string& dir) {
         cases++;
         if (steals) stealing++;
         else free++;
-        for (int n : counts) {
+        {
+            // A program of the original (and of every bank file, SysEx import and pre-0.90
+            // record) has 0 here: it must play exactly like an explicit 8.
+            p = 0;
+            std::vector<float> L0, R0;
+            render(buf, p, L0, R0, 0);
+            if (hashLR(L0, R0) != h8) {
+                bad++;
+                std::printf("DIFF %s: no VOICES in the program vs an explicit 8\n", name.c_str());
+            }
+        }
+        for (int n : more) {
             p = 0;
             std::vector<float> L, R;
             render(buf, p, L, R, n);
@@ -186,33 +204,69 @@ int polyphony(const std::string& dir) {
                 bad++;
                 std::printf("DIFF %s with %d voices (no voice taken over with 8)\n", name.c_str(), n);
             }
-            if (n == 16) {  // set from the menu after loading = set at load (saved setting)
+            if (n == 16) {  // the instance's override = the same value in the program
                 p = 0;
-                std::vector<float> Lm, Rm;
-                render(buf, p, Lm, Rm, n, nullptr, true);
-                if (hashLR(Lm, Rm) != hashLR(L, R)) {
+                std::vector<float> Lo, Ro;
+                render(buf, p, Lo, Ro, n, nullptr, true);
+                if (hashLR(Lo, Ro) != hashLR(L, R)) {
                     bad++;
-                    std::printf("DIFF %s: 16 voices from the menu vs at load\n", name.c_str());
+                    std::printf("DIFF %s: 16 voices from OPTIONS vs from the program\n", name.c_str());
                 }
+            }
+        }
+        for (int n : fewer) {
+            p = 0;
+            std::vector<float> L, R;
+            render(buf, p, L, R, n);
+            if (!finite(L) || !finite(R) || L.size() != L8.size()) {
+                bad++;
+                std::printf("BAD %s with %d voices: non-finite output or wrong length\n", name.c_str(), n);
             }
         }
     }
     std::printf("polyphony: %d cases; %d never take over a voice with 8 and render identically with "
-                "12/16/24/32 voices (%s), %d do (more voices change them, output finite); "
-                "set from the menu = set at load\n",
+                "12/16/24/32/48/64 voices (%s), %d do (more voices change them, output finite); "
+                "no VOICES = 8; 1 and 4 voices finite; OPTIONS override = the program's value\n",
                 cases, free, bad ? "FAILED" : "ok", stealing);
 
-    // Stress: 40 held notes with 32 voices, programs from every bank, then the releases
-    // (and the same with the original's 8 voices, for the level).
+    // The host chunk carries the instance's override (OPTIONS -> Polyphony), so every plugin
+    // format recalls it, and carries nothing when there is none: that chunk must stay exactly
+    // the original's bytes.
+    int chunkBad = 0;
+    {
+        sq8l::Synth a(44100.0f);
+        const std::vector<uint8_t> plain = a.getChunk();
+        a.setPolyphonyOverride(23);
+        const std::vector<uint8_t> with = a.getChunk();
+        size_t diff = 0;
+        for (size_t i = 0; i < plain.size() && i < with.size(); i++)
+            if (plain[i] != with[i]) diff++;
+        sq8l::Synth b(44100.0f);
+        b.setChunk(with.data(), with.size());
+        const int restored = b.polyphonyOverride();
+        b.setChunk(plain.data(), plain.size());       // a project without an override
+        const int cleared = b.polyphonyOverride();
+        if (plain[0x1b] || plain[0x1c] || diff != 2 || restored != 23 || cleared != 0) {
+            chunkBad++;
+            std::printf("BAD chunk: spare bytes %02x %02x, %zu bytes differ, restored %d, cleared %d\n",
+                        plain[0x1b], plain[0x1c], diff, restored, cleared);
+        }
+        std::printf("chunk: no override = the original's bytes; an override adds %zu bytes and comes "
+                    "back as %d; a chunk without one restores \"set by program\" (%s)\n",
+                    diff, restored, chunkBad ? "FAILED" : "ok");
+    }
+
+    // Stress: 40 held notes with 64 voices, programs from every bank, then the releases
+    // (and the same with the original's 8 voices, for the level). With 64 voices every held
+    // note must sound: no note takes over another.
     int maxActive = 0, programs = 0, stressBad = 0;
     float peak = 0, peak8 = 0;
     for (int run = 0; run < 2; run++)
     for (int prog = 0; prog < 512; prog += 23) {
-        sq8l::Settings settings;
-        settings.port[1] = run ? 8 : 32;
-        sq8l::Synth synth(44100.0f, nullptr, &settings);
+        sq8l::Synth synth(44100.0f);
         synth.setSampleRate(44100.0f);
         synth.setProgram(prog);
+        synth.editBuffer().current().setU8(sq8l::ofs::Polyphony, run ? 8u : 64u);
         std::vector<float> l(512), r(512);
         std::vector<float> all;
         for (int phase = 0; phase < 2; phase++) {
@@ -239,10 +293,10 @@ int polyphony(const std::string& dir) {
         }
         for (float x : all) (run ? peak8 : peak) = std::max(run ? peak8 : peak, std::fabs(x));
     }
-    std::printf("stress: %d programs, 40 held notes: up to %d voices sounding with 32, output finite; "
+    std::printf("stress: %d programs, 40 held notes: up to %d voices sounding with 64, output finite; "
                 "peak %.2f (with 8 voices: %.2f), %s\n",
-                programs, maxActive, double(peak), double(peak8), stressBad || maxActive != 32 ? "FAILED" : "ok");
-    return bad || stressBad || maxActive != 32 ? 1 : 0;
+                programs, maxActive, double(peak), double(peak8), stressBad || maxActive != 40 ? "FAILED" : "ok");
+    return bad || chunkBad || stressBad || maxActive != 40 ? 1 : 0;
 }
 
 }  // namespace

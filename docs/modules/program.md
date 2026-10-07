@@ -374,7 +374,7 @@ still be preserved.
 | 0x194 | 0x172 | 365 | s8 | (not in the GUI) |  | 0 |  |
 | 0x195 | 0x173 | 366 | s8 | VSTEAL | -1..0 | 0 | -1 HARD, 0 SOFT |
 | 0x196 | 0x174 | 367 | bits 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 | emulation bits 3 |  | 0x00 | b0 voice flag (+0x70 of the voice), b1 DCA4 smoothing (EMU/HARD) |
-| 0x197 | 0x175 | 375 | s8 | (not in the GUI) |  | 0 |  |
+| 0x197 | 0x175 | 375 | u8 | VOICES (port addition) | 1..64 | 0 | playable voices, EMU page; 0 (the original, every import) = the original's 8, see below |
 | 0x198 | 0x176 | 376 | s8 | (not in the GUI) |  | 0 |  |
 | 0x199 | 0x177 | 377 | s8 | (not in the GUI) |  | 0 |  |
 | 0x19a | 0x178 | 378 | s8 | (not in the GUI) |  | 0 |  |
@@ -483,3 +483,29 @@ the current layout, starting from INIT: osc blocks at 16*o (+0x30 for the DCA pa
 0x150 (+16) with mod amounts doubled, 0x170 -> 0x122 block, 0x180 -> DCA4 (pan mod amount
 doubled), 0x1b6 -> SAT, 0x190.. -> modes, 0x1a0.. -> 0x188.., 0x1ae.. -> 0x190 (BEND range,
 mode, AMBUG bit). Verified on 400 random records.
+
+## VOICES (port addition, 0x197)
+
+The playable voices of the program (EMU page, `ofs::Polyphony`, parameter 375,
+`programPolyphony`): 1..64, with **0 meaning the original's 8**. The byte is one the original
+never writes — "not in the GUI", always 0 — so every program that predates the port reads as
+8 without needing a version anywhere in the file formats:
+
+* programs made by the SQ8L, and every library (`*.8XL`), bank and `SQ8L_backup.dat` file
+  holding them: 0;
+* `initProgram` zeroes the record, so INIT and everything built from it is 0;
+* the SysEx import starts from INIT and maps only the SQ80's fields, so an imported program
+  or bank is 0 — the SQ80 had 8 voices;
+* `convertOldProgram` also starts from INIT: pre-0.90 records are 0;
+* host chunks are the 540-byte record, so the value travels with a project; an old chunk has
+  0 there. A value outside 1..64 is treated as 0 (no version of the port writes one).
+
+The original preserves the byte: it copies whole records in and out of its library and files
+and never touches the bytes it has no page for, so a program edited and written by the
+original keeps the voices the port stored. The one path that cannot carry it is the SysEx
+*export*, whose 204 nybbles are the SQ80's fixed layout.
+
+Nothing else in a file format changed, and a program asking for 8 voices (0, or an explicit
+8) renders bit-exactly like the original — see *More polyphony* in `master.md` for the engine
+side. `OPTIONS -> Polyphony` overrides the parameter for one plugin instance and is not part
+of a program: it travels in two spare bytes of the host chunk header (`library.md`).

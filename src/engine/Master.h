@@ -63,7 +63,18 @@ public:
     int32_t setSampleRateInt(int32_t sampleRate);    // FUN_00462214: 0 or 0xffff53bc (sr < 40000)
     void setControlRate(float rate);                  // FUN_00462380
     void setVoices(int32_t playable, int32_t fade);   // FUN_00463358 (the original uses 8 + 8)
-    int32_t playableVoices() const { return numPlay_; }
+    // (port) The layout the plugin uses: kMaxPlayableVoices playable slots (0..63) and the
+    // same number of fade slots at kFadeSlotBase (64..127), so a voice of any program can
+    // always fade out. The playable voices actually allocated are the per-instance override
+    // or, with no override, the current program's (ofs::Polyphony) - a limit read at every
+    // note on, so a program change or an edit never resets anything. Resets like setVoices.
+    void setPortLayout();
+    // (port) Per-instance playable voices (OPTIONS -> Polyphony), 0 = set by the program.
+    // Clamped to 1..kMaxPlayableVoices; takes effect at the next note on.
+    void setPolyphonyOverride(int32_t voices);
+    int32_t polyphonyOverride() const { return polyOverride_; }
+    // (port) The voices notes are allocated from now: numPlay_ without the port layout.
+    int32_t effectivePlayableVoices() const;
     uint32_t stealCount() const { return stealCount_; }  // (port) see stealCount_
     void panic();                                     // FUN_00462174 (GUI panic button, MIDI reset)
     // FUN_004620e4: the 5 [synth] settings by config index (FUN_00452c5c(cfg, i), i.e. the
@@ -147,6 +158,13 @@ private:
     int32_t slotMap_[kMaxVoices] = {};                // +0x0f0c playable [0, numPlay) + fade slots
     int32_t numPlay_ = 0;                             // +0x0f4c
     int32_t numFade_ = 0;                             // +0x0f50
+    // (port) first fade slot in slotMap_: numPlay_ like the original, kFadeSlotBase with the
+    // port layout, where the playable region keeps its size and only the allocator's limit
+    // (effectivePlayableVoices) changes. Everything reaches the voices through slotMap_, so
+    // this moves the fade slots without touching anything else.
+    int32_t fadeBase_ = 0;
+    bool portLayout_ = false;
+    int32_t polyOverride_ = 0;                        // 0 = set by the program
     int16_t noteStacks_[8] = {};                      // +0x0f54 [0..3] last keys, [4..7] held keys (mono)
     float volume_ = 0;                                // +0x0f64
     int32_t muffleVoice_ = 0;                         // +0x0f68 slot of the newest voice (muffle owner)

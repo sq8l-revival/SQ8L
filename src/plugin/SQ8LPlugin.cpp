@@ -96,6 +96,8 @@ void SQ8LPlugin::initState(uint32_t index, State& state) {
     }
 }
 
+// The chunk also carries OPTIONS -> Polyphony (Synth::getChunk), so one state key is all the
+// plugin needs: the VST2 chunk is this value verbatim (DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY).
 String SQ8LPlugin::getState(const char* key) const {
     if (std::strcmp(key, "editbuffer") != 0) return String();
     std::lock_guard<std::recursive_mutex> lock(mutex_);

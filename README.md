@@ -38,21 +38,28 @@ code and verified against the original plugin running inside an x86 emulator.
   operating system's native controls: on macOS they look like macOS. On Linux they are drawn
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
 - A few small additions to the editor: a left click on the program number opens the program
-  list (the original needs a right or double click), and these items at the bottom of
-  OPTIONS: *Polyphony* (see below), *Down arrow -> next program* (the original's hidden
-  `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by default, like the
-  original), *Zoom* and *HD graphics* (see below).
+  list (the original needs a right or double click), the **VOICES** parameter on the EMU page
+  (see below), and these items at the bottom of OPTIONS: *Polyphony* (see below), *Down arrow
+  -> next program* (the original's hidden `swapProgUpDn` setting), *Ask before loading
+  banks/libraries* (on by default, like the original), *Zoom* and *HD graphics* (see below).
 - **Window size and HD graphics:** the editor can be enlarged from 100% to 300% with
   OPTIONS → *Zoom* (or the window's corner, where the host allows it); the original's pixels
   stay crisp at any size. OPTIONS → *HD graphics* draws the whole editor at the window's
   resolution instead: the panel (labels, signal lines, frames, logo) as vector shapes
   measured from the original's picture, the knobs, buttons, LEDs and both displays from
   their state. Both settings are global (saved in `SQ8L.ini`).
-- **Polyphony:** 8 voices like the SQ-80 by default, up to 32 with OPTIONS → *Polyphony*.
-  With 8 the sound is bit-exact; with more, a performance changes only where the original
-  would have stolen a voice. The output is not rescaled, so many voices sounding together
-  are louder: lower the volume if needed. The setting is global (saved in `SQ8L.ini`) and
-  changing it stops the notes that are playing.
+- **Polyphony:** 8 voices like the SQ-80 by default, 1 to 64 with the **VOICES** parameter on
+  the EMU page, right below VSTEAL. It belongs to the sound, so it is stored in the program
+  and travels with it: into banks and libraries, and into the project your host saves. Every
+  program that does not have it — anything made by the original SQ8L, any `.8XL` or bank
+  file, any imported SysEx dump — plays with the SQ-80's 8 voices, exactly as it always did,
+  and the original can still load a bank the port saved. OPTIONS → *Polyphony* overrides the
+  parameter for one instance (*Set by program* by default) and is saved with that instance in
+  your project, not globally. Changing the voices never interrupts anything: the notes that
+  are playing keep playing, and a voice taken over by soft stealing always has a slot to fade
+  out in. With 8 voices the sound is bit-exact; with more, a performance changes only where
+  the original would have stolen a voice. The output is not rescaled, so many voices sounding
+  together are louder: lower the volume if needed.
 - Text (status bar, program name) uses Liberation Sans, a free font metrically compatible
   with Arial, with anti-aliasing.
 - SEND/REQ to a hardware SQ-80/ESQ-1 over MIDI ports are not connected yet (SysEx import and

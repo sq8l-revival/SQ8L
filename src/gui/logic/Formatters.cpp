@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
+
 namespace sq8l::gui {
 
 namespace delphi {
@@ -172,6 +174,11 @@ void formatValue(Fmt f, int width, int v, std::string& s) {
         break;
     case Fmt::DcBlock:  // 0x461bac
         s = v == 0 ? "SMART" : (v == 1 ? "ON   " : "OFF  ");
+        break;
+    case Fmt::Polyphony:  // (port) EMU -> VOICES
+        // 0 is what every program of the original has: its 8 voices.
+        s = intToStr(v == 0 ? kOriginalPlayableVoices : v);
+        zeroPad(s, width);
         break;
     }
 }

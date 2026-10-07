@@ -5,7 +5,9 @@ matching the original; this checks the additions themselves:
   * OPTIONS "Down arrow -> next program": the original's hidden swapProgUpDn ini key;
   * OPTIONS "Ask before loading banks/libraries" ([port] confirmLoad): no prompt when off;
   * a left click on the program number opens the program list (the original: right only);
-  * OPTIONS "Polyphony..." ([port] polyphony): 8 (the original) to 32 voices;
+  * EMU "VOICES" (program byte 0x197): the playable voices of the program, 1 to 64, with the
+    original's 8 for every program that does not have the parameter;
+  * OPTIONS "Polyphony...": the same per instance, 0 = set by the program;
   * OPTIONS "Zoom..." ([port] zoom): the editor's size, 100% to 300%;
   * OPTIONS "HD graphics" ([port] hd): the editor drawn at the window's resolution.
 
@@ -111,6 +113,20 @@ class Editor:
         self.L.sq8l_gl_settings(self.v, out)
         return list(out)
 
+    def lcd_row(self, y):
+        row = json.loads(self.cstr(self.L.sq8l_gl_state))["lcd"][y]
+        return "".join(chr(c[0]) for c in row)
+
+    def pages(self):
+        return json.loads(self.cstr(self.L.sq8l_gl_pages))
+
+    def program_byte(self, off):
+        """A byte of the edit buffer's current program (state image: slots at +4, ring +0xa90)."""
+        img = ctypes.create_string_buffer(0xB8C)
+        self.L.sq8l_gl_editbuffer(self.v, img)
+        ring = int.from_bytes(img.raw[0xA90:0xA94], "little")
+        return img.raw[4 + ring * 0x21C + off]
+
 
 def text(item):
     return item["text"].replace("&", "")
@@ -131,6 +147,10 @@ def main():
         ("sq8l_gl_state", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_settings", [vp, ctypes.POINTER(ctypes.c_int32)], None),
         ("sq8l_gl_port_setting", [vp, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_poly_override", [vp], ctypes.c_int32),
+        ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
+        ("sq8l_gl_editbuffer", [vp, ctypes.c_char_p], None),
     ]:
         getattr(L, name).argtypes = args
         getattr(L, name).restype = res
@@ -157,11 +177,16 @@ def main():
     check(text(opts[OPT_HD]) == "HD graphics" and not opts[OPT_HD]["checked"],
           f"'{text(opts[OPT_HD])}' unchecked (the host's default)")
     poly = opts[OPT_POLY]
-    check(text(poly) == "Polyphony..." and [text(i) for i in poly.get("sub", [])] ==
-          ["8 voices   (SQ80)", "12 voices", "16 voices", "24 voices", "32 voices"],
-          f"'{text(poly)}' with 8/12/16/24/32 voices")
-    check([i["checked"] for i in poly["sub"]] == [True, False, False, False, False] and
-          all(i.get("radio") for i in poly["sub"]), "radio items, 8 voices checked by default")
+    items = [text(i) for i in poly.get("sub", []) if not i.get("separator")]
+    check(text(poly) == "Polyphony..." and items ==
+          ["Set by program   (EMU->VOICES parameter)", "1 voice", "2 voices", "4 voices",
+           "8 voices   (SQ80)", "12 voices", "16 voices", "24 voices", "32 voices",
+           "48 voices", "64 voices"],
+          f"'{text(poly)}': set by program and 1..64 voices ({len(items)} items)")
+    check([i["checked"] for i in poly["sub"] if not i.get("separator")] ==
+          [True] + [False] * 10 and
+          all(i.get("radio") for i in poly["sub"] if not i.get("separator")),
+          "radio items, 'Set by program' checked by default")
     check(text(opts[OPT_SWAP]) == "Down arrow -> next program" and not opts[OPT_SWAP]["checked"],
           f"'{text(opts[OPT_SWAP])}' unchecked by default")
     check(text(opts[OPT_CONFIRM]) == "Ask before loading banks/libraries" and opts[OPT_CONFIRM]["checked"],
@@ -229,14 +254,39 @@ def main():
     ed.events()
     check(L.sq8l_gl_port_setting(ed.v, 0) == 1, "asking again")
 
-    # 4. polyphony
-    for k, n in ((2, 16), (4, 32), (0, 8)):
+    # 4. OPTIONS -> Polyphony: the override of this instance (item 1 is the separator)
+    for k, n in ((7, 16), (11, 64), (2, 1), (0, 0)):
         ed.choose([OPT_POLY, k])
         ed.click(OPTIONS)
         ed.events()
         sub = ed.menu(OPTIONS)[OPT_POLY]["sub"]
-        check(L.sq8l_gl_port_setting(ed.v, 1) == n and [i["checked"] for i in sub] == [j == k for j in range(5)],
-              f"polyphony {n}: [port] polyphony={L.sq8l_gl_port_setting(ed.v, 1)}, menu checked")
+        checked = [i["checked"] for i in sub if not i.get("separator")]
+        want = [(j if j == 0 else j + 1) == k for j in range(11)]
+        check(L.sq8l_gl_poly_override(ed.v) == n and checked == want,
+              f"override {n or 'set by program'}: {L.sq8l_gl_poly_override(ed.v)}, menu checked")
+
+    # 5. EMU -> VOICES: the playable voices of the program itself
+    EMU_PAGE, EMU_SUB, VOICES = 17, 1, 5
+    params = ed.pages()[EMU_PAGE]["subs"][EMU_SUB]["params"]
+    found = [p for p in params if p["name"] == "VOICES"]
+    p = found[0] if found else {}
+    check(len(found) == 1 and p.get("knob") == 9 and p.get("x") == 33 and p.get("y") == 1,
+          f"VOICES under VSTEAL: knob {p.get('knob')}, column {p.get('x')}, row {p.get('y')}")
+    check(p.get("min") == 1 and p.get("max") == 64 and p.get("paramIndex") == 375 and p.get("width") == 2,
+          f"VOICES is 1..64 and writes program byte 0x197 (parameter {p.get('paramIndex')})")
+    plain = Editor(L, extensions=False)
+    check(all(q["name"] != "VOICES" for q in plain.pages()[EMU_PAGE]["subs"][EMU_SUB]["params"]),
+          "without the additions the EMU page is the original's")
+    L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
+    ed.idle()
+    shown = ed.lcd_row(1)[33:42]
+    check(shown == "VOICES=08" and ed.program_byte(0x197) == 0,
+          f"a program of the original has no VOICES and shows the SQ80's 8 ({shown!r})")
+    L.sq8l_gl_ctr(ed.v, 1, VOICES, 24)
+    ed.idle()
+    shown = ed.lcd_row(1)[33:42]
+    check(ed.program_byte(0x197) == 24 and shown == "VOICES=24",
+          f"24 voices: program byte {ed.program_byte(0x197)}, display {shown!r}")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

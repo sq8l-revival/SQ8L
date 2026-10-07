@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "Fpu.h"
+#include "Program.h"  // (port) programPolyphony
 
 namespace sq8l {
 
@@ -77,7 +78,7 @@ Master::Master(VoiceModules& modules, int32_t sampleRate, const int32_t* overrid
         for (auto& f : pair) f.init(&filterTable_, 0.0f);
     setSampleRateInt(sampleRate);
     setControlRate(kDefaultControlRate);
-    setVoices(8, 8);
+    setVoices(kOriginalPlayableVoices, kOriginalFadeVoices);  // FUN_00463358(8, 8)
     // FUN_0046215c
     parser_.endBlock();
     lockCount_++;  // FUN_004621fc
@@ -161,8 +162,33 @@ void Master::setVoices(int32_t playable, int32_t fade) {
     lockCount_++;
     numPlay_ = playable;
     numFade_ = fade;
+    fadeBase_ = playable;  // (port) the original's layout: the fade slots follow the playable
+    portLayout_ = false;
     setNumVoices(playable + fade);
     lockCount_--;
+}
+
+// (port) see Master.h / VoiceSlots.h.
+void Master::setPortLayout() {
+    lockCount_++;
+    numPlay_ = kMaxPlayableVoices;
+    numFade_ = kMaxPlayableVoices;
+    fadeBase_ = kFadeSlotBase;
+    portLayout_ = true;
+    setNumVoices(kMaxVoiceSlots);
+    lockCount_--;
+}
+
+void Master::setPolyphonyOverride(int32_t voices) {
+    if (voices < 0) voices = 0;
+    polyOverride_ = voices > kMaxPlayableVoices ? kMaxPlayableVoices : voices;
+}
+
+int32_t Master::effectivePlayableVoices() const {
+    if (!portLayout_) return numPlay_;
+    int32_t n = polyOverride_ > 0 ? polyOverride_ : programPolyphony(currentProgram_);
+    if (n < kMinPlayableVoices) n = kMinPlayableVoices;
+    return n > numPlay_ ? numPlay_ : n;
 }
 
 void Master::setNumVoices(int32_t n) {
@@ -201,11 +227,12 @@ void Master::resetVoices() {
         list_[i] = {nullptr, -1};
         slotMap_[i] = i;
     }
-    // (port) the slots beyond the original's 16 are unused (fewer voices) or reset above:
-    // keep them free so that listRemove finds nothing there, as with the original's arrays.
-    for (int32_t i = numVoices_ > kOriginalVoiceSlots ? numVoices_ : kOriginalVoiceSlots; i < kMaxVoices; i++) {
+    // (port) the slots the current layout does not use: kept free so that listRemove and the
+    // scans find nothing there, as with the original's arrays.
+    for (int32_t i = numVoices_; i < kMaxVoices; i++) {
         clearVoice(i);
         list_[i] = {nullptr, -1};
+        slotMap_[i] = i;
     }
 }
 
@@ -251,7 +278,9 @@ void Master::removeHeldKey(int16_t* stacks, uint8_t key) {
 
 int32_t Master::activeVoiceCount() {
     int32_t n = 0;
-    for (int32_t i = 0; i < numPlay_; i++)
+    // (port) the whole playable region: with the port layout it also counts the voices above
+    // a lowered limit that are still sounding. fadeBase_ == numPlay_ for the original.
+    for (int32_t i = 0; i < fadeBase_; i++)
         if (voiceAt(i).active != 0) n++;
     return n;
 }
@@ -377,7 +406,10 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             // poly
             const bool retrigger = static_cast<int8_t>(prog[0x174]) > 0;
             int32_t found = -1;
-            for (int32_t i = 0; i < numPlay_; i++) {
+            // (port) the scans below run over the whole playable region so that a voice above
+            // a lowered limit is still found, released and retargeted. fadeBase_ == numPlay_
+            // for the original, i.e. the original's scan.
+            for (int32_t i = 0; i < fadeBase_; i++) {
                 Voice& v = voiceAt(i);
                 if (v.active != 0 && v.key == key && v.noteId == noteId) {
                     if (v.released == 0) release(slotMap_[i]);
@@ -391,7 +423,7 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             // mono
             bool wasReleased = false, wasMono = false;
             int32_t found = -1;
-            for (int32_t i = 0; i < numPlay_; i++) {
+            for (int32_t i = 0; i < fadeBase_; i++) {
                 Voice& v = voiceAt(i);
                 if (v.active != 0 && v.noteId == noteId) {
                     wasReleased = v.released != 0;
@@ -410,7 +442,7 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             pushNoteStack(stacks, key8, true);
         }
     } else {
-        for (int32_t i = 0; i < numPlay_; i++) {
+        for (int32_t i = 0; i < fadeBase_; i++) {
             Voice& v = voiceAt(i);
             if (v.active != 0 && v.released == 0 && v.key == key &&
                 static_cast<int16_t>(v.noteId) == static_cast<int16_t>(noteId)) {
@@ -684,10 +716,13 @@ void Master::listRemove(int32_t slot) {
 }
 
 int32_t Master::allocate() {
-    if (numPlay_ <= 1) return 0;
+    // (port) the playable voices of the program / of the override; numPlay_ without the port
+    // layout, i.e. the original's scan.
+    const int32_t limit = effectivePlayableVoices();
+    if (limit <= 1) return 0;
     uint32_t best = 0xffffffffu;
     int32_t result = -1;
-    for (int32_t i = 0; i < numPlay_; i++) {
+    for (int32_t i = 0; i < limit; i++) {
         const Voice& v = voiceAt(i);
         if (v.active == 0 || v.age == 0) {
             result = i;
@@ -701,7 +736,7 @@ int32_t Master::allocate() {
     if (result < 0) {
         result = 0;
         best = voiceAt(0).age;
-        for (int32_t i = 1; i < numPlay_; i++) {
+        for (int32_t i = 1; i < limit; i++) {
             if (voiceAt(i).age <= best) {
                 best = voiceAt(i).age;
                 result = i;
@@ -713,10 +748,11 @@ int32_t Master::allocate() {
 }
 
 int32_t Master::findStealTarget() {
-    int32_t result = numPlay_;
-    uint32_t best = voiceAt(numPlay_).age;
-    if (voiceAt(numPlay_).active != 0) {
-        for (int32_t i = numPlay_ + 1; i <= numPlay_ + numFade_ - 1; i++) {
+    // (port) fadeBase_ == numPlay_ without the port layout, i.e. the original's scan.
+    int32_t result = fadeBase_;
+    uint32_t best = voiceAt(fadeBase_).age;
+    if (voiceAt(fadeBase_).active != 0) {
+        for (int32_t i = fadeBase_ + 1; i <= fadeBase_ + numFade_ - 1; i++) {
             const Voice& v = voiceAt(i);
             if (v.active == 0) {
                 result = i;

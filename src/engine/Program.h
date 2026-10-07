@@ -9,6 +9,8 @@
 #include <string>
 #include <string_view>
 
+#include "VoiceSlots.h"
+
 namespace sq8l {
 
 constexpr size_t kProgramSize = 0x21c;  // 540
@@ -135,7 +137,22 @@ constexpr size_t EmuFlags = 0x192;  // bit 0 AMBUG, bits 1-2 DCA1-3 smoothing (0
                                     // bits 3-4 DC-BLOCK (0 SMART 1 ON 2 OFF)
 constexpr size_t VoiceSteal = 0x195;// s8 -1 HARD, 0 SOFT
 constexpr size_t EmuFlags3 = 0x196; // bit 0 (voice flag), bit 1 DCA4 smoothing (0 EMU 1 HARD)
+// (port) playable voices, EMU -> VOICES: 0 = the original's 8, 1..64 = explicit. One of the
+// bytes the original never writes ("not in the GUI", always 0), so every program made by the
+// SQ8L, every bank/library file, every pre-0.90 record and every SysEx import reads as 0 and
+// keeps the original's 8 voices. See docs/modules/program.md.
+constexpr size_t Polyphony = 0x197;
 }  // namespace ofs
+
+// (port) Playable voices of a program record: ofs::Polyphony, 1..64. The original's 8 for 0
+// (anything the original or an import wrote), for a missing record, and for a value out of
+// range, which no version of the port writes.
+inline int programPolyphony(const uint8_t* program) {
+    if (!program) return kOriginalPlayableVoices;
+    const int n = static_cast<int>(program[ofs::Polyphony]);
+    if (n < kMinPlayableVoices || n > kMaxPlayableVoices) return kOriginalPlayableVoices;
+    return n;
+}
 
 // The program record. Plain bytes; all multi-byte fields are little endian and unaligned.
 struct Program {

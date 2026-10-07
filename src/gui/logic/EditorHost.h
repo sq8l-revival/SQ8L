@@ -54,9 +54,8 @@ public:
     // behaves exactly like the original (the differential GUI tests rely on it): no extra
     // OPTIONS items, no left click on the program number.
     virtual bool portExtensions() { return true; }
-    // Change a [port] setting (Settings::port: 0 confirmLoad, 1 polyphony, which the host
-    // also applies to the synth); the host notifies the editor (wParam 0, lParam
-    // 0x20 + index) when the value changed.
+    // Change a [port] setting (Settings::port: 0 confirmLoad); the host notifies the editor
+    // (wParam 0, lParam 0x20 + index) when the value changed.
     virtual void setPortSetting(int index, int value) { (void)index; (void)value; }
     // OPTIONS -> Zoom: size of the editor window in percent (100 = 626x430). setZoom resizes
     // the window; the host notifies the editor (wParam 0, lParam 0x30) when the size changed,
@@ -66,6 +65,10 @@ public:
     // OPTIONS -> HD graphics: the editor drawn at the window's resolution ([port] hd).
     virtual bool hdGraphics() { return false; }
     virtual void setHdGraphics(bool on) { (void)on; }
+    // OPTIONS -> Polyphony: the playable voices of this instance, 0 = set by the program
+    // (EMU -> VOICES). Per instance and saved with the plugin's state, not in SQ8L.ini.
+    virtual int polyphonyOverride() { return 0; }
+    virtual void setPolyphonyOverride(int voices) { (void)voices; }
 };
 
 }  // namespace sq8l::gui

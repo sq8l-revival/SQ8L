@@ -10,7 +10,12 @@ namespace sq8l {
 
 namespace {
 constexpr float kControlRate = 83.592575f;  // 0x42a72f66, rate of LFOs/envelopes/followers
-}
+// (port) the per-instance playable voices in the host chunk: 0x1b..0x1e are 0 in the
+// original's chunk and never read by it (see docs/modules/library.md).
+constexpr size_t kChunkPolyMarker = 0x1b;
+constexpr size_t kChunkPolyVoices = 0x1c;
+constexpr uint8_t kChunkPolyMagic = 'V';
+}  // namespace
 
 // The master's view of the Cdoc parameter block and of the LFO inputs alias the module
 // storage (identical layouts, checked here).
@@ -55,8 +60,10 @@ Synth::Synth(float sampleRate, SoundLibrary* library, const Settings* settings, 
         RoundToNearest rn;
         // CSynth ctor: master created with Round(sampleRate) of the AudioEffect (44100 default).
         master_ = std::make_unique<Master>(*modules_, fistp(sampleRate), settings_.synth, notify);
-        // (port) OPTIONS -> Polyphony; the original's 8 + 8 are set by the constructor.
-        if (settings_.polyphony() != kOriginalPlayableVoices) master_->setVoices(settings_.polyphony(), kFadeVoices);
+        // (port) the port's voice layout (VoiceSlots.h): the playable voices then come from
+        // the program (EMU -> VOICES) or from the per-instance override, and the original's
+        // 8 are what a program made by the SQ8L, a bank file or a SysEx import asks for.
+        master_->setPortLayout();
     }
     edit_->listener = [this](EditBuffer::Event e, const Program* slot) {
         syncProgram();
@@ -104,24 +111,44 @@ void Synth::setProgramName(const std::string& name) {
     syncProgram();
 }
 
-std::vector<uint8_t> Synth::getChunk() { return edit_->getChunk(); }
+std::vector<uint8_t> Synth::getChunk() {
+    std::vector<uint8_t> chunk = edit_->getChunk();
+    // (port) OPTIONS -> Polyphony belongs to this instance, so it travels in the host chunk,
+    // which every plugin format saves (the VST2 chunk is these bytes verbatim). It goes in
+    // two of the four spare header bytes that the original writes as 0 and never reads, and
+    // only when there is an override: a chunk without one stays byte-identical to the
+    // original's, which is what the differential tests compare.
+    const int32_t ovr = master_->polyphonyOverride();
+    if (ovr > 0 && chunk.size() == EditBuffer::kChunkSize) {
+        chunk[kChunkPolyMarker] = kChunkPolyMagic;
+        chunk[kChunkPolyVoices] = static_cast<uint8_t>(ovr);
+    }
+    return chunk;
+}
 
 int32_t Synth::setChunk(const uint8_t* data, size_t size) {
     const int n = edit_->setChunk(data, size);
     syncProgram();
     if (n > 0) {
         chunkLoaded_ = true;
+        // (port) the override this chunk carries, if any (see getChunk). A chunk written by
+        // the original, by an older port or by an instance set to "set by program" has none,
+        // and must put this instance back to that.
+        int32_t ovr = 0;
+        if (size == EditBuffer::kChunkSize && data[kChunkPolyMarker] == kChunkPolyMagic) {
+            const int32_t v = data[kChunkPolyVoices];
+            if (v >= kMinPlayableVoices && v <= kMaxPlayableVoices) ovr = v;
+        }
+        master_->setPolyphonyOverride(ovr);
         return 0;
     }
     return -1;
 }
 
-void Synth::setPolyphony(int voices) {
-    if (voices < kOriginalPlayableVoices) voices = kOriginalPlayableVoices;
-    if (voices > kMaxPlayableVoices) voices = kMaxPlayableVoices;
-    if (voices == master_->playableVoices()) return;
-    RoundToNearest rn;
-    master_->setVoices(voices, kFadeVoices);
-}
+void Synth::setPolyphonyOverride(int voices) { master_->setPolyphonyOverride(voices); }
+
+int Synth::polyphonyOverride() const { return master_->polyphonyOverride(); }
+
+int Synth::polyphony() const { return master_->effectivePlayableVoices(); }
 
 }  // namespace sq8l

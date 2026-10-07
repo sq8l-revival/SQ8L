@@ -377,10 +377,10 @@ void LcdPage::select(int n) {  // FUN_0045a170
 LcdController::LcdController(LcdDisplay& lcd, EditBuffer* editBuffer, LcdListener* listener)
     : lcd_(lcd), eb_(editBuffer), listener_(listener) {}
 
-void LcdController::buildPages() {  // FUN_0045a790(0x12) + FUN_0047e340
+void LcdController::buildPages(bool portExtensions) {  // FUN_0045a790(0x12) + FUN_0047e340
     pages_.assign(size_t(kNumPages), LcdPage{});
     for (int i = 0; i < kNumPages; i++) {
-        const PageSetup& ps = data::kPages[i];
+        const PageSetup& ps = data::pageSetup(i, portExtensions);
         LcdPage& pg = pages_[size_t(i)];
         pg.subs.resize(1);
         pg.subs[0].c = i;

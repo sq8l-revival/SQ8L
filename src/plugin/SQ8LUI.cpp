@@ -95,7 +95,6 @@ public:
 
     void setPortSetting(int index, int value) override {
         if (!p_.settings().setPort(index, value)) return;
-        if (index == 1) p_.synth().setPolyphony(p_.settings().polyphony());  // (engine lock held)
         sq8l::SharedLibrary::saveSettings();
         if (controller_) controller_->post(sq8l::gui::kMsgNotify, 0, 0x20 + index);
     }
@@ -114,6 +113,12 @@ public:
     void setHdGraphics(bool on) override {
         if (applyHd) applyHd(on);
     }
+
+    int polyphonyOverride() override { return p_.synth().polyphonyOverride(); }
+
+    // (engine lock held) The host reads the value back with getState when it saves; the port
+    // does not notify it of edits, like every other edit the editor makes.
+    void setPolyphonyOverride(int voices) override { p_.synth().setPolyphonyOverride(voices); }
 
     void panic() override { p_.synth().master().panic(); }
     int voicesUsed() override { return p_.synth().master().activeVoiceCount(); }

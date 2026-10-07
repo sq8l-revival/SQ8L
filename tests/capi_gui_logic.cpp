@@ -99,6 +99,11 @@ struct TestHost : EditorHost {
     void setPortSetting(int i, int v) override {
         if (cfg.setPort(i, v) && ctl) ctl->post(kMsgNotify, 0, 0x20 + i);
     }
+    // (port) OPTIONS -> Polyphony: per instance, so the plugin keeps it in its own state
+    // (here just a field), not in SQ8L.ini.
+    int polyOverride = 0;
+    int polyphonyOverride() override { return polyOverride; }
+    void setPolyphonyOverride(int voices) override { polyOverride = voices; }
     void panic() override { log << "panic\n"; }
     int voicesUsed() override { return usedVoices; }
     int voicesMax() override { return maxVoices; }
@@ -290,6 +295,8 @@ std::string lcdJson(const LcdDisplay& l) {
 SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
 // With the port's additions (EditorHost::portExtensions), for tests/test_gui_extensions.py.
 SQ8L_API void* sq8l_gl_new_ext(int first) { return new Box(first, true); }
+// (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
+SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }

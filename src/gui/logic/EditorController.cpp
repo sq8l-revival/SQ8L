@@ -171,13 +171,22 @@ void EditorController::buildMenus() {
     if (host_.portExtensions()) {
         // Port additions: polyphony, the original's hidden swapProgUpDn ini key, load prompts.
         o.push_back(line());
+        // Like the emulation overrides above, but of this instance only (the voices are a
+        // parameter of the program): the plugin saves it with its state, not in SQ8L.ini.
         MenuNode poly = item("Polyphony...", 0, nullptr);
         auto polyClick = [this](MenuNode& n) { polyphonyClick(n); };
+        poly.items.push_back(item("Set by program   (EMU->VOICES parameter)", 0, polyClick, true, true));
+        poly.items.push_back(line());
+        poly.items.push_back(item("1 voice", 1, polyClick, true, true));
+        poly.items.push_back(item("2 voices", 2, polyClick, true, true));
+        poly.items.push_back(item("4 voices", 4, polyClick, true, true));
         poly.items.push_back(item("8 voices   (SQ80)", 8, polyClick, true, true));
         poly.items.push_back(item("12 voices", 12, polyClick, true, true));
         poly.items.push_back(item("16 voices", 16, polyClick, true, true));
         poly.items.push_back(item("24 voices", 24, polyClick, true, true));
         poly.items.push_back(item("32 voices", 32, polyClick, true, true));
+        poly.items.push_back(item("48 voices", 48, polyClick, true, true));
+        poly.items.push_back(item("64 voices", 64, polyClick, true, true));
         o.push_back(poly);
         o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
         o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
@@ -238,7 +247,7 @@ void EditorController::show() {  // TplugEditForm_FormShow
     firstShow_ = false;
     // ---- FUN_00483d9c (the parts that are not view set-up, see EditorView)
     ctr_ = std::make_unique<LcdController>(view_.lcd(), &host_.editBuffer(), this);
-    ctr_->buildPages();                 // FUN_0047e340
+    ctr_->buildPages(host_.portExtensions());  // FUN_0047e340 (+ the port's VOICES control)
     ctr_->numKnobs = 10;
     ctr_->setRefreshDiv(1);             // FUN_0045a730(ctr, 1)
     wireControls();
@@ -486,8 +495,11 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     if (menuZoom_)  // a size dragged to a value that is not in the list checks nothing
         for (MenuNode& n : menuZoom_->items) n.checked = n.tag == host_.zoom();
     if (menuHd_) menuHd_->setChecked(host_.hdGraphics());
-    if (menuPolyphony_)
-        for (MenuNode& n : menuPolyphony_->items) n.checked = n.tag == s.polyphony();
+    if (menuPolyphony_) {
+        const int ovr = host_.polyphonyOverride();
+        for (MenuNode& n : menuPolyphony_->items)
+            if (n.caption != "-") n.checked = n.tag == ovr;
+    }
     b = s.rightClickScrollsDisplay();
     if (b != rmbScroll_) {
         rmbScroll_ = b;
@@ -991,11 +1003,11 @@ void EditorController::swapProgUpDnClick(MenuNode& item) {
     swapProgUpDn_ = host_.settings().swapProgramUpDown();
 }
 
-// Port addition: playable voices ([port] polyphony), applied by the host to the synth.
+// Port addition: this instance's playable voices, 0 = set by the program (EMU->VOICES).
 void EditorController::polyphonyClick(MenuNode& item) {
     if (item.checked) return;
     item.setChecked(true);
-    host_.setPortSetting(1, item.tag);
+    host_.setPolyphonyOverride(item.tag);
     updateVoices();
 }
 

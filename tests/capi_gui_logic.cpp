@@ -346,6 +346,10 @@ SQ8L_API void sq8l_gl_context_menu(void* v, int32_t x, int32_t y) {
     B(v)->ui.cursor = Point{x, y};
     B(v)->ctl->contextMenu(x, y);
 }
+// What the plugin UI does after a press that opened a menu or a dialog (SQ8LUI::onMouse):
+// the modal loop keeps the button up, so the control the press was made on must not keep the
+// mouse. Scripted input drives the logic without that shell, so a test says it itself.
+SQ8L_API void sq8l_gl_cancel_mouse_mode(void* v) { B(v)->view.cancelMouseMode(); }
 SQ8L_API void sq8l_gl_idle(void* v, int32_t ms) { B(v)->ctl->idle(ms); }
 SQ8L_API void sq8l_gl_timer(void* v) { B(v)->ctl->timerTick(); }
 SQ8L_API int32_t sq8l_gl_pump(void* v) { return B(v)->ctl->pump(); }

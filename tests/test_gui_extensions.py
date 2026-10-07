@@ -61,6 +61,19 @@ class Editor:
             self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y, 0)
         self.idle()
 
+    def press(self, xy):
+        """A press that opens a menu, as the plugin UI sees it.
+
+        The menu is modal and keeps the button up, so the editor only ever gets the button
+        down; the plugin UI then cancels the mouse capture itself (SQ8LUI::onMouse), which
+        scripted input has to stand in for.
+        """
+        x, y = xy
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+        self.L.sq8l_gl_cancel_mouse_mode(self.v)
+        self.idle()
+
     def choose(self, path):
         self.L.sq8l_gl_menu_choice(self.v, (ctypes.c_int32 * max(len(path), 1))(*path), len(path))
 
@@ -109,6 +122,7 @@ def main():
         ("sq8l_gl_set_host", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_char_p], None),
         ("sq8l_gl_show", [vp], None), ("sq8l_gl_idle", [vp, ctypes.c_int32], None),
         ("sq8l_gl_mouse", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32], None),
+        ("sq8l_gl_cancel_mouse_mode", [vp], None),
         ("sq8l_gl_menu_choice", [vp, ctypes.POINTER(ctypes.c_int32), ctypes.c_int32], None),
         ("sq8l_gl_file_answer", [vp, ctypes.c_char_p], None),
         ("sq8l_gl_events", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
@@ -150,6 +164,16 @@ def main():
     trees = ed.popups(ed.events())
     check(len(trees) == 1 and sum(1 for it in trees[0] if it.get("break")) == 3,
           "left click on the program number: program list (4 columns)")
+
+    # 1b. the menu is modal and keeps the button up, so the editor only ever sees the button
+    # down (issue #8: the program number stayed captured and swallowed every later click).
+    ed.choose([])
+    ed.press(NUM_LCD)
+    check(len(ed.popups(ed.events())) == 1, "left button down alone: program list")
+    p0 = ed.program()
+    ed.click(UP)
+    check(not ed.popups(ed.events()), "the click after the list: no second program list")
+    check(ed.program() == p0[0] + "%03d" % (int(p0[1:]) + 1), "the click after the list reaches the arrow")
 
     # 2. arrows, then swapped from the OPTIONS menu
     p0 = ed.program()

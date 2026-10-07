@@ -35,7 +35,10 @@ pixels may differ from a real Windows XP; everything else is the original's own 
 4. **Platform interface** (`PlatformUi`): popup menus (data model + our own Windows-classic
    style renderer), modal dialogs, file open/save, timers (20 ms tick like the original's
    CsimpleTimer), mouse cursor warp (the "jumping mouse"), clipboard/keyboard capture.
-   Implemented later by the DPF UI.
+   Implemented later by the DPF UI. On Windows the menus are real `TrackPopupMenu` menus,
+   except that a menu split into columns (the program list, the longer LCD value lists) is
+   not drawn in the host's dark theme by Windows, so `win/DarkMenu` owner-draws those from
+   the theme parts USER32 would have used.
 
 `EditorModel::render(Bitmap&)` composes the whole window exactly like the VCL paint order;
 input arrives as `mouseDown/Move/Up/DoubleClick(x, y, buttons)` in form coordinates.

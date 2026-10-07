@@ -144,13 +144,14 @@ if(SQ8L_BUILD_PLUGIN)
     FILES_UI src/plugin/SQ8LUI.cpp
              $<$<PLATFORM_ID:Darwin>:${CMAKE_SOURCE_DIR}/src/plugin/mac/PlatformUiMac.mm>
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/PlatformUiWin.cpp>
+             $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/DarkMenu.cpp>
              $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/X11Pointer.cpp>)
   target_include_directories(sq8l PUBLIC src/plugin)
   target_link_libraries(sq8l PUBLIC sq8l_engine)
   target_link_libraries(sq8l-dsp PUBLIC sq8l_engine)
   target_link_libraries(sq8l-ui PUBLIC sq8l_gui sq8l_gui_logic sq8l_gui_drawn sq8l_engine)
   if(WIN32)
-    target_link_libraries(sq8l-ui PUBLIC comdlg32 gdi32 user32)
+    target_link_libraries(sq8l-ui PUBLIC comdlg32 gdi32 user32 uxtheme)
   endif()
   if(APPLE)
     set_source_files_properties(src/plugin/mac/PlatformUiMac.mm PROPERTIES COMPILE_FLAGS -fobjc-arc)

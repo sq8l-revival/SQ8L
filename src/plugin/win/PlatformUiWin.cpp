@@ -9,6 +9,8 @@
 
 #include "PlatformUiWin.h"
 
+#include "DarkMenu.h"
+
 #include <fstream>
 #include <iterator>
 #include <vector>
@@ -77,6 +79,7 @@ struct PlatformUiWin::Impl {
     HBRUSH editBrush = nullptr;
     HFONT editFont = nullptr;
     HFONT dialogFont = nullptr;
+    DarkMenu darkMenu;
 
     double scale() const {
         RECT r;
@@ -112,9 +115,13 @@ struct PlatformUiWin::Impl {
         }
         return CallWindowProcA(self->editProc, w, msg, wp, lp);
     }
-    // The plugin window gets WM_CTLCOLOREDIT for the EDIT: black background like the original.
+    // The plugin window gets WM_CTLCOLOREDIT for the EDIT (black background like the original)
+    // and, while a column menu is up in a dark host, its owner-draw messages.
     static LRESULT CALLBACK parentSubclass(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         auto* self = reinterpret_cast<Impl*>(GetPropA(w, "SQ8LPortV1Impl"));
+        if (self && msg == WM_MEASUREITEM && self->darkMenu.measure(reinterpret_cast<MEASUREITEMSTRUCT*>(lp)))
+            return TRUE;
+        if (self && msg == WM_DRAWITEM && self->darkMenu.draw(reinterpret_cast<DRAWITEMSTRUCT*>(lp))) return TRUE;
         if (self && msg == WM_CTLCOLOREDIT && reinterpret_cast<HWND>(lp) == self->edit) {
             HDC dc = reinterpret_cast<HDC>(wp);
             SetTextColor(dc, RGB(0x78, 0x79, 0x8b));
@@ -202,6 +209,13 @@ PlatformUiWin::PlatformUiWin(void* window, Hooks hooks) : impl_(std::make_unique
     impl_->hooks = std::move(hooks);
     impl_->editBrush = CreateSolidBrush(RGB(0, 0, 0));
     impl_->dialogFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    // The window is the owner of the popup menus and of the program name EDIT, so it is where
+    // their messages arrive.
+    if (impl_->hwnd) {
+        SetPropA(impl_->hwnd, "SQ8LPortV1Impl", impl_.get());
+        impl_->parentProc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtrA(impl_->hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&Impl::parentSubclass)));
+    }
 }
 
 PlatformUiWin::~PlatformUiWin() {
@@ -218,6 +232,9 @@ PlatformUiWin::~PlatformUiWin() {
 int PlatformUiWin::popupMenu(const std::vector<MenuItem>& items, int x, int y) {
     HMENU menu = CreatePopupMenu();
     appendMenu(menu, items);
+    // Windows does not draw a menu split into columns in the host's dark theme; for those we
+    // draw the items ourselves (DarkMenu), which needs our window procedure in place.
+    if (impl_->parentProc) impl_->darkMenu.prepare(menu, impl_->hwnd);
     const POINT p = impl_->screenOfForm(x, y);
     int cmd;
     {
@@ -226,6 +243,7 @@ int PlatformUiWin::popupMenu(const std::vector<MenuItem>& items, int x, int y) {
                              impl_->hwnd, nullptr);
     }
     DestroyMenu(menu);
+    impl_->darkMenu.reset();
     return cmd;
 }
 
@@ -298,9 +316,6 @@ void PlatformUiWin::beginNameEdit(int left, int top, int width, int height, cons
         I.editProc = reinterpret_cast<WNDPROC>(
             SetWindowLongPtrA(I.edit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&Impl::editSubclass)));
         SendMessageA(I.edit, EM_LIMITTEXT, 15, 0);
-        SetPropA(I.hwnd, "SQ8LPortV1Impl", &I);
-        I.parentProc = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtrA(I.hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&Impl::parentSubclass)));
         I.editFont = CreateFontA(-static_cast<int>(11 * s), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET,
                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
         SendMessageA(I.edit, WM_SETFONT, reinterpret_cast<WPARAM>(I.editFont), TRUE);

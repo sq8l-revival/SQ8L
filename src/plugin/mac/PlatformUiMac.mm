@@ -55,11 +55,16 @@ NSString* menuTitle(const std::string& s) {
 @end
 
 @implementation SQ8LPortV1DialogController
-- (NSInteger)numberOfRowsInTableView:(NSTableView*)tv { return (NSInteger)self.dialog->items.size(); }
+// (dialog is nullptr once the dialog has ended: see PlatformUiMac::runModal)
+- (NSInteger)numberOfRowsInTableView:(NSTableView*)tv {
+    return self.dialog ? (NSInteger)self.dialog->items.size() : 0;
+}
 - (id)tableView:(NSTableView*)tv objectValueForTableColumn:(NSTableColumn*)col row:(NSInteger)row {
+    if (!self.dialog || row < 0 || (size_t)row >= self.dialog->items.size()) return nil;
     return ns(self.dialog->items[(size_t)row]);
 }
 - (void)refresh {
+    if (!self.dialog) return;
     self.syncing = YES;
     [self.table reloadData];
     if (self.dialog->itemIndex >= 0 && self.dialog->itemIndex < (int)self.dialog->items.size()) {
@@ -77,9 +82,11 @@ NSString* menuTitle(const std::string& s) {
     [self checkDone];
 }
 - (void)checkDone {
+    if (!self.dialog) return;
     if (self.dialog->modalResult != 0) [NSApp stopModal];
 }
 - (void)tableViewSelectionDidChange:(NSNotification*)n {
+    if (!self.dialog) return;
     if (self.syncing) return;
     const int row = (int)self.table.selectedRow;
     if (row < 0) return;
@@ -88,6 +95,7 @@ NSString* menuTitle(const std::string& s) {
     [self refresh];
 }
 - (void)doubleClick:(id)sender {
+    if (!self.dialog) return;
     const int row = (int)self.table.clickedRow;
     if (row < 0) return;
     ModalDialog* d = self.dialog;
@@ -95,16 +103,19 @@ NSString* menuTitle(const std::string& s) {
     [self refresh];
 }
 - (void)ok:(id)sender {
+    if (!self.dialog) return;
     ModalDialog* d = self.dialog;
     self.act([d] { d->clickOk(); });
     [self refresh];
 }
 - (void)cancel:(id)sender {
+    if (!self.dialog) return;
     ModalDialog* d = self.dialog;
     self.act([d] { d->clickCancel(); });
     [self refresh];
 }
 - (void)toggleCompare:(id)sender {
+    if (!self.dialog) return;
     auto* sel = dynamic_cast<sq8l::gui::SelSingleDialog*>(self.dialog);
     if (sel) self.act([sel] { sel->clickCompare(); });
     [self refresh];
@@ -454,6 +465,19 @@ void PlatformUiMac::runModal(ModalDialog& dialog) {
         [NSApp runModalForWindow:panel];
     }
     [panel orderOut:nil];
+    // The panel and its table outlive this call (AppKit releases windows later), while the
+    // dialog and this controller end here. macOS 10.15 redraws the hidden table during the
+    // next modal loop (the NSAlert that often follows): with its data source still set it
+    // read the destroyed dialog and crashed (issue #12). Detach everything, then close.
+    table.dataSource = nil;
+    table.delegate = nil;
+    table.target = nil;
+    panel.delegate = nil;
+    c.dialog = nullptr;
+    c.table = nil;
+    c.compare = nil;
+    panel.releasedWhenClosed = NO;
+    [panel close];
 }
 
 void PlatformUiMac::showModInfo(const std::vector<std::string>& lines) {

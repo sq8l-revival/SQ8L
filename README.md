@@ -127,7 +127,7 @@ cmake --build build --target sq8l_render_check
 ./build/sq8l_render_check --regression tests/regression
 ```
 
-This renders 228 MIDI cases and compares a hash of the output with the hash of the original
+This renders 243 MIDI cases and compares a hash of the output with the hash of the original
 plugin's output.
 
 ## How it was made

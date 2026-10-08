@@ -10,7 +10,13 @@ rm -f /tmp/sq8l-stop
 Xvfb :99 -screen 0 800x600x24 +extension GLX >/dev/null 2>&1 &
 XVFB=$!
 export DISPLAY=:99
-sleep 1
+# wait until the server answers (a fixed delay is sometimes too short on CI runners)
+i=0
+until xdotool getdisplaygeometry >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ $i -gt 100 ] && { echo "Xvfb did not start"; exit 1; }
+    sleep 0.1
+done
 g++ -O1 -o /tmp/linux_host "$(dirname "$0")/uihost/linux_host.cpp" -lX11 -ldl
 HOME=/tmp/sq8l-home SQ8L_UI_DEBUG=1 timeout -s KILL 150 /tmp/linux_host "$PLUGIN" 140 /tmp/sq8l-stop > "$OUT/host.log" 2>&1 &
 HOST=$!

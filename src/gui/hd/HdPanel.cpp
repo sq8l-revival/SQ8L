@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "Sprite.h"
-
 namespace sq8l::gui::hd {
 
 namespace {
@@ -14,12 +12,17 @@ constexpr int kW = 626, kH = 430;  // the form
 
 // ---------------------------------------------------------------- grain
 // The original's surfaces have a fine grey grain: about 1.65 levels of standard deviation,
-// one form pixel in size (a pixel is 39% correlated with its neighbours). Here: white noise
-// on the form's pixel grid filtered like that (fixed seed), smoothly interpolated at the
-// window's resolution, so it keeps its size and character at any zoom.
+// a form pixel in size. Here: white noise on a grid of kCells x kCells points per form
+// pixel (fixed seed), a little correlated with its neighbours, smoothly interpolated at the
+// window's resolution: as strong as the original's at 1x (the grid's points fall on the
+// pixel centres there), finer and sharper than the original's pixels when enlarged.
+constexpr int kCells = 2;
+constexpr float kNeighbour = 0.1f;  // [k 1 k] filter across and down
+constexpr int kGW = kW * kCells + 1, kGH = kH * kCells + 1;
+
 const std::vector<float>& grainLattice() {
     static const std::vector<float> lattice = [] {
-        const size_t n = size_t(kW) * kH;
+        const size_t n = size_t(kGW) * kGH;
         std::vector<float> w(n), t(n), g(n);
         uint32_t s = 0x2545F491u;
         auto next = [&s] {
@@ -31,18 +34,18 @@ const std::vector<float>& grainLattice() {
             w[i] = r * std::cos(a);
             if (i + 1 < n) w[i + 1] = r * std::sin(a);
         }
-        const float k = 0.21f;  // [k 1 k] across and down: neighbour correlation 2k / (1 + 2k^2)
-        for (int y = 0; y < kH; y++)
-            for (int x = 0; x < kW; x++) {
-                const size_t i = size_t(y) * kW + x;
-                t[i] = w[i] + k * (w[size_t(y) * kW + std::max(x - 1, 0)] + w[size_t(y) * kW + std::min(x + 1, kW - 1)]);
-            }
+        auto at = [](const std::vector<float>& v, int x, int y) {
+            return v[size_t(clampi(y, 0, kGH - 1)) * kGW + size_t(clampi(x, 0, kGW - 1))];
+        };
+        for (int y = 0; y < kGH; y++)
+            for (int x = 0; x < kGW; x++)
+                t[size_t(y) * kGW + x] = at(w, x, y) + kNeighbour * (at(w, x - 1, y) + at(w, x + 1, y));
         double sum2 = 0;
-        for (int y = 0; y < kH; y++)
-            for (int x = 0; x < kW; x++) {
-                const size_t i = size_t(y) * kW + x;
-                g[i] = t[i] + k * (t[size_t(std::max(y - 1, 0)) * kW + x] + t[size_t(std::min(y + 1, kH - 1)) * kW + x]);
-                sum2 += double(g[i]) * g[i];
+        for (int y = 0; y < kGH; y++)
+            for (int x = 0; x < kGW; x++) {
+                const float v = at(t, x, y) + kNeighbour * (at(t, x, y - 1) + at(t, x, y + 1));
+                g[size_t(y) * kGW + x] = v;
+                sum2 += double(v) * v;
             }
         const float norm = float(1.65 / std::sqrt(sum2 / double(n)));
         for (float& v : g) v *= norm;
@@ -55,13 +58,15 @@ const std::vector<float>& grainLattice() {
 
 float grain(float x, float y) {
     const std::vector<float>& g = grainLattice();
-    x -= 0.5f, y -= 0.5f;  // lattice values at the pixel centres
-    const float fx0 = std::floor(x), fy0 = std::floor(y);
-    float tx = x - fx0, ty = y - fy0;
+    // grid point i at form x = (i + off) / kCells: at 1x the pixel centres fall on grid points
+    constexpr float off = kCells % 2 ? 0.5f : 0.f;
+    const float u = x * kCells - off, v = y * kCells - off;
+    const float u0 = std::floor(u), v0 = std::floor(v);
+    float tx = u - u0, ty = v - v0;
     tx = tx * tx * (3 - 2 * tx), ty = ty * ty * (3 - 2 * ty);
-    const int x0 = clampi(int(fx0), 0, kW - 1), x1 = clampi(int(fx0) + 1, 0, kW - 1);
-    const int y0 = clampi(int(fy0), 0, kH - 1), y1 = clampi(int(fy0) + 1, 0, kH - 1);
-    auto at = [&g](int xx, int yy) { return g[size_t(yy) * kW + xx]; };
+    const int x0 = clampi(int(u0), 0, kGW - 1), x1 = clampi(int(u0) + 1, 0, kGW - 1);
+    const int y0 = clampi(int(v0), 0, kGH - 1), y1 = clampi(int(v0) + 1, 0, kGH - 1);
+    auto at = [&g](int xx, int yy) { return g[size_t(yy) * kGW + xx]; };
     return (at(x0, y0) * (1 - tx) + at(x1, y0) * tx) * (1 - ty) + (at(x0, y1) * (1 - tx) + at(x1, y1) * tx) * ty;
 }
 
@@ -135,17 +140,18 @@ const struct {
     float x, y;
     Style style;
 } kLabels[] = {
-    {"FILE", 26.375f, 16.750f, kMenu},       {"OPTIONS", 72.375f, 16.750f, kMenu},   {"INFO", 150.375f, 16.750f, kMenu},
-    {"PANIC", 199.375f, 16.875f, kMenu},     {"BANK", 323.375f, 46.750f, kLabel},    {"WRITE", 388.500f, 46.750f, kLabel},
-    {"INIT", 444.250f, 46.750f, kLabel},     {"SEND", 504.250f, 46.750f, kLabel},    {"REQ", 555.375f, 46.750f, kLabel},
-    {"OSC 1-3", 159.375f, 104.875f, kLabel}, {"DCA 1-3", 279.125f, 104.875f, kLabel}, {"MONO", 557.375f, 104.750f, kLabel},
-    {"SYNC", 108.250f, 122.875f, kLabel},    {"MIX", 40.250f, 132.875f, kLabel},     {"FILTER", 378.875f, 132.750f, kLabel},
-    {"DCA 4", 451.250f, 132.750f, kLabel},   {"AM", 255.250f, 137.750f, kLabel},     {"MODES", 554.375f, 143.875f, kLabel},
-    {"/ EMU", 558.250f, 154.750f, kLabel},   {"LFO 1", 56.375f, 363.750f, kLabel},   {"2", 113.250f, 363.875f, kLabel},
-    {"3", 160.250f, 363.750f, kLabel},       {"4", 205.250f, 363.875f, kLabel},      {"ENV 1", 250.250f, 363.875f, kLabel},
-    {"2", 308.250f, 363.875f, kLabel},       {"3", 355.250f, 363.750f, kLabel},      {"4", 400.250f, 363.875f, kLabel},
-    {"MAT 1", 447.125f, 363.750f, kLabel},   {"2", 505.250f, 363.875f, kLabel},      {"3", 551.250f, 363.750f, kLabel},
-    {"Left", 502.000f, 117.000f, kSmall},    {"pan", 473.000f, 168.000f, kSmall},    {"Right", 499.000f, 185.875f, kSmall},
+    {"FILE", 26.375f, 16.750f, kMenu}, {"OPTIONS", 72.375f, 16.750f, kMenu}, {"INFO", 150.375f, 16.750f, kMenu},
+    {"PANIC", 199.375f, 16.875f, kMenu}, {"BANK", 323.375f, 46.750f, kLabel}, {"WRITE", 388.500f, 46.750f, kLabel},
+    {"INIT", 444.250f, 46.750f, kLabel}, {"SEND", 504.250f, 46.750f, kLabel}, {"REQ", 555.375f, 46.750f, kLabel},
+    {"OSC 1-3", 159.375f, 104.875f, kLabel}, {"DCA 1-3", 279.125f, 104.875f, kLabel},
+    {"MONO", 557.375f, 104.750f, kLabel},
+    {"SYNC", 108.250f, 122.875f, kLabel}, {"MIX", 40.250f, 132.875f, kLabel}, {"FILTER", 378.875f, 132.750f, kLabel},
+    {"DCA 4", 451.250f, 132.750f, kLabel}, {"AM", 255.250f, 137.750f, kLabel}, {"MODES", 554.375f, 143.875f, kLabel},
+    {"/ EMU", 558.250f, 154.750f, kLabel}, {"LFO 1", 56.375f, 363.750f, kLabel}, {"2", 113.250f, 363.875f, kLabel},
+    {"3", 160.250f, 363.750f, kLabel}, {"4", 205.250f, 363.875f, kLabel}, {"ENV 1", 250.250f, 363.875f, kLabel},
+    {"2", 308.250f, 363.875f, kLabel}, {"3", 355.250f, 363.750f, kLabel}, {"4", 400.250f, 363.875f, kLabel},
+    {"MAT 1", 447.125f, 363.750f, kLabel}, {"2", 505.250f, 363.875f, kLabel}, {"3", 551.250f, 363.750f, kLabel},
+    {"Left", 502.000f, 117.000f, kSmall}, {"pan", 473.000f, 168.000f, kSmall}, {"Right", 499.000f, 185.875f, kSmall},
 };
 
 // A display bezel: the black opening (form coordinates) with rounded corners, in a dark ring,
@@ -161,45 +167,43 @@ void bezel(Hd& hd, float S, float x0, float y0, float x1, float y1) {
         const float k = level / 142.f;
         return rgb(int(140 * k + 0.5f), int(141 * k + 0.5f), int(160 * k + 0.5f));
     });
-    hd.roundRect(hx0 * S, hy0 * S, (x1 + 1.6f) * S, (y1 + 0.6f) * S, (r + 1.f) * S, [](float, float) { return kBezelRing; });
+    hd.roundRect(hx0 * S, hy0 * S, (x1 + 1.6f) * S, (y1 + 0.6f) * S, (r + 1.f) * S,
+                 [](float, float) { return kBezelRing; });
     hd.roundRect(x0 * S, y0 * S, x1 * S, y1 * S, r * S, [](float, float) { return Color(0); });
 }
 
-// The screws: the original's pixels, smoothly enlarged, as a darkening of the surface they
-// sit on (so the grain goes on around them).
+// A screw (all six are the same picture): a black head in a soft shadow, the recess's rim as
+// a ring lit along its upper half, brightest at the upper left, and a dark grey centre.
+// Measured from the original (form pixels; the ring's brightness at 22.5 + 45k degrees from
+// the right, clockwise).
 void screw(Hd& hd, float S, float cx, float cy) {
-    const Bitmap& bg = assets::background();
-    const float R = 9.f;
-    const Rect k = hd.area((cx - R) * S, (cy - R) * S, (cx + R) * S, (cy + R) * S, 0);
-    if (k.empty()) return;
-    float base[3] = {};  // the surface around the screw in the original
-    int n = 0;
-    for (int a = 0; a < 64; a++) {
-        const float t = a * 6.2831853f / 64;
-        const int x = clampi(int(cx + (R + 0.5f) * std::cos(t)), 0, kW - 1), y = clampi(int(cy + (R + 0.5f) * std::sin(t)), 0, kH - 1);
-        const Color c = bg.pixel(x, y);
-        base[0] += ch(c, 16), base[1] += ch(c, 8), base[2] += ch(c, 0), n++;
-    }
-    for (float& b : base) b = std::max(b / float(n), 1.f);
+    constexpr float kShadow = 8.6f, kHead = 6.0f, kRing = 3.25f, kRingHalf = 0.75f, kCentre = 2.4f;
+    constexpr float kRingLight[8] = {27, 25, 33, 36, 50, 33, 62, 60};
+    const Rect k = hd.area((cx - kShadow) * S, (cy - kShadow) * S, (cx + kShadow) * S, (cy + kShadow) * S, 0);
+    const Color head = rgb(13, 13, 15), centre = rgb(16, 16, 18);
+    const float edge = std::max(S * 0.3f, 1.f);  // the head's edge: a little soft, as in the original
     for (int Y = k.top; Y < k.bottom; Y++)
         for (int X = k.left; X < k.right; X++) {
-            const float x = (X + 0.5f) / S - 0.5f, y = (Y + 0.5f) / S - 0.5f;
-            const float r = std::hypot(x + 0.5f - cx, y + 0.5f - cy);
-            if (r >= R) continue;
-            const int ix = int(std::floor(x)), iy = int(std::floor(y));
-            const float tx = x - ix, ty = y - iy;
-            auto px = [&bg](int xx, int yy) { return bg.pixel(clampi(xx, 0, kW - 1), clampi(yy, 0, kH - 1)); };
-            const Color c00 = px(ix, iy), c10 = px(ix + 1, iy), c01 = px(ix, iy + 1), c11 = px(ix + 1, iy + 1);
-            const float fade = clampf((R - r) / 2.5f, 0.f, 1.f);
+            const float dx = (X + 0.5f) / S - cx, dy = (Y + 0.5f) / S - cy, r = std::hypot(dx, dy);
+            if (r >= kShadow) continue;
             Color* p = hd.b.row(Y) + X;
-            int out[3];
-            for (int c = 0; c < 3; c++) {
-                const int sh = 16 - 8 * c;
-                const float v = (ch(c00, sh) * (1 - tx) + ch(c10, sh) * tx) * (1 - ty) + (ch(c01, sh) * (1 - tx) + ch(c11, sh) * tx) * ty;
-                const float ratio = 1 + (v / base[c] - 1) * fade;
-                out[c] = clampi(int(std::lround(ch(*p, sh) * ratio)), 0, 255);
+            Color c = mix(*p, 0, 0.58f * clampf((kShadow - r) / (kShadow - kHead), 0.f, 1.f));
+            c = mix(c, head, clampf((kHead - r) * S / edge + 0.5f, 0.f, 1.f));
+            c = mix(c, centre, clampf((kCentre - r) * S + 0.5f, 0.f, 1.f));
+            const float ring = clampf((kRingHalf - std::fabs(r - kRing)) * S + 0.5f, 0.f, 1.f);
+            if (ring > 0) {
+                float a = std::atan2(dy, dx) * 57.29578f;  // 0 = right, 90 = down
+                if (a < 0) a += 360;
+                const float u = (a + 337.5f) / 45;  // (a - 22.5) / 45, wrapped
+                const int i0 = int(u) % 8, i1 = (i0 + 1) % 8;
+                const float f = u - std::floor(u);
+                float d = std::fabs(a - 215);  // the highlight at the upper left
+                d = std::min(d, 360 - d);
+                const float l =
+                    kRingLight[i0] + (kRingLight[i1] - kRingLight[i0]) * f + 40 * std::exp(-(d / 18) * (d / 18));
+                c = mix(c, rgb(int(l), int(l), int(l * 1.06f)), ring);
             }
-            *p = rgb(out[0], out[1], out[2]);
+            *p = c;
         }
 }
 
@@ -231,10 +235,11 @@ void drawPanel(Hd& hd, float S, TextRenderer& text) {
         f.italic = true;
         f.color = l.style == kMenu ? kMenuColour : kLabelColour;
         // (the original's strokes are heavier: its text was hinted at 1x)
-        text.drawTextScaled(hd.b, l.x * S, l.y * S, S, hd.clip, f, l.text, l.style == kMenu ? 0.33f : l.style == kLabel ? 0.5f : 0.45f);
+        const float embolden = l.style == kMenu ? 0.33f : l.style == kLabel ? 0.5f : 0.45f;
+        text.drawTextScaled(hd.b, l.x * S, l.y * S, S, hd.clip, f, l.text, embolden);
     }
-    for (const auto& s : {std::pair{12.92f, 11.89f}, {613.0f, 11.81f}, {30.26f, 205.92f}, {595.29f, 206.04f},
-                          {12.89f, 418.66f}, {612.89f, 418.66f}})
+    for (const auto& s : {std::pair{12.86f, 11.88f}, {612.88f, 11.88f}, {30.40f, 206.04f}, {595.40f, 206.07f},
+                          {12.80f, 418.96f}, {612.80f, 418.97f}})
         screw(hd, S, s.first, s.second);
 }
 

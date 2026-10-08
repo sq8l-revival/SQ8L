@@ -17,6 +17,7 @@ Self-contained (no original files needed):
 import ctypes
 import json
 import os
+import struct
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +113,11 @@ class Editor:
         out = (ctypes.c_int32 * 11)()
         self.L.sq8l_gl_settings(self.v, out)
         return list(out)
+
+    def knob(self, i):
+        """The position of knob i (the state dump stores floats as their bits)."""
+        bits = json.loads(self.cstr(self.L.sq8l_gl_state))["knobs"][i]["value"]
+        return struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
 
     def lcd_row(self, y):
         row = json.loads(self.cstr(self.L.sq8l_gl_state))["lcd"][y]
@@ -282,11 +288,19 @@ def main():
     shown = ed.lcd_row(1)[33:42]
     check(shown == "VOICES=08" and ed.program_byte(0x197) == 0,
           f"a program of the original has no VOICES and shows the SQ80's 8 ({shown!r})")
+    # the knob snaps to the 8 the display shows, so turning it goes to 7 or 9, and the
+    # program keeps its 0 until the parameter is really edited
+    check(ed.knob(9) == 8.0, f"the knob snaps to 8 for such a program ({ed.knob(9)})")
     L.sq8l_gl_ctr(ed.v, 1, VOICES, 24)
     ed.idle()
     shown = ed.lcd_row(1)[33:42]
     check(ed.program_byte(0x197) == 24 and shown == "VOICES=24",
           f"24 voices: program byte {ed.program_byte(0x197)}, display {shown!r}")
+    # a program that has the parameter puts the knob on its own value (the refresh that runs
+    # when the page is selected, i.e. what a program change does)
+    L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
+    ed.idle()
+    check(ed.knob(9) == 24.0, f"the knob follows the program's own value ({ed.knob(9)})")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

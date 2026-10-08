@@ -1,6 +1,7 @@
 #include "LcdControl.h"
 
 #include "EditBuffer.h"
+#include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
 
 namespace sq8l::gui {
 
@@ -519,8 +520,14 @@ int LcdController::readParam(const LcdParam& p) const {  // FUN_0045b378
     const LcdSubPage& sp = page_->sub();
     if (!sp.editor) return 0;
     const int idx = sp.editBufferIndex(p);
-    if (uint32_t(idx) < uint32_t(kNumParams)) return eb_->param(idx);
-    return 0;
+    if (uint32_t(idx) >= uint32_t(kNumParams)) return 0;
+    const int v = eb_->param(idx);
+    // (port) EMU -> VOICES: a program of the original has 0 there, which means its 8 voices.
+    // Reading it as 8 puts the knob and the value popup where the display already says they
+    // are, so turning the knob goes to 7 or 9 instead of jumping to the bottom of the range.
+    // The program itself keeps the 0 until the parameter is really edited.
+    if (p.fmt == Fmt::Polyphony && v == 0) return kOriginalPlayableVoices;
+    return v;
 }
 
 void LcdController::writeParam(const LcdParam& p, int v) {  // FUN_0045b3a4

@@ -500,6 +500,11 @@ never writes — "not in the GUI", always 0 — so every program that predates t
 * host chunks are the 540-byte record, so the value travels with a project; an old chunk has
   0 there. A value outside 1..64 is treated as 0 (no version of the port writes one).
 
+In the editor the 0 is read as 8 (`LcdController::readParam`), so the knob and the value list
+sit where the display already says they are and turning the knob goes to 7 or 9 instead of
+jumping to the bottom of the range; the program itself keeps the 0 until the parameter is
+really edited, which is what keeps old programs byte for byte what they were.
+
 The original preserves the byte: it copies whole records in and out of its library and files
 and never touches the bytes it has no page for, so a program edited and written by the
 original keeps the voices the port stored. The one path that cannot carry it is the SysEx

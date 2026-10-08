@@ -271,7 +271,7 @@ int PlatformUiMac::messageBox(const std::string& text, const std::string& captio
 bool PlatformUiMac::fileDialog(const FileDialogRequest& req, std::string& path) {
     NSSavePanel* p = req.save ? [NSSavePanel savePanel] : [NSOpenPanel openPanel];
     // filter "Desc (*.a; *.b)|*.a;*.b|..." -> extensions
-    NSMutableArray<UTType*>* types = [NSMutableArray array];
+    NSMutableArray<NSString*>* exts = [NSMutableArray array];
     {
         std::string f = req.filter;
         size_t bar = 0;
@@ -285,10 +285,7 @@ bool PlatformUiMac::fileDialog(const FileDialogRequest& req, std::string& path) 
                     const size_t e = part.find(';', s);
                     std::string pat = part.substr(s, e == std::string::npos ? std::string::npos : e - s);
                     const size_t dot = pat.rfind('.');
-                    if (dot != std::string::npos && pat.substr(dot + 1) != "*") {
-                        UTType* t = [UTType typeWithFilenameExtension:ns(pat.substr(dot + 1))];
-                        if (t) [types addObject:t];
-                    }
+                    if (dot != std::string::npos && pat.substr(dot + 1) != "*") [exts addObject:ns(pat.substr(dot + 1))];
                     if (e == std::string::npos) break;
                     s = e + 1;
                 }
@@ -298,7 +295,21 @@ bool PlatformUiMac::fileDialog(const FileDialogRequest& req, std::string& path) 
             bar = next + 1;
         }
     }
-    if (types.count) p.allowedContentTypes = types;
+    // UTType and allowedContentTypes are macOS 11+; the plug-ins also run on 10.15, which
+    // has the (now deprecated) extension list instead.
+    if (exts.count) {
+        if (@available(macOS 11.0, *)) {
+            NSMutableArray<UTType*>* types = [NSMutableArray array];
+            for (NSString* ext in exts)
+                if (UTType* t = [UTType typeWithFilenameExtension:ext]) [types addObject:t];
+            if (types.count) p.allowedContentTypes = types;
+        } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            p.allowedFileTypes = exts;
+#pragma clang diagnostic pop
+        }
+    }
     p.allowsOtherFileTypes = YES;
     if (!req.initialDir.empty()) p.directoryURL = [NSURL fileURLWithPath:ns(req.initialDir) isDirectory:YES];
     if (!req.fileName.empty()) {

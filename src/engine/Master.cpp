@@ -748,11 +748,16 @@ int32_t Master::allocate() {
 }
 
 int32_t Master::findStealTarget() {
-    // (port) fadeBase_ == numPlay_ without the port layout, i.e. the original's scan.
+    // (port) fadeBase_ == numPlay_ and the fade slots are numFade_ without the port layout,
+    // i.e. the original's scan. With it the fade slots are as many as the playable voices in
+    // use, like the original's 8 + 8: that is what keeps 8 voices bit-exact, because the
+    // original re-steals the oldest fade slot once they are all busy instead of finding a
+    // free one (the heavy-stealing regression cases).
+    const int32_t fades = portLayout_ ? effectivePlayableVoices() : numFade_;
     int32_t result = fadeBase_;
     uint32_t best = voiceAt(fadeBase_).age;
     if (voiceAt(fadeBase_).active != 0) {
-        for (int32_t i = fadeBase_ + 1; i <= fadeBase_ + numFade_ - 1; i++) {
+        for (int32_t i = fadeBase_ + 1; i <= fadeBase_ + fades - 1; i++) {
             const Voice& v = voiceAt(i);
             if (v.active == 0) {
                 result = i;

@@ -56,10 +56,10 @@ code and verified against the original plugin running inside an x86 emulator.
   and the original can still load a bank the port saved. OPTIONS → *Polyphony* overrides the
   parameter for one instance (*Set by program* by default) and is saved with that instance in
   your project, not globally. Changing the voices never interrupts anything: the notes that
-  are playing keep playing, and a voice taken over by soft stealing always has a slot to fade
-  out in. With 8 voices the sound is bit-exact; with more, a performance changes only where
-  the original would have stolen a voice. The output is not rescaled, so many voices sounding
-  together are louder: lower the volume if needed.
+  are playing keep playing, and soft voice stealing gets as many slots to fade out in as there
+  are voices. With 8 voices the sound is bit-exact; with more, a performance changes only
+  where the original would have stolen a voice. The output is not rescaled, so many voices
+  sounding together are louder: lower the volume if needed.
 - Text (status bar, program name) uses Liberation Sans, a free font metrically compatible
   with Arial, with anti-aliasing.
 - SEND/REQ to a hardware SQ-80/ESQ-1 over MIDI ports are not connected yet (SysEx import and

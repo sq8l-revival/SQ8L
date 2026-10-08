@@ -110,7 +110,7 @@ jobs:
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.so python3 tests/test_gui_extensions.py
       - name: Editor on an X server (Xvfb)
         run: |
-          sh tests/linux_ui_session.sh build/bin/sq8l-vst2.so ui-session \
+          sh tests/linux_ui_session.sh build/bin/SQ8L.so ui-session \
             "c 105,12; m 110,125; c 330,161; c 40,52; k Escape; c 406,63; k Down; c 362,380; c 168,12; k Escape"
           grep -q "^closed" ui-session/host.log
       - name: Package

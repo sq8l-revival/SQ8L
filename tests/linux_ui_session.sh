@@ -1,7 +1,7 @@
 #!/bin/sh
 # Drive the Linux editor in a virtual X server (Xvfb + xdotool): the VST2 plugin runs in
 # tests/uihost/linux_host.cpp, every step is followed by a screenshot <out>/<n>.png.
-#   tests/linux_ui_session.sh build/bin/sq8l-vst2.so out "c 105,12; m 120,40; k Escape; t abc"
+#   tests/linux_ui_session.sh build/bin/SQ8L.so out "c 105,12; m 120,40; k Escape; t abc"
 #   c x,y = left click, r x,y = right click, m x,y = move, k Key = xdotool key, t text = typing
 set -e
 PLUGIN=$1; OUT=$2; STEPS=$3

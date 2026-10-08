@@ -137,7 +137,9 @@ if(SQ8L_BUILD_PLUGIN)
     set(SQ8L_FORMATS vst2 vst3 clap lv2)
     set(SQ8L_DPF_OPTIONS USE_FILE_BROWSER)
   endif()
-  dpf_add_plugin(sq8l ${SQ8L_DPF_OPTIONS}
+  # The target is named like the original's file (SQ8L.dll), so the plug-ins come out as
+  # SQ8L.vst3, SQ8L.clap, SQ8L.component, SQ8L.lv2...
+  dpf_add_plugin(SQ8L ${SQ8L_DPF_OPTIONS}
     TARGETS ${SQ8L_FORMATS}
     UI_TYPE opengl
     FILES_DSP src/plugin/SQ8LPlugin.cpp
@@ -146,19 +148,23 @@ if(SQ8L_BUILD_PLUGIN)
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/PlatformUiWin.cpp>
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/DarkMenu.cpp>
              $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/X11Pointer.cpp>)
-  target_include_directories(sq8l PUBLIC src/plugin)
-  target_link_libraries(sq8l PUBLIC sq8l_engine)
-  target_link_libraries(sq8l-dsp PUBLIC sq8l_engine)
-  target_link_libraries(sq8l-ui PUBLIC sq8l_gui sq8l_gui_logic sq8l_gui_drawn sq8l_engine)
+  target_include_directories(SQ8L PUBLIC src/plugin)
+  target_link_libraries(SQ8L PUBLIC sq8l_engine)
+  target_link_libraries(SQ8L-dsp PUBLIC sq8l_engine)
+  target_link_libraries(SQ8L-ui PUBLIC sq8l_gui sq8l_gui_logic sq8l_gui_drawn sq8l_engine)
   if(WIN32)
-    target_link_libraries(sq8l-ui PUBLIC comdlg32 gdi32 user32 uxtheme)
+    target_link_libraries(SQ8L-ui PUBLIC comdlg32 gdi32 user32 uxtheme)
   endif()
   if(APPLE)
     set_source_files_properties(src/plugin/mac/PlatformUiMac.mm PROPERTIES COMPILE_FLAGS -fobjc-arc)
-    target_link_libraries(sq8l-ui PUBLIC "-framework Cocoa" "-framework UniformTypeIdentifiers")
+    target_link_libraries(SQ8L-ui PUBLIC "-framework Cocoa" "-framework UniformTypeIdentifiers")
   endif()
-  target_include_directories(sq8l-ui PUBLIC src/plugin src/gui)
-  target_compile_options(sq8l-dsp PRIVATE ${SQ8L_FP_FLAGS})
+  target_include_directories(SQ8L-ui PUBLIC src/plugin src/gui)
+  target_compile_options(SQ8L-dsp PRIVATE ${SQ8L_FP_FLAGS})
+  # VST2 on Windows/Linux: SQ8L.dll / SQ8L.so like the original, not DPF's SQ8L-vst2.
+  if(TARGET SQ8L-vst2 AND NOT APPLE)
+    set_target_properties(SQ8L-vst2 PROPERTIES OUTPUT_NAME SQ8L)
+  endif()
 endif()
 
 # The drawn menus and dialogs of the Linux editor, without a window (tests/drawn_check.cpp).

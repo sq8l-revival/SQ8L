@@ -1,4 +1,4 @@
-"""End-to-end test of the BUILT VST2 plugin (build-plugin/bin/sq8l.vst) through the VST2 ABI,
+"""End-to-end test of the BUILT VST2 plugin (build-plugin/bin/SQ8L.vst) through the VST2 ABI,
 against the emulated original:
 
 1. renders golden scenarios through the plugin (effSetProgram + effProcessEvents +
@@ -20,7 +20,7 @@ from harness import ROOT, SQ8LHost, effSetProgram
 from oracle_render import GOLDEN
 from render_scenarios import all_scenarios, chord_and_melody
 
-PLUGIN = os.path.join(ROOT, "build-plugin", "bin", "sq8l.vst", "Contents", "MacOS", "sq8l")
+PLUGIN = os.path.join(ROOT, "build-plugin", "bin", "SQ8L.vst", "Contents", "MacOS", "SQ8L")
 
 HOSTCB = C.CFUNCTYPE(C.c_ssize_t, C.c_void_p, C.c_int32, C.c_int32, C.c_ssize_t, C.c_void_p, C.c_float)
 DISPATCH = C.CFUNCTYPE(C.c_ssize_t, C.c_void_p, C.c_int32, C.c_int32, C.c_ssize_t, C.c_void_p, C.c_float)

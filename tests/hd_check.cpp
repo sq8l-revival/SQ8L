@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     for (double S : {1.0, 1.25, 1.5, 2.0, 3.0}) {
         Bitmap full;
         hd.capture(view);
-        const Rect r = hd.render(classic, S, full, all);
+        const Rect r = hd.render(S, full, all);
         const int w = static_cast<int>(std::lround(626 * S)), h = static_cast<int>(std::lround(430 * S));
         check(full.width() == w && full.height() == h && r.left == 0 && r.top == 0 && r.right == w && r.bottom == h,
               "scale " + std::to_string(S).substr(0, 4) + ": " + std::to_string(full.width()) + "x" +
@@ -145,11 +145,11 @@ int main(int argc, char** argv) {
         view.render(after);
         const Rect dirty = HdRenderer::changedArea(before, after);
         hd.capture(view);
-        const Rect redrawn = hd.render(after, S, inc, dirty);
-        hd.render(after, S, full, all);
+        const Rect redrawn = hd.render(S, inc, dirty);
+        hd.render(S, full, all);
         check(inc.pixels() == full.pixels() && !redrawn.empty() && redrawn.width() < w,
               "  what changed redrawn alone: same pixels as a full redraw");
-        check(hd.render(after, S, inc, HdRenderer::changedArea(after, after)).empty(),
+        check(hd.render(S, inc, HdRenderer::changedArea(after, after)).empty(),
               "  nothing changed: nothing redrawn");
         view.knob(2).setValue(-70);
         view.lcd().writeText(5, 1, "+7", 0);

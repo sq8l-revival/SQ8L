@@ -347,7 +347,7 @@ protected:
         glBindTexture(GL_TEXTURE_2D, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         if (!dirty.empty()) {
-            const Rect r = hdRenderer_.render(frame_, S, hdOut_, dirty);
+            const Rect r = hdRenderer_.render(S, hdOut_, dirty);
             hdClassic_ = frame_;
             if (full) {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);

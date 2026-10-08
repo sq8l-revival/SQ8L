@@ -1,12 +1,12 @@
 // HD graphics (OPTIONS -> HD graphics, a port addition): the editor drawn at the window's
 // resolution instead of its 626x430 pixels enlarged.
 //
-// The editor still renders its classic frame; that frame, enlarged with sharp scaling, is the
-// base (background, panels and everything not redrawn yet). On top of it the controls whose
-// look is geometric are redrawn from their state with anti-aliased vector shapes: the knobs,
-// the LEDs, the buttons, the VFD (16-segment glyphs) and the red LED digits (7 segments),
-// and the texts with the font at the window's size. Which segments a glyph lights is read
-// from the original's own bitmaps, so every character keeps its shape.
+// The panel (the original's background picture) is drawn as vector shapes (HdPanel), the
+// controls over it from their state: the knobs, the LEDs, the buttons, the VFD (16-segment
+// glyphs), the red LED digits (7 segments) and the texts with the font at the window's
+// size. What the original's bitmaps show is read from them (which segments a character
+// lights, the knob's angle per frame, the shading of knobs and buttons), so the controls
+// keep their look.
 #pragma once
 
 #include <cstdint>
@@ -29,13 +29,14 @@ public:
     void capture(const EditorView& view);
 
     // Draw the editor as captured at `scale` window pixels per form pixel into `out` (resized
-    // to the window size). `classic` is the editor's 626x430 frame; only the part of the window
-    // covering `dirty` (form coordinates) is redrawn, the rest of `out` is kept. Returns the
-    // part of `out` that was redrawn (window pixels).
-    Rect render(const Bitmap& classic, double scale, Bitmap& out, const Rect& dirty) const;
+    // to the window size). Only the part of the window covering `dirty` (form coordinates) is
+    // redrawn, the rest of `out` is kept. Returns the part of `out` that was redrawn (window
+    // pixels).
+    Rect render(double scale, Bitmap& out, const Rect& dirty) const;
 
     // The bounding rectangle of the pixels that differ (empty if none; everything if the sizes
-    // differ): what changed between two classic frames.
+    // differ): what changed between two classic frames (EditorView::render), i.e. what to
+    // redraw.
     static Rect changedArea(const Bitmap& before, const Bitmap& after);
 
     // What is read from the original's bitmaps (tests): the segments a frame lights (VFD,

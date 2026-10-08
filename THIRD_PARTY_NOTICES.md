@@ -9,7 +9,7 @@ The SQ8L port uses the following third-party components. Their licence texts fol
 | [vst2sdk](https://github.com/Xaymar/vst2sdk), Michael Fabian 'Xaymar' Dirks (bundled with DPF) | clean-room VST2 interface | BSD-3-Clause |
 | [CORE-MATH](https://core-math.gitlabpages.inria.fr/) | correctly rounded exp/log/sin/cos/tan | MIT |
 | [stb_truetype](https://github.com/nothings/stb), Sean Barrett | font rasterizer | MIT / Public domain |
-| [Liberation Sans](https://github.com/liberationfonts/liberation-fonts) (embedded in the editor) | editor text | SIL Open Font License 1.1 |
+| [Liberation Sans](https://github.com/liberationfonts/liberation-fonts) 2.1.5 regular, italic, bold italic (embedded in the editor) | editor text, HD panel labels | SIL Open Font License 1.1 |
 
 Other plug-in format licences as documented by DPF (`third_party/DPF/LICENSING.md`) apply to
 the corresponding targets (VST3 and AU: ISC, DPF's own implementation; CLAP: MIT).

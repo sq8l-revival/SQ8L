@@ -27,6 +27,8 @@ jobs:
         run: ./build/sq8l_render_check --polyphony tests/regression
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
+      - name: HD graphics
+        run: ./build/sq8l_hd_check
       # Code signing and notarization (Developer ID) go here once certificates are set up
       # as repository secrets; until then package.sh signs the bundles ad hoc.
       - name: Package
@@ -106,6 +108,8 @@ jobs:
         run: ./build/sq8l_render_check --polyphony tests/regression
       - name: Drawn menus and dialogs
         run: ./build/sq8l_drawn_check
+      - name: HD graphics
+        run: ./build/sq8l_hd_check
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.so python3 tests/test_gui_extensions.py
       - name: Editor on an X server (Xvfb)

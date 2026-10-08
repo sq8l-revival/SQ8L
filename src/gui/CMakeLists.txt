@@ -1,7 +1,9 @@
-# SQ8L editor GUI (framework independent): graphics core, assets, ported controls, EditorView.
+# SQ8L editor GUI (framework independent): graphics core, assets, ported controls, EditorView,
+# HD rendering.
 file(GLOB SQ8L_GUI_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/controls/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/hd/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/text/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/data/*.cpp)
 add_library(sq8l_gui STATIC ${SQ8L_GUI_SOURCES})

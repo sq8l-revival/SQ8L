@@ -22,6 +22,7 @@
 #include "DistrhoUI.hpp"
 #include "EditorView.h"
 #include "SQ8LPlugin.hpp"
+#include "hd/HdRenderer.h"
 #include "logic/EditorController.h"
 #include "logic/EditorHost.h"
 #include "text/StbTextRenderer.h"
@@ -106,6 +107,13 @@ public:
     void setZoom(int percent) override {
         if (applyZoom) applyZoom(percent);
     }
+    // OPTIONS -> HD graphics, answered by the UI.
+    std::function<bool()> currentHd;
+    std::function<void(bool)> applyHd;
+    bool hdGraphics() override { return currentHd && currentHd(); }
+    void setHdGraphics(bool on) override {
+        if (applyHd) applyHd(on);
+    }
 
     void panic() override { p_.synth().master().panic(); }
     int voicesUsed() override { return p_.synth().master().activeVoiceCount(); }
@@ -150,6 +158,9 @@ public:
                 static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
         host_.currentZoom = [this] { return zoom_; };
         host_.applyZoom = [this](int percent) { setZoom(percent); };
+        hd_ = plugin_.settings().hd;
+        host_.currentHd = [this] { return hd_; };
+        host_.applyHd = [this](bool on) { setHd(on); };
         rgb_.resize(static_cast<size_t>(EditorView::kWidth) * EditorView::kHeight * 3);
         view_->setTextRenderer(&text_);
 
@@ -276,7 +287,11 @@ protected:
         {
             Engine lock(*this);
             view_->render(frame_);
+            if (hd_) hdRenderer_.capture(*view_);
         }
+        const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
+        if (hd_ && !(drawn_ && drawn_->hasOverlay()) && displayHd(W, H)) return;
+        hdValid_ = false;
         if (drawn_ && drawn_->hasOverlay()) {  // drawn menus and dialogs over the editor
             overlay_ = frame_;
             drawn_->render(overlay_);
@@ -284,26 +299,12 @@ protected:
         } else {
             frame_.toRGB24(rgb_.data());
         }
-        if (!texture_) {
-            glGenTextures(1, &texture_);
-            glBindTexture(GL_TEXTURE_2D, texture_);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
+        if (!texture_) createTexture();
         // Debugging aid: SQ8L_UI_FRAME=/path/frame.ppm keeps the last frame shown (with overlays).
-        if (const char* path = std::getenv("SQ8L_UI_FRAME")) {
-            if (FILE* f = std::fopen(path, "wb")) {
-                std::fprintf(f, "P6\n%d %d\n255\n", EditorView::kWidth, EditorView::kHeight);
-                std::fwrite(rgb_.data(), 1, rgb_.size(), f);
-                std::fclose(f);
-            }
-        }
+        saveFrame(EditorView::kWidth, EditorView::kHeight, rgb_);
         // Sharp scaling: the frame is enlarged with nearest neighbour to the integer multiple k
         // that covers the window, then filtered down to the window size. Pixels stay crisp
         // and even at any size; at an exact multiple the frame is drawn with nearest only.
-        const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
         int k = static_cast<int>(std::ceil(std::max(W / double(EditorView::kWidth), H / double(EditorView::kHeight)) - 1e-6));
         k = std::max(1, std::min(k, 6));
         const bool exact = W == EditorView::kWidth * k && H == EditorView::kHeight * k;
@@ -325,6 +326,81 @@ protected:
                          GL_UNSIGNED_BYTE, src);
             textureK_ = texK;
         }
+        drawTexture(W, H);
+    }
+
+    // HD graphics (src/gui/hd): the editor drawn at the window's size, redrawn where the
+    // classic frame changed and uploaded 1:1. False when the window is larger than the
+    // largest texture (the classic frame is shown then).
+    bool displayHd(int W, int H) {
+        using sq8l::gui::HdRenderer;
+        using sq8l::gui::Rect;
+        if (!maxTexture_) glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexture_);
+        const double S = W / double(EditorView::kWidth);
+        const int w = static_cast<int>(std::lround(EditorView::kWidth * S));
+        const int h = static_cast<int>(std::lround(EditorView::kHeight * S));
+        if (w > maxTexture_ || h > maxTexture_) return false;
+        if (!texture_) createTexture();
+        const bool full = !hdValid_ || hdOut_.width() != w || hdOut_.height() != h;
+        const Rect dirty =
+            full ? Rect{0, 0, EditorView::kWidth, EditorView::kHeight} : HdRenderer::changedArea(hdClassic_, frame_);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        if (!dirty.empty()) {
+            const Rect r = hdRenderer_.render(frame_, S, hdOut_, dirty);
+            hdClassic_ = frame_;
+            if (full) {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                hdRgb_.resize(static_cast<size_t>(w) * h * 3);
+                hdOut_.toRGB24(hdRgb_.data());
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, hdRgb_.data());
+                hdValid_ = true;
+                textureK_ = 0;  // (the classic frame is uploaded again when it is shown)
+                shown_.clear();
+            } else if (!r.empty()) {
+                hdRgb_.resize(static_cast<size_t>(r.width()) * r.height() * 3);
+                uint8_t* o = hdRgb_.data();
+                for (int y = r.top; y < r.bottom; y++)
+                    for (const sq8l::gui::Color* p = hdOut_.row(y) + r.left, *e = p + r.width(); p < e; p++) {
+                        *o++ = static_cast<uint8_t>(*p >> 16);
+                        *o++ = static_cast<uint8_t>(*p >> 8);
+                        *o++ = static_cast<uint8_t>(*p);
+                    }
+                glTexSubImage2D(GL_TEXTURE_2D, 0, r.left, r.top, r.width(), r.height(), GL_RGB, GL_UNSIGNED_BYTE,
+                                hdRgb_.data());
+            }
+        }
+        if (std::getenv("SQ8L_UI_FRAME")) {  // (the debugging aid above, at the window's size)
+            hdRgb_.resize(static_cast<size_t>(w) * h * 3);
+            hdOut_.toRGB24(hdRgb_.data());
+            saveFrame(w, h, hdRgb_);
+        }
+        drawTexture(W, H);
+        return true;
+    }
+
+    static void saveFrame(int w, int h, const std::vector<uint8_t>& rgb) {
+        if (const char* path = std::getenv("SQ8L_UI_FRAME")) {
+            if (FILE* f = std::fopen(path, "wb")) {
+                std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+                std::fwrite(rgb.data(), 1, rgb.size(), f);
+                std::fclose(f);
+            }
+        }
+    }
+
+    void createTexture() {
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    // The texture over the whole window.
+    void drawTexture(int W, int H) {
         const float w = static_cast<float>(W), h = static_cast<float>(H);
         glEnable(GL_TEXTURE_2D);
         glColor4f(1, 1, 1, 1);
@@ -497,6 +573,16 @@ private:
         sq8l::SharedLibrary::saveSettings();
     }
 
+    // OPTIONS -> HD graphics: remember the choice and redraw.
+    void setHd(bool on) {
+        if (on == hd_) return;
+        hd_ = on;
+        hdValid_ = false;
+        plugin_.settings().hd = on;
+        sq8l::SharedLibrary::saveSettings();
+        repaint();
+    }
+
     // Nearest-neighbour enlargement of an RGB24 editor frame by an integer factor.
     static void upscale(const std::vector<uint8_t>& src, int k, std::vector<uint8_t>& dst) {
         const int w = EditorView::kWidth, h = EditorView::kHeight, rowBytes = w * k * 3;
@@ -624,6 +710,13 @@ private:
     std::vector<uint8_t> scaled_;  // the frame enlarged k times (sharp scaling)
     int textureK_ = 0;
     int zoom_ = 100;               // window size in percent (OPTIONS -> Zoom)
+    sq8l::gui::HdRenderer hdRenderer_{text_};  // OPTIONS -> HD graphics
+    bool hd_ = false;
+    bool hdValid_ = false;           // the texture holds hdOut_
+    sq8l::gui::Bitmap hdOut_;        // the editor at the window's size
+    sq8l::gui::Bitmap hdClassic_;    // the classic frame hdOut_ was drawn from
+    std::vector<uint8_t> hdRgb_;     // upload buffer
+    GLint maxTexture_ = 0;
     bool fileDone_ = false;
     std::string fileChosen_;
     std::vector<uint8_t> rgb_;

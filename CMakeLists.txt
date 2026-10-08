@@ -171,6 +171,10 @@ endif()
 add_executable(sq8l_drawn_check tests/drawn_check.cpp)
 target_link_libraries(sq8l_drawn_check PRIVATE sq8l_gui_drawn)
 
+# HD graphics without a window (tests/hd_check.cpp).
+add_executable(sq8l_hd_check tests/hd_check.cpp)
+target_link_libraries(sq8l_hd_check PRIVATE sq8l_gui)
+
 # Native full-render checker (tests/render_check.cpp), see tests/export_golden_raw.py.
 add_executable(sq8l_render_check tests/render_check.cpp)
 target_link_libraries(sq8l_render_check PRIVATE sq8l_engine)

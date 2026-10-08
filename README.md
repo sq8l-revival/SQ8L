@@ -38,10 +38,15 @@ code and verified against the original plugin running inside an x86 emulator.
   operating system's native controls: on macOS they look like macOS. On Linux they are drawn
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
 - A few small additions to the editor: a left click on the program number opens the program
-  list (the original needs a right or double click), and three items at the bottom of
+  list (the original needs a right or double click), and these items at the bottom of
   OPTIONS: *Polyphony* (see below), *Down arrow -> next program* (the original's hidden
-  `swapProgUpDn` setting) and *Ask before loading banks/libraries* (on by default, like the
-  original).
+  `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by default, like the
+  original), *Zoom* and *HD graphics* (see below).
+- **Window size and HD graphics:** the editor can be enlarged from 100% to 300% with
+  OPTIONS → *Zoom* (or the window's corner, where the host allows it); the original's pixels
+  stay crisp at any size. OPTIONS → *HD graphics* draws the knobs, buttons, LEDs, both
+  displays and the texts at the window's resolution instead; the panel behind them is still
+  the original's picture, enlarged. Both settings are global (saved in `SQ8L.ini`).
 - **Polyphony:** 8 voices like the SQ-80 by default, up to 32 with OPTIONS → *Polyphony*.
   With 8 the sound is bit-exact; with more, a performance changes only where the original
   would have stolen a voice. The output is not rescaled, so many voices sounding together

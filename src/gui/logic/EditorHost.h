@@ -63,6 +63,9 @@ public:
     // also when the user dragged the window to a new size.
     virtual int zoom() { return 100; }
     virtual void setZoom(int percent) { (void)percent; }
+    // OPTIONS -> HD graphics: the editor drawn at the window's resolution ([port] hd).
+    virtual bool hdGraphics() { return false; }
+    virtual void setHdGraphics(bool on) { (void)on; }
 };
 
 }  // namespace sq8l::gui

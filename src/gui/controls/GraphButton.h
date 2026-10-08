@@ -40,6 +40,8 @@ public:
     int frameWidth() const { return frameWidth_; }
     Color frameColor() const { return frameColor_; }
     int pressDisplacement() const { return pressDisp_; }
+    int imageX() const { return imageX_; }  // where Paint draws the frame (set by layout)
+    int imageY() const { return imageY_; }
     // The sprite frame Paint shows.
     int frameIndex() const { return aniIdx_ + ((twoFrames_ && pressed_ > 0) ? 1 : 0); }
 

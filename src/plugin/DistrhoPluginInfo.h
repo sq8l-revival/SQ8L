@@ -13,7 +13,7 @@
 #define DISTRHO_PLUGIN_WANT_DIRECT_ACCESS 1
 #define DISTRHO_UI_DEFAULT_WIDTH 626
 #define DISTRHO_UI_DEFAULT_HEIGHT 430
-#define DISTRHO_UI_USER_RESIZABLE 0
+#define DISTRHO_UI_USER_RESIZABLE 1  // OPTIONS -> Zoom (port addition), aspect ratio kept
 #define DISTRHO_UI_USE_NANOVG 0
 // Linux: the editor's file dialogs come from DPF's file browser (elsewhere: native ones).
 #if defined(__linux__)

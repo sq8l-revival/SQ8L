@@ -58,6 +58,11 @@ public:
     // also applies to the synth); the host notifies the editor (wParam 0, lParam
     // 0x20 + index) when the value changed.
     virtual void setPortSetting(int index, int value) { (void)index; (void)value; }
+    // OPTIONS -> Zoom: size of the editor window in percent (100 = 626x430). setZoom resizes
+    // the window; the host notifies the editor (wParam 0, lParam 0x30) when the size changed,
+    // also when the user dragged the window to a new size.
+    virtual int zoom() { return 100; }
+    virtual void setZoom(int percent) { (void)percent; }
 };
 
 }  // namespace sq8l::gui

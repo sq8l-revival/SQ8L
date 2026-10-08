@@ -1,6 +1,7 @@
 #include "EditorController.h"
 
 #include <cstring>
+#include <utility>
 
 #include "Dialogs.h"
 #include "GuiFpu.h"
@@ -180,6 +181,12 @@ void EditorController::buildMenus() {
         o.push_back(poly);
         o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
         o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
+        MenuNode zoom = item("Zoom...", 0, nullptr);
+        auto zoomClick = [this](MenuNode& n) { this->zoomClick(n); };
+        for (const auto& z : {std::pair<const char*, int>{"100%   (SQ8L)", 100}, {"125%", 125}, {"150%", 150},
+                              {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
+            zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
+        o.push_back(zoom);
     }
 
     // parents (for radio items) and the items the form references
@@ -216,6 +223,7 @@ void EditorController::buildMenus() {
         menuPolyphony_ = &optionsMenu_.items[6];
         menuSwapProgUpDn_ = &optionsMenu_.items[7];
         menuConfirmLoad_ = &optionsMenu_.items[8];
+        menuZoom_ = &optionsMenu_.items[9];
     }
     pageMenu_.autoHotkeys = false;     // menuPagePopup: AutoHotkeys = maManual
     programMenu_.autoHotkeys = false;  // FUN_0043bb14
@@ -473,6 +481,8 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     swapProgUpDn_ = s.swapProgramUpDown();
     if (menuSwapProgUpDn_) menuSwapProgUpDn_->setChecked(swapProgUpDn_);
     if (menuConfirmLoad_) menuConfirmLoad_->setChecked(s.confirmLoading());
+    if (menuZoom_)  // a size dragged to a value that is not in the list checks nothing
+        for (MenuNode& n : menuZoom_->items) n.checked = n.tag == host_.zoom();
     if (menuPolyphony_)
         for (MenuNode& n : menuPolyphony_->items) n.checked = n.tag == s.polyphony();
     b = s.rightClickScrollsDisplay();
@@ -984,6 +994,13 @@ void EditorController::polyphonyClick(MenuNode& item) {
     item.setChecked(true);
     host_.setPortSetting(1, item.tag);
     updateVoices();
+}
+
+// Port addition: size of the editor window ([port] zoom), applied by the host.
+void EditorController::zoomClick(MenuNode& item) {
+    if (item.checked) return;
+    item.setChecked(true);
+    host_.setZoom(item.tag);
 }
 
 // Port addition: ask before loading a library, a bank or a SysEx bank ([port] confirmLoad).

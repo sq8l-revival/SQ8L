@@ -9,6 +9,8 @@
 // SQ8L_DRAWN_UI=1 selects them on macOS too, for testing).
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <functional>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -97,6 +99,14 @@ public:
         if (controller_) controller_->post(sq8l::gui::kMsgNotify, 0, 0x20 + index);
     }
 
+    // OPTIONS -> Zoom, answered by the UI (window size).
+    std::function<int()> currentZoom;
+    std::function<void(int)> applyZoom;
+    int zoom() override { return currentZoom ? currentZoom() : 100; }
+    void setZoom(int percent) override {
+        if (applyZoom) applyZoom(percent);
+    }
+
     void panic() override { p_.synth().master().panic(); }
     int voicesUsed() override { return p_.synth().master().activeVoiceCount(); }
     int voicesMax() override { return p_.synth().polyphony(); }
@@ -130,8 +140,16 @@ public:
           host_(plugin_),
           view_(std::make_unique<EditorView>()),
           frame_(EditorView::kWidth, EditorView::kHeight) {
+        // Resizable from the original's size up, aspect ratio kept (OPTIONS -> Zoom or the
+        // host's window handle); opens at the size last chosen ([port] zoom in SQ8L.ini).
         const double scale = getScaleFactor();
-        if (scale != 1.0) setSize(EditorView::kWidth * scale, EditorView::kHeight * scale);
+        setGeometryConstraints(static_cast<uint>(EditorView::kWidth * scale),
+                               static_cast<uint>(EditorView::kHeight * scale), true, false);
+        zoom_ = plugin_.settings().zoomPercent();
+        setSize(static_cast<uint>(EditorView::kWidth * scale * zoom_ / 100.0 + 0.5),
+                static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
+        host_.currentZoom = [this] { return zoom_; };
+        host_.applyZoom = [this](int percent) { setZoom(percent); };
         rgb_.resize(static_cast<size_t>(EditorView::kWidth) * EditorView::kHeight * 3);
         view_->setTextRenderer(&text_);
 
@@ -227,6 +245,10 @@ public:
             host_.setController(nullptr);
             controller_.reset();
         }
+        if (zoom_ != plugin_.settings().zoom) {  // dragged to a new size: remember it
+            plugin_.settings().zoom = zoom_;
+            sq8l::SharedLibrary::saveSettings();
+        }
         if (texture_) glDeleteTextures(1, &texture_);
     }
 
@@ -278,11 +300,32 @@ protected:
                 std::fclose(f);
             }
         }
+        // Sharp scaling: the frame is enlarged with nearest neighbour to the integer multiple k
+        // that covers the window, then filtered down to the window size. Pixels stay crisp
+        // and even at any size; at an exact multiple the frame is drawn with nearest only.
+        const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
+        int k = static_cast<int>(std::ceil(std::max(W / double(EditorView::kWidth), H / double(EditorView::kHeight)) - 1e-6));
+        k = std::max(1, std::min(k, 6));
+        const bool exact = W == EditorView::kWidth * k && H == EditorView::kHeight * k;
+        const int texK = exact ? 1 : k;
+        const bool changed = rgb_ != shown_;
+        if (changed) shown_ = rgb_;
         glBindTexture(GL_TEXTURE_2D, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, EditorView::kWidth, EditorView::kHeight, 0, GL_RGB,
-                     GL_UNSIGNED_BYTE, rgb_.data());
-        const float w = static_cast<float>(getWidth()), h = static_cast<float>(getHeight());
+        if (changed || texK != textureK_) {
+            const uint8_t* src = rgb_.data();
+            if (texK > 1) {
+                upscale(rgb_, texK, scaled_);
+                src = scaled_.data();
+            }
+            const GLint filter = texK > 1 ? GL_LINEAR : GL_NEAREST;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, EditorView::kWidth * texK, EditorView::kHeight * texK, 0, GL_RGB,
+                         GL_UNSIGNED_BYTE, src);
+            textureK_ = texK;
+        }
+        const float w = static_cast<float>(W), h = static_cast<float>(H);
         glEnable(GL_TEXTURE_2D);
         glColor4f(1, 1, 1, 1);
         glBegin(GL_QUADS);
@@ -293,6 +336,20 @@ protected:
         glEnd();
         glDisable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    // The window was resized (OPTIONS -> Zoom, or the host's handle): note the zoom.
+    void onResize(const ResizeEvent& ev) override {
+        UI::onResize(ev);
+        const double base = EditorView::kWidth * getScaleFactor();
+        const int z = std::max(sq8l::Settings::kMinZoom,
+                               std::min(sq8l::Settings::kMaxZoom, static_cast<int>(ev.size.getWidth() * 100.0 / base + 0.5)));
+        if (z == zoom_) return;
+        zoom_ = z;
+        if (controller_) {
+            Engine lock(*this);
+            controller_->post(sq8l::gui::kMsgNotify, 0, 0x30);  // the OPTIONS -> Zoom checks
+        }
     }
 
     bool onMouse(const MouseEvent& ev) override {
@@ -429,6 +486,30 @@ protected:
 #endif
 
 private:
+    // OPTIONS -> Zoom: resize the window (the host may adjust) and remember the choice.
+    void setZoom(int percent) {
+        percent = std::max(sq8l::Settings::kMinZoom, std::min(sq8l::Settings::kMaxZoom, percent));
+        const double scale = getScaleFactor();
+        setSize(static_cast<uint>(EditorView::kWidth * scale * percent / 100.0 + 0.5),
+                static_cast<uint>(EditorView::kHeight * scale * percent / 100.0 + 0.5));
+        zoom_ = percent;
+        plugin_.settings().zoom = percent;
+        sq8l::SharedLibrary::saveSettings();
+    }
+
+    // Nearest-neighbour enlargement of an RGB24 editor frame by an integer factor.
+    static void upscale(const std::vector<uint8_t>& src, int k, std::vector<uint8_t>& dst) {
+        const int w = EditorView::kWidth, h = EditorView::kHeight, rowBytes = w * k * 3;
+        dst.resize(static_cast<size_t>(rowBytes) * h * k);
+        for (int y = 0; y < h; y++) {
+            uint8_t* row = dst.data() + static_cast<size_t>(y) * k * rowBytes;
+            const uint8_t* s = src.data() + static_cast<size_t>(y) * w * 3;
+            for (int x = 0; x < w; x++)
+                for (int i = 0; i < k; i++) std::memcpy(row + (x * k + i) * 3, s + x * 3, 3);
+            for (int i = 1; i < k; i++) std::memcpy(row + static_cast<size_t>(i) * rowBytes, row, rowBytes);
+        }
+    }
+
     sq8l::gui::PlatformUi& platform() {
 #if SQ8L_NATIVE_UI
         if (!drawn_) return *native_;
@@ -539,6 +620,10 @@ private:
     std::unique_ptr<sq8l::gui::EditorController> controller_;
     sq8l::gui::Bitmap frame_;
     sq8l::gui::Bitmap overlay_;
+    std::vector<uint8_t> shown_;   // the frame in the texture (skip uploads when unchanged)
+    std::vector<uint8_t> scaled_;  // the frame enlarged k times (sharp scaling)
+    int textureK_ = 0;
+    int zoom_ = 100;               // window size in percent (OPTIONS -> Zoom)
     bool fileDone_ = false;
     std::string fileChosen_;
     std::vector<uint8_t> rgb_;

@@ -41,6 +41,11 @@ struct Settings {
     int port[kNumPort] = {1, kOriginalPlayableVoices};
     // Ask before loading a library, a bank or a SysEx bank over existing programs.
     bool confirmLoading() const { return port[0] > 0; }
+    // [port] zoom: size of the editor window in percent (OPTIONS -> Zoom), 100 = the original's
+    // 626x430. A preference of the user, not of a project: every editor opens at it.
+    static constexpr int kMinZoom = 100, kMaxZoom = 300;
+    int zoom = kMinZoom;
+    int zoomPercent() const { return zoom < kMinZoom ? kMinZoom : zoom > kMaxZoom ? kMaxZoom : zoom; }
     // Playable voices (OPTIONS -> Polyphony), 8 like the original up to 32.
     int polyphony() const {
         return port[1] < kOriginalPlayableVoices ? kOriginalPlayableVoices
@@ -110,6 +115,7 @@ struct Settings {
         for (int i = 0; i < kNumGui; i++) gui[i] = kGuiDefaults[i];
         for (int i = 0; i < kNumSynth; i++) synth[i] = kSynthDefaults[i];
         for (int i = 0; i < kNumPort; i++) port[i] = kPortDefaults[i];
+        zoom = kMinZoom;
         std::string section;
         size_t pos = 0;
         while (pos < text.size()) {
@@ -136,6 +142,7 @@ struct Settings {
             } else if (section == "port") {
                 for (int i = 0; i < kNumPort; i++)
                     if (key == lower(kPortKeys[i])) port[i] = strToIntDef(val, kPortDefaults[i]);
+                if (key == "zoom") zoom = strToIntDef(val, kMinZoom);
             }
         }
     }
@@ -151,6 +158,7 @@ struct Settings {
         s += "[port]\r\n";
         for (int i = 0; i < kNumPort; i++)
             s += std::string(kPortKeys[i]) + "=" + std::to_string(port[i]) + "\r\n";
+        s += "zoom=" + std::to_string(zoomPercent()) + "\r\n";
         return s;
     }
 

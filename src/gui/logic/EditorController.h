@@ -198,6 +198,7 @@ private:
     void swapProgUpDnClick(MenuNode& item);  // port addition
     void confirmLoadClick(MenuNode& item);   // port addition
     void polyphonyClick(MenuNode& item);     // port addition
+    void zoomClick(MenuNode& item);          // port addition
     void showModInfo();         // FUN_0047c9c0
     void showAbout();           // 0x47d260
     // dialogs
@@ -237,6 +238,7 @@ private:
     MenuNode* menuSwapProgUpDn_ = nullptr;  // port addition (nullptr without portExtensions)
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
+    MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)
     MenuNode* menuSynth_[5][4] = {};  // [setting][0 prog, 1.., ..] radio items
     // the popup menu shown last: command id -> item
     std::vector<MenuNode*> commands_;

@@ -131,7 +131,17 @@ void StbTextRenderer::drawTextScaled(Bitmap& target, float x, float baseline, fl
                                      const Font& font, const std::string& text, float embolden) {
     Sized& s = sized(font);  // the layout: drawText's advances
     const stbtt_fontinfo* info = &s.face->info;
-    const float sc = s.scale * scale, wider = std::max(embolden * scale, 0.f);
+    // Grid fitting at the small sizes. stb_truetype does not hint, so around one window
+    // pixel per form pixel the strokes of an 11 pixel face fall across pixel boundaries and
+    // hardly a pixel is fully covered: the text turns soft, where the original's hinted text
+    // had solid stems. Here the origin is snapped to the pixel grid and the coverage is
+    // pushed towards 0 or 1, which gives the stems their cores back. It fades out by twice
+    // the size, where plain anti-aliasing is what is wanted; `embolden`, which compensates
+    // for the thin unhinted strokes, fades out with it.
+    const float sharp = std::max(0.f, std::min(1.f, 2.f - scale));
+    if (sharp > 0) x = std::floor(x + 0.5f), baseline = std::floor(baseline + 0.5f);
+    const float contrast = 1.f + sharp, mid = 0.5f - 0.15f * sharp;
+    const float sc = s.scale * scale, wider = std::max(embolden * (1.f - 0.5f * sharp) * scale, 0.f);
     const Rect c = clip.intersect(Rect{0, 0, target.width(), target.height()});
     const float fy = baseline - std::floor(baseline);
     const int by = static_cast<int>(std::floor(baseline));
@@ -165,6 +175,11 @@ void StbTextRenderer::drawTextScaled(Bitmap& target, float x, float baseline, fl
                         d = std::max(d, scratch2_[static_cast<size_t>(yy) * gw[k] + xx]);
                     }
             }
+            if (contrast > 1.f)
+                for (uint8_t& a : scratch_) {
+                    const float v = (a / 255.f - mid) * contrast + 0.5f;
+                    a = static_cast<uint8_t>(std::max(0.f, std::min(1.f, v)) * 255.f + 0.5f);
+                }
             for (int gy = 0; gy < h; gy++) {
                 const int py = uy0 + gy;
                 if (py < c.top || py >= c.bottom) continue;

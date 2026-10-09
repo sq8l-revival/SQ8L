@@ -24,7 +24,8 @@ public:
     int textWidth(const Font& font, const std::string& text) override;
     int textHeight(const Font& font) override;
     void drawText(Bitmap& target, int x, int y, const Rect& clip, const Font& font, const std::string& text) override;
-    // Antialiased, glyphs placed at fractional positions.
+    // Antialiased, glyphs placed at fractional positions; grid fitted below twice the size,
+    // where anti-aliasing alone leaves the strokes of a small face without a solid pixel.
     void drawTextScaled(Bitmap& target, float x, float baseline, float scale, const Rect& clip, const Font& font,
                         const std::string& text, float embolden = 0) override;
 

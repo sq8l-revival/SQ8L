@@ -240,6 +240,7 @@ public:
         controller_->show();
         // The LEDs size themselves on their first paint, which mouse hit-testing depends on.
         view_->render(frame_);
+        opening_ = Opening::hostsTurn;  // see askHostForSize
     }
 
     ~SQ8LUI() override {
@@ -267,6 +268,10 @@ protected:
     void parameterChanged(uint32_t, float) override {}
 
     void uiIdle() override {
+        if (opening_ != Opening::open) {  // nothing resized us, or the request was dropped
+            askHostForSize();
+            opening_ = Opening::open;  // the window is up: a resize is the user's from here on
+        }
         if (drawn_ && drawn_->modal()) {  // (a host timer inside a nested loop: the dialog runs)
             repaint();
             return;
@@ -417,6 +422,18 @@ protected:
     // The window was resized (OPTIONS -> Zoom, or the host's handle): note the zoom.
     void onResize(const ResizeEvent& ev) override {
         UI::onResize(ev);
+        // The host sizing the window it had settled on before the editor existed (VST3 in
+        // REAPER forces its own rect in postInit): ask for ours right back. This runs before
+        // the host shows the window, so the editor never appears at the wrong size.
+        if (opening_ == Opening::hostsTurn) {
+            opening_ = Opening::asked;
+            askHostForSize();
+        }
+        // Startup churn, never a zoom the user chose -- and one resize arrives as several
+        // events (WM_SIZE, WM_WINDOWPOSCHANGED and WM_SHOWWINDOW all configure the view), so
+        // this has to hold until the window is up. Taking any of them for the zoom would
+        // shrink the editor and persist the wrong size at close.
+        if (opening_ != Opening::open) return;
         const double base = EditorView::kWidth * getScaleFactor();
         const int z = std::max(sq8l::Settings::kMinZoom,
                                std::min(sq8l::Settings::kMaxZoom, static_cast<int>(ev.size.getWidth() * 100.0 / base + 0.5)));
@@ -562,6 +579,23 @@ protected:
 #endif
 
 private:
+    // The constructor's setSize() runs while DPF is still initializing, and there it only
+    // resizes our own window -- the host is never told. Hosts settle on a size before the
+    // editor exists, from the unzoomed DISTRHO_UI_DEFAULT_* size DPF answers with until
+    // then, and we lose the zoom: REAPER's CLAP keeps a window that crops the editor
+    // (gui_get_size comes before gui_set_parent), its VST3 pushes the small rect back onto
+    // us (on_size before attached, replayed in postInit). So ask again once the request can
+    // reach the host: from the first resize the host puts on us, and failing that (CLAP
+    // never resizes us, and DPF drops a VST3 request from a host that asked for no size
+    // before attaching) from the first idle. Not a moment earlier -- our own setSize above
+    // resizes the view, whose events land here before the constructor has even returned,
+    // and an ask spent on one of those is an ask the host never hears.
+    void askHostForSize() {
+        const double scale = getScaleFactor();
+        setSize(static_cast<uint>(EditorView::kWidth * scale * zoom_ / 100.0 + 0.5),
+                static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
+    }
+
     // OPTIONS -> Zoom: resize the window (the host may adjust) and remember the choice.
     void setZoom(int percent) {
         percent = std::max(sq8l::Settings::kMinZoom, std::min(sq8l::Settings::kMaxZoom, percent));
@@ -710,6 +744,14 @@ private:
     std::vector<uint8_t> scaled_;  // the frame enlarged k times (sharp scaling)
     int textureK_ = 0;
     int zoom_ = 100;               // window size in percent (OPTIONS -> Zoom)
+    // How far the window has got towards showing at the stored zoom, see askHostForSize.
+    enum class Opening {
+        constructing,  // our own setSize is still echoing back as resize events
+        hostsTurn,     // whatever the host does to the window now, ask for our size back
+        asked,         // asked, waiting for the window to be up
+        open           // settled: a resize is the user's, and sets the zoom
+    };
+    Opening opening_ = Opening::constructing;
     sq8l::gui::HdRenderer hdRenderer_{text_};  // OPTIONS -> HD graphics
     bool hd_ = false;
     bool hdValid_ = false;           // the texture holds hdOut_

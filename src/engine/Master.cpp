@@ -353,6 +353,8 @@ void Master::muffle(float* acc) {
 // ---------------------------------------------------------------- MIDI
 
 void Master::midiNoteOn(uint8_t /*channel*/, uint8_t key, uint8_t velocity) {
+    // (port) MTS-ESP: a key the master excludes from its scale does not sound.
+    if (tuning_ != nullptr && tuning_->active() && tuning_->filteredKey(key)) return;
     NoteRecord rec;
     const int32_t mode = ovrVoiceSteal_ > 0 ? ovrVoiceSteal_ - 2
                                             : static_cast<int8_t>(currentProgram_[0x195]);
@@ -826,6 +828,11 @@ void Master::controlUpdate(Voice& v) {
         v.bendActive = 0;
     }
     pitch += bend;
+
+    // (port) MTS-ESP: whole semitones ride the pitch path like the bend above, the residual
+    // the voice's resampler clock. osc 0's wave (S + 3 below, i = 0) selects the wavesample
+    // the retune is anchored on. See docs/modules/tuning.md.
+    if (tuning_ != nullptr) pitch += modules_.docRetune(v.slot, *tuning_, v.key, word(P + 3));
 
     for (int i = 0; i < 4; i++) v.mod[4 + i] = modules_.envTick(vi, i, sustainPedal());
 

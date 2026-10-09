@@ -8,11 +8,26 @@ The SQ8L port uses the following third-party components. Their licence texts fol
 | [pugl](https://gitlab.com/lv2/pugl), David Robillard (bundled with DPF) | windowing | ISC |
 | [vst2sdk](https://github.com/Xaymar/vst2sdk), Michael Fabian 'Xaymar' Dirks (bundled with DPF) | clean-room VST2 interface | BSD-3-Clause |
 | [CORE-MATH](https://core-math.gitlabpages.inria.fr/) | correctly rounded exp/log/sin/cos/tan | MIT |
+| [MTS-ESP](https://github.com/ODDSound/MTS-ESP) client, ODDSound Ltd. | microtuning (OPTIONS -> MTS-ESP) | 0BSD |
 | [stb_truetype](https://github.com/nothings/stb), Sean Barrett | font rasterizer | MIT / Public domain |
 | [Liberation Sans](https://github.com/liberationfonts/liberation-fonts) 2.1.5 regular, italic, bold italic (embedded in the editor) | editor text, HD panel labels | SIL Open Font License 1.1 |
 
 Other plug-in format licences as documented by DPF (`third_party/DPF/LICENSING.md`) apply to
 the corresponding targets (VST3 and AU: ISC, DPF's own implementation; CLAP: MIT).
+
+## MTS-ESP — 0BSD
+
+Copyright (C) 2021 by ODDSound Ltd. info@oddsound.com
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or
+without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO
+THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT
+SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR
+ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
+CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE
+OR PERFORMANCE OF THIS SOFTWARE.
 
 ## DPF — ISC
 

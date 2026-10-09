@@ -46,6 +46,8 @@ SQ8LPlugin::SQ8LPlugin()
              this),
       events_(1024) {
     synth_.setSampleRate(static_cast<float>(getSampleRate()));
+    // (port) MTS-ESP: the engine reads this snapshot, run() refreshes it per block.
+    synth_.setTuning(&mts_.tuning());
 }
 
 SQ8LPlugin::~SQ8LPlugin() { sq8l::SharedLibrary::release(); }
@@ -119,6 +121,9 @@ void SQ8LPlugin::sampleRateChanged(double sr) {
 
 void SQ8LPlugin::run(const float**, float** outputs, uint32_t frames, const MidiEvent* midi, uint32_t midiCount) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // (port) MTS-ESP: one snapshot per block, before the events are dispatched, so the MIDI
+    // and voice paths never call into the client.
+    mts_.refresh(synth_.mtsEnabled(), synth_.mtsCorrectPitch());
     events_.clear();
     for (uint32_t i = 0; i < midiCount; i++) {
         const MidiEvent& m = midi[i];

@@ -143,6 +143,8 @@ if(SQ8L_BUILD_PLUGIN)
     TARGETS ${SQ8L_FORMATS}
     UI_TYPE opengl
     FILES_DSP src/plugin/SQ8LPlugin.cpp
+              src/plugin/MtsEspTuning.cpp
+              ${CMAKE_SOURCE_DIR}/third_party/MTS-ESP/Client/libMTSClient.cpp
     FILES_UI src/plugin/SQ8LUI.cpp
              $<$<PLATFORM_ID:Darwin>:${CMAKE_SOURCE_DIR}/src/plugin/mac/PlatformUiMac.mm>
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/PlatformUiWin.cpp>
@@ -151,6 +153,11 @@ if(SQ8L_BUILD_PLUGIN)
   target_include_directories(SQ8L PUBLIC src/plugin)
   target_link_libraries(SQ8L PUBLIC sq8l_engine)
   target_link_libraries(SQ8L-dsp PUBLIC sq8l_engine)
+  # MTS-ESP client (third_party/MTS-ESP, 0BSD): dlopens the master's library at run time.
+  target_include_directories(SQ8L-dsp PUBLIC ${CMAKE_SOURCE_DIR}/third_party/MTS-ESP/Client)
+  if(NOT WIN32)
+    target_link_libraries(SQ8L-dsp PUBLIC ${CMAKE_DL_LIBS})
+  endif()
   target_link_libraries(SQ8L-ui PUBLIC sq8l_gui sq8l_gui_logic sq8l_gui_drawn sq8l_engine)
   if(WIN32)
     target_link_libraries(SQ8L-ui PUBLIC comdlg32 gdi32 user32 uxtheme)

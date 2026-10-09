@@ -140,8 +140,17 @@ message box results, file paths, dialog actions). After every step the complete 
 compared: VFD and program display cells (character + attribute), all knob fields, button / LED
 states, status texts, name edit, page controller (page, sub-page, locks, message timer, every
 field's value / text / highlight), form fields, mouse jump, the edit buffer image, settings,
-optionally the library, and every event: popup menus (full trees with flags and position),
-message boxes, file dialogs, modal dialog contents, info windows, SetCursorPos, MIDI output.
+optionally the library, and every event: message boxes, file dialogs, modal dialog contents,
+info windows, SetCursorPos, MIDI output.
+
+The popup menu **trees are not compared** with the original. The port regroups OPTIONS and adds
+items the original has no counterpart for, and GUI parity is not a goal of the port, so
+asserting the tree would only generate churn. The menus are still driven by the scripted popup
+paths, so every command they dispatch is exercised and its effect on the state and the edit
+buffer is compared as before.
+
+The OPTIONS layout is likewise not asserted in `tests/test_gui_extensions.py`; it locates the
+items it clicks by caption. The grouping is left to inspection.
 
 To run the modal dialogs of the original the test patches PeekMessage / DispatchMessage (the
 VCL modal loop gets the posted messages, then the messages of the scripted user actions) and
@@ -177,6 +186,36 @@ Coverage (pages x parameters x actions), printed at the end of the run:
 | changed by any GUI gesture | 248 of the 248 editable ones (the other 116 are labels, min = max) |
 
 All 18 pages and 33 sub-pages; all 21 page buttons; every OPTIONS / FILE / INFO item.
+
+## OPTIONS layout (port)
+
+```
+Polyphony                           >   per instance, 0 = set by the program (EMU -> VOICES)
+Voice stealing mode                 >
+Emulation preferences               >
+------------------------------------
+Mouse                               >   restore after popup menus / knob turning, - , display scroll
+Down arrow -> next program
+------------------------------------
+Ask before loading banks/libraries
+------------------------------------
+MTS-ESP                             >   Enable, - , Correct SQ-80 per-key pitch offsets
+------------------------------------
+Zoom                                >
+```
+
+Polyphony leads: how many voices there are, then what happens when they run out, then the rest
+of the emulation. The original's "Mouse position is restored after..." submenu and its separate
+"Right click on display -> scroll page" item are one `Mouse` submenu, with the children reworded
+because the originals only read correctly under the old parent's phrasing. `MTS-ESP` carries the
+checkmark of its own `Enable` child, so the state shows without opening the submenu. Everything
+except Voice stealing mode, Emulation preferences and Mouse is a port addition and appears only
+with `portExtensions()`; without it the menu degrades to those three.
+
+**Indices are recorded as the items go in.** `buildMenus` keeps a `size_t` per cached
+`MenuNode*` and resolves the pointers once the vector is final, because the conditional port
+items shift everything after them and hard-coded positions silently rewired the wrong setting
+whenever the layout changed.
 
 ## Changes outside src/gui/logic
 

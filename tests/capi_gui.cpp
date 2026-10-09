@@ -358,6 +358,16 @@ SQ8L_API void sq8l_gui_ani_call(void* c, int32_t fn, uint32_t a) {
 // ------------------------------------------------------------------ text controls
 
 SQ8L_API void sq8l_gui_label_set(void* c, const char* text) { static_cast<Label*>(C(c))->setCaption(text); }
+
+// (port) The MTS-ESP scale name through the view, so the ellipsizing runs (a plain
+// label_set would not: it bypasses EditorView::setMtsText).
+SQ8L_API void sq8l_gui_set_mts_text(void* v, const char* text) { B(v)->view.setMtsText(text); }
+
+// (port) The voices counter through the view, so its autoSize runs and the label takes
+// the text's real width (a plain label_set leaves the bounds alone and clips).
+SQ8L_API void sq8l_gui_set_voices_text(void* v, const char* text) {
+    B(v)->view.setVoicesText(text);
+}
 SQ8L_API void sq8l_gui_edit_set(void* c, const char* text) { static_cast<NameEdit*>(C(c))->setText(text); }
 
 // ------------------------------------------------------------------ assets

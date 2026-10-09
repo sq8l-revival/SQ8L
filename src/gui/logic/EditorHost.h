@@ -66,6 +66,16 @@ public:
     // (EMU -> VOICES). Per instance and saved with the plugin's state, not in SQ8L.ini.
     virtual int polyphonyOverride() { return 0; }
     virtual void setPolyphonyOverride(int voices) { (void)voices; }
+    // OPTIONS -> MTS-ESP. Of this instance, like the polyphony override above: the plugin
+    // saves them in its own state, not in SQ8L.ini, so a project recalls them and two
+    // instances can differ.
+    virtual bool mtsEnabled() { return false; }
+    virtual void setMtsEnabled(bool on) { (void)on; }
+    virtual bool mtsCorrectPitch() { return false; }
+    virtual void setMtsCorrectPitch(bool on) { (void)on; }
+    // The connected master's scale name, empty when none is connected. Polled with the voices
+    // counter, since a master may change its scale at any time.
+    virtual std::string mtsScaleName() { return {}; }
 };
 
 }  // namespace sq8l::gui

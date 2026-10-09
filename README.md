@@ -39,14 +39,27 @@ code and verified against the original plugin running inside an x86 emulator.
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
 - A few small additions to the editor: a left click on the program number opens the program
   list (the original needs a right or double click), the **VOICES** parameter on the EMU page
-  (see below), and these items at the bottom of OPTIONS: *Polyphony* (see below), *Down arrow
-  -> next program* (the original's hidden `swapProgUpDn` setting), *Ask before loading
-  banks/libraries* (on by default, like the original) and *Zoom* (see below).
+  (see below), and these OPTIONS items: *Polyphony* (see below), *Down arrow -> next program*
+  (the original's hidden `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by
+  default, like the original), *MTS-ESP* (see below) and *Zoom* (see below). OPTIONS is also
+  regrouped: *Polyphony* leads, and the original's mouse-restore submenu and its separate
+  *Right click on display -> scroll page* item are now one *Mouse* submenu.
 - **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
   the window's corner, where the host allows it). It is drawn at the window's resolution
   rather than enlarged: the panel (labels, signal lines, frames, logo) as vector shapes
   measured from the original's picture, the knobs, buttons, LEDs and both displays from
   their state. The size is global (saved in `SQ8L.ini`).
+- **MTS-ESP:** OPTIONS → *MTS-ESP* → *Enable* makes the plug-in follow an MTS-ESP master's
+  tuning, for microtuning and dynamic scales (off by default; the master's scale name then
+  appears in the top bar). Each voice is retuned by its own resampling clock rather than by the
+  SQ-80's pitch table, which is quantized to about 3 cents: the tuning is exact to a millionth
+  of a cent while the oscillators, their relative detune and the sound itself are untouched.
+  By default only the master's deviation from equal temperament is applied, so the SQ-80's own
+  per-key pitch offsets (−1.5 to +0.5 cents, part of how it sounds) are preserved; *Correct
+  SQ-80 per-key pitch offsets* tunes to the master's frequencies exactly instead. Pitch bend
+  and glide keep the original's stepping either way. Both switches belong to the instance:
+  they are saved with it in your project, not globally, so two instances can differ and a
+  project recalls what it was set to.
 - **Polyphony:** 8 voices like the SQ-80 by default, 1 to 64 with the **VOICES** parameter on
   the EMU page, right below VSTEAL. It belongs to the sound, so it is stored in the program
   and travels with it: into banks and libraries, and into the project your host saves. Every

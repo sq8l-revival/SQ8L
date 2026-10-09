@@ -136,6 +136,7 @@ void Doc::setNumVoices(uint32_t n) { numVoices = n < capacity ? n : capacity; }
 void Doc::setDocRate(float rate) {
     docRate = rate;
     computeSmoothing();
+    resetVoiceClocks();  // (port) the per-voice poles follow the nominal ones
 }
 
 void Doc::computeSmoothing() {
@@ -155,6 +156,7 @@ void Doc::setSampleRate(float sr) {
         delphiTrunc(sgl(static_cast<double>(docRate) / sr * 1073741824.0f)));
     releaseSamples = delphiRound(sgl(mulExt(kReleaseTime, sr)));
     computeDcBlocker();
+    resetVoiceClocks();  // (port) the per-voice increments follow the nominal one
 }
 
 void Doc::computeDcBlocker() {
@@ -182,12 +184,13 @@ void Doc::resetVoice(uint32_t v) {
     DocVoice& vc = voice[v];
     vc = DocVoice{};
     vc.smoothMode = 2;
+    setVoiceClock(v, 1.0);  // (port) a reset slot is never left on a scaled clock
     for (int i = 0; i < 3; i++) {
         DocOsc& o = vc.osc[i];
         o.levelCur = levelToAmp(0);
         o.levelPrev = o.levelCur;
         o.amp = o.levelCur;
-        setAmpTarget(vc, i, o.levelCur);
+        setAmpTarget(v, vc, i, o.levelCur);
         o.halted = -1;
     }
 }
@@ -203,6 +206,7 @@ void Doc::startVoice(uint32_t v, int32_t key, int32_t linkedVoice, int32_t newNo
     p.waveKey = key;
     p.pitchKey = key;
     for (DocOscParams& op : p.osc) op.pitchMod = 0;
+    setVoiceClock(v, 1.0);  // (port) the first control tick sets the real ratio
 }
 
 void Doc::setKeys(uint32_t v, int32_t key, bool waveKeyToo) {
@@ -238,9 +242,63 @@ float Doc::levelToAmp(int32_t level) const {
     return sgl((static_cast<double>(data::kDocLevelTable[j]) - a) * f + a);
 }
 
-void Doc::setAmpTarget(DocVoice& vc, int osc, float level) {
-    const float gain = (osc == 1 && vc.amMode == 1) ? amSmoothGain : smoothGain;
+void Doc::setAmpTarget(uint32_t v, DocVoice& vc, int osc, float level) {
+    const VoiceClock& c = clock[v];
+    const float gain = (osc == 1 && vc.amMode == 1) ? c.amSmoothGain : c.smoothGain;
     vc.osc[osc].ampTarget = sgl(static_cast<double>(level) * gain);
+}
+
+// ------------------------------------------------------------------ (port) voice clock
+
+int32_t Doc::basePitch(int32_t key, int32_t wave) const {
+    int32_t p = 0;
+    uint8_t waveReg = 0, page = 0;
+    computePitch(key, key, &p, &waveReg, &page, wave, 0, 0);
+    return p;
+}
+
+void Doc::setVoiceClock(uint32_t v, double ratio) {
+    if (v >= kMaxVoices) return;
+    VoiceClock& c = clock[v];
+    if (!(ratio > 0.0)) ratio = 1.0;  // NaN or non-positive: fall back to nominal
+    if (ratio == 1.0) {
+        // Copy, never recompute: the untuned path has to stay bit-exact.
+        c.phaseInc = phaseInc;
+        c.smoothPole = smoothPole;
+        c.smoothGain = smoothGain;
+        c.amSmoothPole = amSmoothPole;
+        c.amSmoothGain = amSmoothGain;
+        c.quantizedOffset = 0;
+        c.valid = true;
+        return;
+    }
+    // floor(x + 0.5), not nearbyint: this runs inside process(), which is in round-toward-zero,
+    // and the result should not depend on the FPU mode the caller happens to be in.
+    double inc = std::floor(static_cast<double>(phaseInc) * ratio + 0.5);
+    if (!(inc >= 1.0)) inc = 1.0;  // a frozen resampler would hold one DOC sample forever
+    const double incMax = static_cast<double>((1u << 30) - 1u);  // render(): one step per sample
+    if (inc > incMax) inc = incMax;
+    c.phaseInc = static_cast<uint32_t>(inc);
+
+    // The poles only need the clock to about 0.1%, so quantize the residual to 1/64 semitone
+    // (4 units of 1/256) and recompute only when that changes: delphiPower runs CORE-MATH's
+    // correctly rounded exp/log, far too slow for every control tick of every voice.
+    const int32_t q = static_cast<int32_t>(std::floor(3072.0 * std::log2(ratio) / 4.0 + 0.5));
+    if (c.valid && c.quantizedOffset == q) return;
+    c.quantizedOffset = q;
+    const double rate =
+        static_cast<double>(docRate) * std::exp2(static_cast<double>(q) * 4.0 / 3072.0);
+    const double e = 1.0f / (mulExt(kSmoothTime, rate) + 1.0f);
+    c.smoothPole = sgl(delphiPower(0.01, e));
+    c.smoothGain = sgl(1.0f - static_cast<double>(c.smoothPole));
+    const double eAm = 1.0f / (mulExt(kAmSmoothTime, rate) + 1.0f);
+    c.amSmoothPole = sgl(delphiPower(0.01, eAm));
+    c.amSmoothGain = sgl(1.0f - static_cast<double>(c.amSmoothPole));
+    c.valid = true;
+}
+
+void Doc::resetVoiceClocks() {
+    for (uint32_t v = 0; v < kMaxVoices; v++) setVoiceClock(v, 1.0);
 }
 
 void Doc::computePitch(int32_t waveKey, int32_t pitchKey, int32_t* pitch, uint8_t* waveReg,
@@ -400,19 +458,19 @@ void Doc::update(uint32_t v) {
 
         const float amp = levelToAmp(op.level);
         if (p.init != 0) {
-            setAmpTarget(vc, i, amp);
+            setAmpTarget(v, vc, i, amp);
             o.levelCur = amp;
             o.levelPrev = amp;
         } else if (vc.smoothMode == 1) {  // EMU: one control step behind, see interpolateLevels
-            setAmpTarget(vc, i, o.levelCur);
+            setAmpTarget(v, vc, i, o.levelCur);
             o.levelPrev = o.levelCur;
             o.levelCur = amp;
         } else if (vc.smoothMode == 2) {  // FAST
-            setAmpTarget(vc, i, amp);
+            setAmpTarget(v, vc, i, amp);
             o.levelPrev = o.levelCur;
             o.levelCur = amp;
         } else {
-            setAmpTarget(vc, i, amp);
+            setAmpTarget(v, vc, i, amp);
         }
     }
 
@@ -446,7 +504,7 @@ void Doc::interpolateLevels(uint32_t v) {
         const DocOsc& o = vc.osc[i];
         if (o.valid == 0) continue;
         if (vc.smoothMode == 1) {  // EMU: halfway between the previous and the current level
-            setAmpTarget(vc, i, sgl((static_cast<double>(o.levelCur) + o.levelPrev) * 0.5f));
+            setAmpTarget(v, vc, i, sgl((static_cast<double>(o.levelCur) + o.levelPrev) * 0.5f));
         } else if (vc.smoothMode == 2) {  // FAST: extrapolate half a step, clamped to 0..1
             float x = sgl((3.0f * static_cast<double>(o.levelCur) - o.levelPrev) * 0.5f);
             if (!(x >= 0.0f)) {
@@ -454,7 +512,7 @@ void Doc::interpolateLevels(uint32_t v) {
             } else if (x > 1.0f) {
                 x = 1.0f;
             }
-            setAmpTarget(vc, i, x);
+            setAmpTarget(v, vc, i, x);
         }
     }
 }
@@ -486,6 +544,7 @@ int32_t Doc::stepOscillator(DocVoice& vc, int osc) {
 double Doc::render(uint32_t v) {
     if (v >= numVoices) return 0.0;
     DocVoice& vc = voice[v];
+    const VoiceClock& ck = clock[v];  // (port) this voice's clock and its smoothing poles
 
     if (vc.phase <= vc.prevPhase) {
         // The resampler phase wrapped: compute the next DOC output sample.
@@ -498,16 +557,16 @@ double Doc::render(uint32_t v) {
             const double t0 = o[0].enabled != 0 ? static_cast<double>(s0) * sampleScale * o[0].amp : 0.0;
             sum = t0 + static_cast<double>(s1) * sampleScale * o[1].amp;
             sum = sum + static_cast<double>(s2) * sampleScale * o[2].amp;
-            o[0].amp = sgl(static_cast<double>(smoothPole) * o[0].amp + o[0].ampTarget);
-            o[1].amp = sgl(static_cast<double>(smoothPole) * o[1].amp + o[1].ampTarget);
-            o[2].amp = sgl(static_cast<double>(smoothPole) * o[2].amp + o[2].ampTarget);
+            o[0].amp = sgl(static_cast<double>(ck.smoothPole) * o[0].amp + o[0].ampTarget);
+            o[1].amp = sgl(static_cast<double>(ck.smoothPole) * o[1].amp + o[1].ampTarget);
+            o[2].amp = sgl(static_cast<double>(ck.smoothPole) * o[2].amp + o[2].ampTarget);
         } else {
             // AM: osc 0 is silent; its sample drives osc 1's amplitude.
             sum = static_cast<double>(s1) * sampleScale * o[1].amp +
                   static_cast<double>(s2) * sampleScale * o[2].amp;
-            o[1].amp = sgl((static_cast<double>(s0) * amScale + amOffset) * amSmoothGain +
-                           static_cast<double>(amSmoothPole) * o[1].amp);
-            o[2].amp = sgl(static_cast<double>(smoothPole) * o[2].amp + o[2].ampTarget);
+            o[1].amp = sgl((static_cast<double>(s0) * amScale + amOffset) * ck.amSmoothGain +
+                           static_cast<double>(ck.amSmoothPole) * o[1].amp);
+            o[2].amp = sgl(static_cast<double>(ck.smoothPole) * o[2].amp + o[2].ampTarget);
         }
         vc.hist[0] = vc.hist[1];
         vc.hist[1] = vc.hist[2];
@@ -575,7 +634,7 @@ double Doc::render(uint32_t v) {
         tp = tp * t;
     }
     vc.prevPhase = vc.phase;
-    vc.phase = (vc.phase + phaseInc) & kPhaseMask;
+    vc.phase = (vc.phase + ck.phaseInc) & kPhaseMask;
 
     if (vc.dcBlock != 0) {
         double y = static_cast<double>(dcB0) * out + static_cast<double>(dcB1) * vc.dcX1;

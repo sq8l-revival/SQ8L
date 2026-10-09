@@ -34,6 +34,17 @@ public:
         doc.startVoice(static_cast<uint32_t>(v), key, linkedVoice, newNote, resetPhase);
     }
     void docSetPitchKey(int v, int32_t key) override { doc.setPitchKey(static_cast<uint32_t>(v), key); }
+    int32_t docRetune(int v, const Tuning& t, int32_t key, int32_t wave) override {
+        // Inactive (disabled, or the master went away mid-note): back to the nominal clock,
+        // without paying for the wavesample lookup below.
+        if (!t.active()) {
+            doc.setVoiceClock(static_cast<uint32_t>(v), 1.0);
+            return 0;
+        }
+        const VoiceRetune r = computeRetune(t, key, doc.basePitch(key, wave), doc.phaseInc);
+        doc.setVoiceClock(static_cast<uint32_t>(v), r.clockRatio);
+        return r.pitchOffset;
+    }
     void docStopVoice(int v) override { doc.stopVoice(static_cast<uint32_t>(v)); }
     void docInterpolateLevels(int v) override { doc.interpolateLevels(static_cast<uint32_t>(v)); }
     MasterDocParams& docVoiceParams(int v) override;
@@ -111,6 +122,16 @@ public:
     void setPolyphonyOverride(int voices);
     int polyphonyOverride() const;
     int polyphony() const;
+    // (port) MTS-ESP: the tuning snapshot the engine reads. Owned by the caller (the plugin
+    // refreshes it once per block); nullptr = no retuning at all. See docs/modules/tuning.md.
+    void setTuning(const Tuning* t);
+    // (port) OPTIONS -> MTS-ESP, both off by default. Of this instance, like the polyphony
+    // override above and for the same reason: a global would not be recalled with a project
+    // and would be shared by every instance in it. The plugin saves them in its own state.
+    bool mtsEnabled() const { return mtsEnabled_; }
+    void setMtsEnabled(bool on) { mtsEnabled_ = on; }
+    bool mtsCorrectPitch() const { return mtsCorrectPitch_; }
+    void setMtsCorrectPitch(bool on) { mtsCorrectPitch_ = on; }
     EditBuffer& editBuffer() { return *edit_; }
     SoundLibrary& library() { return *library_; }
     SynthModules& modules() { return *modules_; }
@@ -125,6 +146,8 @@ private:
     std::unique_ptr<EditBuffer> edit_;
     std::unique_ptr<Master> master_;
     bool chunkLoaded_ = false;  // CSynth +0xb4: ignore the next setProgram after setChunk
+    bool mtsEnabled_ = false;        // (port) OPTIONS -> MTS-ESP -> Enable
+    bool mtsCorrectPitch_ = false;   // (port) ... -> Correct SQ-80 per-key pitch offsets
 };
 
 }  // namespace sq8l

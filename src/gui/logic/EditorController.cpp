@@ -129,51 +129,16 @@ void EditorController::buildMenus() {
 
     auto emu = [this](MenuNode& n) { emuModeClick(n); };
     auto& o = optionsMenu_.items;
-    MenuNode steal = item("Voice stealing mode...", 0, nullptr);
-    steal.items.push_back(item("Set by program   (EMU->VSTEAL parameter)", 0, emu, true, true));
-    steal.items.push_back(line(true, true));
-    steal.items.push_back(item("HARD", 1, emu, true, true));
-    steal.items.push_back(item("SOFT", 2, emu, true, true));
-    o.push_back(steal);
-    MenuNode emulation = item("Emulation...", 0, nullptr);
-    MenuNode dca13 = item("DCA1-3 smoothing...", 0, nullptr);
-    dca13.items.push_back(item("Set by program   (EMU->DCA1-3 parameter)", 16, emu, true, true));
-    dca13.items.push_back(line());
-    dca13.items.push_back(item("EMU   (emulate SQ80: smooth, less responsive)", 17, emu, true, true));
-    dca13.items.push_back(item("FAST   (less accurate, more responsive)", 18, emu, true, true));
-    emulation.items.push_back(dca13);
-    MenuNode dca4 = item("DCA4 smoothing...", 0, nullptr);
-    dca4.items.push_back(item("Set by program   (EMU->DCA4 parameter)", 32, emu, true, true));
-    dca4.items.push_back(line());
-    dca4.items.push_back(item("EMU   (softer attack, more like SQ80)", 33, emu, true, true));   // menu_dca4soft
-    dca4.items.push_back(item("HARD   (hard attack, most responsive)", 34, emu, true, true));  // menu_dca4Hard
-    emulation.items.push_back(dca4);
-    MenuNode muff = item("Muffle mode...", 0, nullptr);
-    muff.items.push_back(item("Set by program   (EMU->MUFFLE parameter)", 48, emu, true, true));
-    muff.items.push_back(line());
-    muff.items.push_back(item("OFF   (crisp sound)", 49, emu, true, true));
-    muff.items.push_back(item("ON  (slightly muffled sound, more like SQ80)", 50, emu, true, true));
-    emulation.items.push_back(muff);
-    MenuNode dcb = item("DC blocking filter...", 0, nullptr);
-    dcb.items.push_back(item("Set by program   (EMU->DC-BLOCK parameter)", 64, emu, true, true));
-    dcb.items.push_back(line());
-    dcb.items.push_back(item("SMART   (on when needed)", 65, emu, true, true));
-    dcb.items.push_back(item("ON", 66, emu, true, true));
-    dcb.items.push_back(item("OFF", 67, emu, true, true));
-    emulation.items.push_back(dcb);
-    o.push_back(emulation);
-    o.push_back(line());
-    MenuNode rest = item("Mouse position is restored after...", 0, nullptr);
-    rest.items.push_back(item("Popup menus", 0, [this](MenuNode& n) { restMouseMenuClick(n); }));
-    rest.items.push_back(item("Knob turning", 0, [this](MenuNode& n) { restMouseKnobClick(n); }));
-    o.push_back(rest);
-    o.push_back(item("Right click on display -> scroll page", 0, [this](MenuNode& n) { rmbScrDispClick(n); }));
+    // (port) The OPTIONS items are indexed as they go in, so the cached MenuNode pointers at
+    // the end of this function survive reordering: the conditional port items below shift
+    // everything after them, and hard-coded positions silently rewired the wrong setting.
+    size_t iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iMts = 0, iZoom = 0;
     if (host_.portExtensions()) {
-        // Port additions: polyphony, the original's hidden swapProgUpDn ini key, load prompts.
-        o.push_back(line());
-        // Like the emulation overrides above, but of this instance only (the voices are a
-        // parameter of the program): the plugin saves it with its state, not in SQ8L.ini.
-        MenuNode poly = item("Polyphony...", 0, nullptr);
+        // (port) Polyphony leads: how many voices there are, then what happens when they run
+        // out, then the rest of the emulation. Like the emulation overrides below, but of this
+        // instance only (the voices are a parameter of the program), so the plugin saves it
+        // with its own state and not in SQ8L.ini.
+        MenuNode poly = item("Polyphony", 0, nullptr);
         auto polyClick = [this](MenuNode& n) { polyphonyClick(n); };
         poly.items.push_back(item("Set by program   (EMU->VOICES parameter)", 0, polyClick, true, true));
         poly.items.push_back(line());
@@ -187,14 +152,83 @@ void EditorController::buildMenus() {
         poly.items.push_back(item("32 voices", 32, polyClick, true, true));
         poly.items.push_back(item("48 voices", 48, polyClick, true, true));
         poly.items.push_back(item("64 voices", 64, polyClick, true, true));
+        iPoly = o.size();
         o.push_back(poly);
+    }
+    iSteal = o.size();
+    MenuNode steal = item("Voice stealing mode", 0, nullptr);
+    steal.items.push_back(item("Set by program   (EMU->VSTEAL parameter)", 0, emu, true, true));
+    steal.items.push_back(line(true, true));
+    steal.items.push_back(item("HARD", 1, emu, true, true));
+    steal.items.push_back(item("SOFT", 2, emu, true, true));
+    o.push_back(steal);
+    MenuNode emulation = item("Emulation preferences", 0, nullptr);
+    MenuNode dca13 = item("DCA1-3 smoothing", 0, nullptr);
+    dca13.items.push_back(item("Set by program   (EMU->DCA1-3 parameter)", 16, emu, true, true));
+    dca13.items.push_back(line());
+    dca13.items.push_back(item("EMU   (emulate SQ80: smooth, less responsive)", 17, emu, true, true));
+    dca13.items.push_back(item("FAST   (less accurate, more responsive)", 18, emu, true, true));
+    emulation.items.push_back(dca13);
+    MenuNode dca4 = item("DCA4 smoothing", 0, nullptr);
+    dca4.items.push_back(item("Set by program   (EMU->DCA4 parameter)", 32, emu, true, true));
+    dca4.items.push_back(line());
+    dca4.items.push_back(item("EMU   (softer attack, more like SQ80)", 33, emu, true, true));   // menu_dca4soft
+    dca4.items.push_back(item("HARD   (hard attack, most responsive)", 34, emu, true, true));  // menu_dca4Hard
+    emulation.items.push_back(dca4);
+    MenuNode muff = item("Muffle mode", 0, nullptr);
+    muff.items.push_back(item("Set by program   (EMU->MUFFLE parameter)", 48, emu, true, true));
+    muff.items.push_back(line());
+    muff.items.push_back(item("OFF   (crisp sound)", 49, emu, true, true));
+    muff.items.push_back(item("ON  (slightly muffled sound, more like SQ80)", 50, emu, true, true));
+    emulation.items.push_back(muff);
+    MenuNode dcb = item("DC blocking filter", 0, nullptr);
+    dcb.items.push_back(item("Set by program   (EMU->DC-BLOCK parameter)", 64, emu, true, true));
+    dcb.items.push_back(line());
+    dcb.items.push_back(item("SMART   (on when needed)", 65, emu, true, true));
+    dcb.items.push_back(item("ON", 66, emu, true, true));
+    dcb.items.push_back(item("OFF", 67, emu, true, true));
+    emulation.items.push_back(dcb);
+    iEmu = o.size();
+    o.push_back(emulation);
+    o.push_back(line());
+    // (port) One "Mouse" submenu holding the two restore options and the display scroll, which
+    // the original had as a submenu plus a separate top-level item. The children are reworded
+    // because the original captions only read correctly under "...is restored after...".
+    MenuNode rest = item("Mouse", 0, nullptr);
+    rest.items.push_back(item("Restore position after popup menus", 0,
+                              [this](MenuNode& n) { restMouseMenuClick(n); }));
+    rest.items.push_back(item("Restore position after knob turning", 0,
+                              [this](MenuNode& n) { restMouseKnobClick(n); }));
+    rest.items.push_back(line());
+    rest.items.push_back(item("Right click on display -> scroll page", 0,
+                              [this](MenuNode& n) { rmbScrDispClick(n); }));
+    iMouse = o.size();
+    o.push_back(rest);
+    if (host_.portExtensions()) {
+        // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
+        // and the window size. Polyphony leads the first group, above.
+        iSwap = o.size();
         o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
+        o.push_back(line());
+        iConfirm = o.size();
         o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
-        MenuNode zoom = item("Zoom...", 0, nullptr);
+        o.push_back(line());
+        // (port) Two independent options rather than one tri-state: the parent carries the
+        // checkmark of "Enable", so the state shows without opening the submenu.
+        MenuNode mts = item("MTS-ESP", 0, nullptr);
+        mts.items.push_back(item("Enable", 0, [this](MenuNode& n) { mtsEnableClick(n); }));
+        mts.items.push_back(line());
+        mts.items.push_back(item("Correct SQ-80 per-key pitch offsets", 0,
+                                 [this](MenuNode& n) { mtsCorrectPitchClick(n); }));
+        iMts = o.size();
+        o.push_back(mts);
+        o.push_back(line());
+        MenuNode zoom = item("Zoom", 0, nullptr);
         auto zoomClick = [this](MenuNode& n) { this->zoomClick(n); };
         for (const auto& z : {std::pair<const char*, int>{"100%   (SQ8L)", 100}, {"125%", 125}, {"150%", 150},
                               {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
             zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
+        iZoom = o.size();
         o.push_back(zoom);
     }
 
@@ -207,8 +241,8 @@ void EditorController::buildMenus() {
     };
     for (PopupMenuDef* m : {&fileMenu_, &infoMenu_, &optionsMenu_})
         for (MenuNode& n : m->items) link(n);
-    MenuNode& s = optionsMenu_.items[0];
-    MenuNode& e = optionsMenu_.items[1];
+    MenuNode& s = optionsMenu_.items[iSteal];
+    MenuNode& e = optionsMenu_.items[iEmu];
     menuSynth_[0][0] = &s.items[0];  // menu_vocStealProg
     menuSynth_[0][1] = &s.items[2];  // menu_vocStealHard
     menuSynth_[0][2] = &s.items[3];  // menu_vocStealSoft
@@ -225,14 +259,17 @@ void EditorController::buildMenus() {
     menuSynth_[4][1] = &e.items[3].items[2];  // menu_dcbSmart
     menuSynth_[4][2] = &e.items[3].items[3];  // menu_dcbOn
     menuSynth_[4][3] = &e.items[3].items[4];  // menu_dcbOff
-    menuRestMouseMenu_ = &optionsMenu_.items[3].items[0];
-    menuRestMouseKnob_ = &optionsMenu_.items[3].items[1];
-    menuRmbScrDisp_ = &optionsMenu_.items[4];
+    menuRestMouseMenu_ = &optionsMenu_.items[iMouse].items[0];
+    menuRestMouseKnob_ = &optionsMenu_.items[iMouse].items[1];
+    menuRmbScrDisp_ = &optionsMenu_.items[iMouse].items[3];  // after the separator
     if (host_.portExtensions()) {
-        menuPolyphony_ = &optionsMenu_.items[6];
-        menuSwapProgUpDn_ = &optionsMenu_.items[7];
-        menuConfirmLoad_ = &optionsMenu_.items[8];
-        menuZoom_ = &optionsMenu_.items[9];
+        menuPolyphony_ = &optionsMenu_.items[iPoly];
+        menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
+        menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
+        menuMts_ = &optionsMenu_.items[iMts];
+        menuMtsEnable_ = &menuMts_->items[0];
+        menuMtsCorrect_ = &menuMts_->items[2];
+        menuZoom_ = &optionsMenu_.items[iZoom];
     }
     pageMenu_.autoHotkeys = false;     // menuPagePopup: AutoHotkeys = maManual
     programMenu_.autoHotkeys = false;  // FUN_0043bb14
@@ -451,10 +488,20 @@ void EditorController::onTimer() {  // FUN_00483628
     if (tickDivider_ < 1) {
         tickDivider_ = 2;
         updateVoices();
+        updateMtsScale();  // (port)
     } else {
         tickDivider_--;
     }
     if (ctr_) ctr_->tick();
+}
+
+// Port addition: the connected MTS-ESP master's scale name in the top bar, blank when the
+// option is off or no master is there. Polled, because a master can change scale at any time.
+void EditorController::updateMtsScale() {
+    std::string name = host_.mtsEnabled() ? host_.mtsScaleName() : std::string();
+    if (name == mtsScale_) return;
+    mtsScale_ = std::move(name);
+    view_.setMtsText(mtsScale_);
 }
 
 void EditorController::updateVoices() {  // 0x483804
@@ -490,6 +537,12 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     swapProgUpDn_ = s.swapProgramUpDown();
     if (menuSwapProgUpDn_) menuSwapProgUpDn_->setChecked(swapProgUpDn_);
     if (menuConfirmLoad_) menuConfirmLoad_->setChecked(s.confirmLoading());
+    if (menuMtsEnable_) {
+        const bool on = host_.mtsEnabled();
+        menuMtsEnable_->setChecked(on);
+        menuMts_->setChecked(on);  // the parent shows the state without opening the submenu
+        menuMtsCorrect_->setChecked(host_.mtsCorrectPitch());
+    }
     if (menuZoom_)  // a size dragged to a value that is not in the list checks nothing
         for (MenuNode& n : menuZoom_->items) n.checked = n.tag == host_.zoom();
     if (menuPolyphony_) {
@@ -1016,6 +1069,21 @@ void EditorController::zoomClick(MenuNode& item) {
 }
 
 // Port addition: ask before loading a library, a bank or a SysEx bank ([port] confirmLoad).
+// Port addition: follow an MTS-ESP master ([port] mtsEsp). The parent entry mirrors the
+// checkmark so the state is visible without opening the submenu.
+void EditorController::mtsEnableClick(MenuNode& item) {
+    item.setChecked(!item.checked);
+    if (menuMts_) menuMts_->setChecked(item.checked);
+    host_.setMtsEnabled(item.checked);
+}
+
+// Port addition: correct the SQ-80's own per-key pitch offsets to the master's frequencies
+// (absolute tuning) instead of applying only its deviation from 12-ET ([port] mtsCorrectPitch).
+void EditorController::mtsCorrectPitchClick(MenuNode& item) {
+    item.setChecked(!item.checked);
+    host_.setMtsCorrectPitch(item.checked);
+}
+
 void EditorController::confirmLoadClick(MenuNode& item) {
     item.setChecked(!item.checked);
     host_.setPortSetting(0, item.checked ? 1 : 0);

@@ -27,6 +27,8 @@
 
 #include <cstdint>
 
+#include "Tuning.h"  // (port) MTS-ESP retuning, see docRetune below
+
 namespace sq8l {
 
 // Input block of Csq_lfo at +0xb0..+0xe7 (14 dwords), written by the master from the
@@ -92,6 +94,12 @@ public:
     virtual void docStartVoice(int voice, int32_t key, int32_t resetPhase, int32_t newNote,
                                int32_t linkedVoice) = 0;
     virtual void docSetPitchKey(int voice, int32_t key) = 0;        // FUN_0045c460(doc, voice, key, 0)
+    // (port) MTS-ESP, no counterpart in the original: set the voice's resampler clock for the
+    // residual retune and return the whole-semitone part in 1/256 semitone units for the
+    // caller to add to its pitch. 0 and a nominal clock when no retune applies. `wave` is
+    // oscillator 0's wave, which selects the wavesample the retune is anchored on.
+    // See docs/modules/tuning.md.
+    virtual int32_t docRetune(int voice, const Tuning& t, int32_t key, int32_t wave) = 0;
     virtual void docStopVoice(int voice) = 0;                       // FUN_0045bd78
     virtual void docInterpolateLevels(int voice) = 0;               // FUN_0045c378 (odd control ticks)
     virtual MasterDocParams& docVoiceParams(int voice) = 0;          // FUN_0045c7e0

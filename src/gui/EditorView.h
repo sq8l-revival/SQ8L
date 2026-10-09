@@ -58,6 +58,7 @@ public:
     Panel& panel1() { return *panel1_; }              // status bar panel (bottom)
     Label& statusLabel1() { return *statusLabel1_; }  // status bar text (hints, messages)
     Label& statusLabel2() { return *statusLabel2_; }  // "used/available" voices
+    Label& mtsLabel() { return *mtsLabel_; }          // (port) MTS-ESP scale name (top bar)
     NameEdit& progNameEdit() { return *progNameEdit_; }
     ImageArea& image(const std::string& name);        // menuFileImage, menuOptImage, ...
     FormArea& form() { return form_; }
@@ -70,12 +71,19 @@ public:
     // Convenience for the logic layer.
     void setStatusText(const std::string& text) { statusLabel1_->setCaption(text, text_); }  // FUN_0048367c
     void setVoicesText(const std::string& text) { statusLabel2_->setCaption(text, text_); }  // FUN_004836cc
+    // (port) The connected MTS-ESP master's scale name, empty when there is none.
+    // A name too wide for the span it was given is ellipsized (fitMtsText).
+    void setMtsText(const std::string& text);
 
     // ------------------------------------------------------------ rendering
     void setTextRenderer(TextRenderer* t) { text_ = t; }
     // Paint every visible control (WM_PAINT on the whole tree) and compose the 626x430 frame:
     // background (Form.Brush.Bitmap), then each windowed child's surface in z-order.
     void render(Bitmap& out);
+    // (port) The MTS-ESP scale name, over the finished frame: the form's graphic children are
+    // never painted, and a Panel to hold it would fill its rectangle flat. Also used by the HD
+    // renderer, so both paths draw it the same way.
+    void drawMtsLabel(Bitmap& out, const Rect& clip) const;
 
     // ------------------------------------------------------------ input
     // Form client coordinates; keys = MK_* flags as in the Win32 message wParam.
@@ -117,6 +125,10 @@ private:
     std::unique_ptr<AniDisplay> ledSync_, ledAm_, ledMono_;
     std::unique_ptr<Panel> statusPanel2_, panel1_;
     std::unique_ptr<Label> statusLabel1_, statusLabel2_;
+    // (port) MTS-ESP scale name: transparent, on the form, between PANIC and the voices.
+    std::unique_ptr<Label> mtsLabel_;
+    // The name, shortened with an ellipsis if it does not fit its span.
+    std::string fitMtsText(const std::string& text) const;
     std::unique_ptr<NameEdit> progNameEdit_;
     std::vector<std::unique_ptr<ImageArea>> images_;
     FormArea form_;

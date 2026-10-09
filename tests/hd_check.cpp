@@ -134,6 +134,7 @@ int main(int argc, char** argv) {
     view.button("pscrUpButton").setHover(true);
     view.setStatusText("Oscillator 1: octave, semitone, fine tuning and waveform");
     view.setVoicesText("3/16");
+    view.setMtsText("Bohlen-Pierce: ED3-13 - Equal division of harmonic third");
     view.progNameEdit().setText("SYNTH-BRASS");
     Bitmap classic{EditorView::kWidth, EditorView::kHeight};
     view.render(classic);
@@ -141,7 +142,7 @@ int main(int argc, char** argv) {
 
     HdRenderer hd(text);
     const std::vector<Rect> all{Rect{0, 0, EditorView::kWidth, EditorView::kHeight}};
-    for (double S : {1.0, 1.25, 1.5, 2.0, 3.0}) {
+    for (double S : {1.0, 1.25, 1.5, 1.75, 2.0, 3.0}) {
         Bitmap full;
         hd.capture(view);
         const std::vector<Rect> r = hd.render(S, full, all);

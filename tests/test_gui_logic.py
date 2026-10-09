@@ -40,6 +40,10 @@ load-save-init, SysEx program / bank import-export through the sandbox, message 
 midi (SEND / REQ / receive with ports), host (program changes from the host), random (seeded
 random action sequences). A coverage report (pages x parameters x actions) ends the run.
 
+The popup menu *trees* are not compared with the original: the port regroups OPTIONS and adds
+items the original has no counterpart for, and GUI parity is not a goal of the port. The menus
+are still driven, so every command they dispatch is exercised and its effect compared.
+
 Run:  SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_logic.py [scenario ...]
 """
 import ctypes
@@ -782,20 +786,6 @@ class CppLogic:
 
 
 # ===================================================================== comparison
-def strip_tree(tree):
-    """Oracle popup trees: keep comparable fields (ids are VCL command numbers)."""
-    out = []
-    for it in tree:
-        d = dict(text=it["text"], checked=it["checked"], disabled=it["disabled"], separator=it["separator"])
-        for k in ("radio", "break", "default"):
-            if k in it:
-                d[k] = it[k]
-        if "sub" in it:
-            d["sub"] = strip_tree(it["sub"])
-        out.append(d)
-    return out
-
-
 def path_to_id(tree, path):
     """Command of the item at `path`; 0 (menu dismissed) for a path that does not exist, a
     separator, a disabled item or a sub-menu (items a user can't choose)."""
@@ -1026,9 +1016,12 @@ class Pair:
         d = diff(so, sc, "state")
         po, eo = self.o.take_events()
         pc, ec = self.c.take_events()
-        if d is None:
-            d = diff([(k, strip_tree(t), x, y) for k, t, x, y in po],
-                     [(k, strip_tree(t), x, y) for k, t, x, y in pc], "popups")
+        # The popup trees are deliberately not compared with the original: the port regroups
+        # OPTIONS and adds items the original has no counterpart for, and GUI parity is not a
+        # goal of the port (see docs/modules/gui_logic.md). The menus are still *driven* here,
+        # so every command they dispatch is still exercised and its effect on the state and
+        # the edit buffer compared below; only the tree itself goes uncompared. po/pc are kept
+        # for the popup counter.
         if d is None:
             kinds = ("msgbox", "setcursor", "modal", "modinfo", "about", "filedialog", "midi")
             for e in eo:

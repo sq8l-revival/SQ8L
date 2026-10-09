@@ -697,6 +697,22 @@ void HdRenderer::capture(const EditorView& v) {
                               }
                           });
     }
+    // (port) The MTS-ESP scale name. Unlike the two status labels above it has no panel
+    // behind it: filling a rectangle there would replace the grain of the panel artwork.
+    {
+        const Label& ml = view.mtsLabel();
+        if (ml.visible() && !ml.caption().empty()) {
+            const Rect r = absRect(ml, 0, 0, ml.width(), ml.height());
+            const std::string caption = ml.caption();
+            const Font font = ml.font;
+            add(r, [=](Hd& hd, float S) {
+                                  const Font f = scaled(font, S);
+                                  text_.drawText(hd.b, int(std::lround(r.left * S)),
+                                                 int(std::lround(r.top * S)),
+                                                 toWindow(r, S).intersect(hd.clip), f, caption);
+                              });
+        }
+    }
     const NameEdit& e = view.progNameEdit();
     if (e.visible()) {
         const Rect r = absRect(e, 0, 0, e.width(), e.height());

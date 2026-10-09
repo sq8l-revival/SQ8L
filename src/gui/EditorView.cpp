@@ -65,6 +65,18 @@ const ButtonDef kButtons[] = {
 };
 
 // Windowed children of the form in z-order (creation order of the window handles).
+// (port) The MTS-ESP scale name's span in the top bar, with a clear 10 px at each end: it
+// starts after the PANIC label's text, whose ink ends at x = 242, and stops before the voices
+// counter at its widest. That counter is right justified on x = 599 and autoSizes, so "64/64"
+// -- the most the polyphony override can show -- begins at x = 572; the span therefore ends at
+// 561. A name too wide for it is ellipsized. Top 6 puts the baseline on the counter's,
+// StatusLabel2 sitting at 2 inside StatusPanel2 at 4.
+//
+// The span deliberately runs past StatusPanel2's left edge (496): that panel fills its
+// rectangle with the same colour as the artwork behind it, so there is nothing there to avoid,
+// and the name is drawn after the panel so it sits on top.
+constexpr int kMtsLeft = 253, kMtsTop = 6, kMtsWidth = 309;
+
 const char* const kZOrder[] = {
     "lcdKnob0", "lcdKnob1", "lcdKnob2", "lcdKnob3", "lcdKnob4", "lcdKnob9", "lcdKnob8", "lcdKnob7", "lcdKnob6",
     "lcdKnob5", "StatusPanel2", "Panel1", "lcd", "upButton", "downButton", "writeButton", "initButton",
@@ -180,6 +192,18 @@ EditorView::EditorView() {
     statusLabel2_->parent = statusPanel2_.get();
     statusPanel2_->children.push_back(statusLabel2_.get());
 
+    // (port) MTS-ESP scale name, in the free span of the top bar between the PANIC label and
+    // StatusPanel2. Transparent and parented to the form rather than to a panel of its own: a
+    // Panel fills its rectangle, which would cover artwork the original leaves visible there.
+    // Italic, to read as a status line rather than as a second counter.
+    mtsLabel_ = std::make_unique<Label>("MtsLabel");
+    mtsLabel_->setBounds(kMtsLeft, kMtsTop, kMtsWidth, 13);
+    mtsLabel_->font = labelFont;
+    mtsLabel_->font.italic = true;
+    mtsLabel_->transparent = true;
+    mtsLabel_->hint = "Tuning follows this MTS-ESP master scale";
+    mtsLabel_->parent = &form_;
+
     panel1_ = std::make_unique<Panel>("Panel1");
     panel1_->setBounds(24, 412, 545, 16);
     statusLabel1_ = std::make_unique<Label>("StatusLabel1");
@@ -213,6 +237,7 @@ EditorView::EditorView() {
         graphic_.push_back(im.get());
         images_.push_back(std::move(im));
     }
+    graphic_.push_back(mtsLabel_.get());  // (port) for the hint; painted by drawMtsLabel
     for (Control* c : graphic_) c->host = this;
 
     // ---- z-order
@@ -220,6 +245,7 @@ EditorView::EditorView() {
     form_.host = this;
     statusLabel1_->host = this;
     statusLabel2_->host = this;
+    mtsLabel_->host = this;
 }
 
 EditorView::~EditorView() = default;
@@ -260,6 +286,7 @@ Control* EditorView::find(const std::string& name) {
     if (name == "Panel1") return panel1_.get();
     if (name == "StatusLabel1") return statusLabel1_.get();
     if (name == "StatusLabel2") return statusLabel2_.get();
+    if (name == "MtsLabel") return mtsLabel_.get();
     if (name == "progNameEdit") return progNameEdit_.get();
     for (auto& i : images_)
         if (i->name() == name) return i.get();
@@ -279,6 +306,32 @@ void EditorView::render(Bitmap& out) {
         c->paintWindow(text_);
         out.blit(c->left(), c->top(), c->surface().view());
     }
+    // (port) The MTS-ESP scale name, drawn over the finished frame rather than through a
+    // windowed control: the form's own graphic children are never painted (see above), and a
+    // Panel to hold it would fill its rectangle flat and lose the grain of the artwork there.
+    drawMtsLabel(out, Rect{0, 0, out.width(), out.height()});
+}
+
+std::string EditorView::fitMtsText(const std::string& text) const {
+    if (text_ == nullptr || text.empty()) return text;
+    if (text_->textWidth(mtsLabel_->font, text) <= kMtsWidth) return text;
+    // Byte by byte, which is how the renderer measures and draws (it maps each byte to a
+    // glyph; it is not UTF-8 aware).
+    static const char* const kEllipsis = "...";
+    std::string s = text;
+    while (!s.empty() && text_->textWidth(mtsLabel_->font, s + kEllipsis) > kMtsWidth)
+        s.pop_back();
+    return s.empty() ? std::string() : s + kEllipsis;
+}
+
+void EditorView::setMtsText(const std::string& text) {
+    mtsLabel_->setCaption(fitMtsText(text), text_);
+}
+
+void EditorView::drawMtsLabel(Bitmap& out, const Rect& clip) const {
+    if (text_ == nullptr || !mtsLabel_->visible() || mtsLabel_->caption().empty()) return;
+    text_->drawText(out, mtsLabel_->left(), mtsLabel_->top(), clip, mtsLabel_->font,
+                    mtsLabel_->caption());
 }
 
 // ------------------------------------------------------------------ input

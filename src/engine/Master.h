@@ -12,6 +12,7 @@
 
 #include "FilterSQ.h"
 #include "MidiParser.h"
+#include "Tuning.h"
 #include "Voice.h"
 #include "VoiceModules.h"
 #include "VoiceSlots.h"
@@ -82,6 +83,9 @@ public:
     // order) -> +0xfe4, +0xfec, +0xff0, +0xfe8, +0xff4. 0 = set by the program, else
     // option + 1. Note the key names do not match the use of the fields (see master.md).
     void loadOverrides(const int32_t ini[5]);
+    // (port) MTS-ESP: the tuning snapshot read at note on and at every full control tick.
+    // Owned by the caller and refreshed per block; nullptr = no retuning at all.
+    void setTuning(const Tuning* t) { tuning_ = t; }
     // The edit buffer's current program (CeditBuf+0xa94) and program number (+0xb74):
     // read at note on. The record must stay valid while voices play it.
     void setCurrentProgram(const uint8_t* program, uint16_t number);
@@ -199,6 +203,7 @@ private:
     uint32_t stealCount_ = 0;
     int16_t polyPressure_[128] = {};                  // +0x11840 + key * 16
     int16_t pitchBend_ = 0;                           // +0x12040 raw -8192..8191
+    const Tuning* tuning_ = nullptr;                  // (port) MTS-ESP snapshot, not owned
     uint8_t inProcess_ = 0;                           // +0x12050
 };
 

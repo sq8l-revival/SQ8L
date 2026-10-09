@@ -78,6 +78,9 @@ struct Forwarder final : VoiceModules {
         call(M_DOC_NOTEON, v, -1, {double(key), double(oscRestart), double(newNote), double(stolen)});
     }
     void docSetPitchKey(int v, int32_t key) override { call(M_DOC_SETKEY, v, -1, {double(key)}); }
+    // (port) MTS-ESP has no counterpart in the original, and the master only calls this when a
+    // tuning snapshot is set, which the differential tests never do. Nothing to record.
+    int32_t docRetune(int, const Tuning&, int32_t, int32_t) override { return 0; }
     void docStopVoice(int v) override { call(M_DOC_STOP, v, -1, {}); }
     void docInterpolateLevels(int v) override { call(M_DOC_TICKODD, v, -1, {}); }
     MasterDocParams& docVoiceParams(int v) override { return doc[v]; }

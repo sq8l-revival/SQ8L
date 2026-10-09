@@ -104,6 +104,10 @@ SQ8L_API void sq8l_doc_load(void* d, const uint8_t* obj, uint32_t base) {
         get(obj, kParamBase + v * kParamSize + kLinkedOffset, ptr);
         o.param[v].linkedSlot = slotFromPointer(ptr, base);
     }
+    // (port) The image carries phaseInc (+0x2068) and the smoothing poles (+0x2080..+0x208c),
+    // which the per-voice clocks mirror. Loading writes them behind setSampleRate's back, so
+    // the mirrors have to be refreshed here or render() would use the previous state's.
+    o.resetVoiceClocks();
 }
 
 SQ8L_API void sq8l_doc_save(void* d, uint8_t* obj, uint32_t base) {
@@ -141,6 +145,28 @@ SQ8L_API void sq8l_doc_set_num_voices(void* d, uint32_t n) { doc(d).setNumVoices
 
 SQ8L_API void sq8l_doc_set_sample_rate(void* d, float sr, int32_t tz) {
     SQ8L_MODE(tz, doc(d).setSampleRate(sr));
+}
+
+// (port) per-voice resampler clock: not part of the original's object image, so it is read
+// and written here rather than through sq8l_doc_load / sq8l_doc_save.
+SQ8L_API void sq8l_doc_set_voice_clock(void* d, uint32_t v, double ratio) {
+    sq8l::RoundToNearest rn;
+    doc(d).setVoiceClock(v, ratio);
+}
+
+// (port) The anchor the MTS-ESP retune is measured against, for a key and oscillator 0's wave.
+SQ8L_API int32_t sq8l_doc_base_pitch(void* d, int32_t key, int32_t wave) {
+    return doc(d).basePitch(key, wave);
+}
+
+SQ8L_API void sq8l_doc_voice_clock(void* d, uint32_t v, uint32_t* phaseInc, float* smoothPole,
+                                   float* smoothGain, float* amSmoothPole, float* amSmoothGain) {
+    const sq8l::VoiceClock& c = doc(d).clock[v];
+    *phaseInc = c.phaseInc;
+    *smoothPole = c.smoothPole;
+    *smoothGain = c.smoothGain;
+    *amSmoothPole = c.amSmoothPole;
+    *amSmoothGain = c.amSmoothGain;
 }
 
 SQ8L_API void sq8l_doc_reset_all(void* d, int32_t tz) { SQ8L_MODE(tz, doc(d).resetAll()); }

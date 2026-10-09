@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "DistrhoPlugin.hpp"
+#include "MtsEspTuning.h"
 #include "SharedLibrary.h"
 #include "Synth.h"
 
@@ -23,6 +24,8 @@ public:
     std::recursive_mutex& engineMutex() { return mutex_; }
     sq8l::Synth& synth() { return synth_; }
     sq8l::Settings& settings() { return *shared_.settings; }
+    // (port) The connected MTS-ESP master's scale name, empty when there is none.
+    const std::string& mtsScaleName() const { return mts_.scaleName(); }
     // Editor notifications from the master (CSynth 0x487bb8: WM_APP+3 posted to the form),
     // queued under the engine lock and drained by the editor.
     struct EditorMessage {
@@ -67,6 +70,8 @@ private:
     std::vector<EditorMessage> editorMessages_;
     mutable std::recursive_mutex mutex_;
     sq8l::SharedLibrary::Handle shared_;
+    // (port) MTS-ESP: declared before synth_, which is handed a pointer to its snapshot.
+    sq8l::MtsEspTuning mts_;
     sq8l::Synth synth_;
     std::vector<sq8l::RawMidiEvent> events_;
 

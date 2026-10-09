@@ -2,3 +2,6 @@
 	path = third_party/DPF
 	url = https://github.com/DISTRHO/DPF.git
 	ignore = dirty
+[submodule "third_party/MTS-ESP"]
+	path = third_party/MTS-ESP
+	url = https://github.com/ODDSound/MTS-ESP.git

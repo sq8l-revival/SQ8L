@@ -75,7 +75,9 @@ public:
         std::lock_guard<std::mutex> lock(s.mutex);
         const std::string dir = userDataDir();
         makeDir(dir);
-        std::ofstream f(dir + "SQ8L.ini", std::ios::trunc);
+        // Binary: saveIni() already ends every line with CRLF like the original, and on
+        // Windows a text-mode stream would translate the LF again and write CR CR LF.
+        std::ofstream f(dir + "SQ8L.ini", std::ios::binary | std::ios::trunc);
         f << s.settings.saveIni();
     }
 

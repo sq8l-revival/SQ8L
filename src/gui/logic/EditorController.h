@@ -125,7 +125,8 @@ private:
     void wireControls();
     // message handlers
     void onTimer();                           // FUN_00483628
-    void updateVoices();                      // 0x483804
+    void updateVoices();
+    void updateMtsScale();  // port addition                      // 0x483804
     void onNotify(uint32_t wParam, int32_t lParam);  // FUN_0048365c
     void settingsChanged();                   // FUN_00483b08
     void refreshAll();                        // FUN_004842d8
@@ -199,6 +200,8 @@ private:
     void confirmLoadClick(MenuNode& item);   // port addition
     void polyphonyClick(MenuNode& item);     // port addition
     void zoomClick(MenuNode& item);          // port addition
+    void mtsEnableClick(MenuNode& item);     // port addition
+    void mtsCorrectPitchClick(MenuNode& item);  // port addition
     void showModInfo();         // FUN_0047c9c0
     void showAbout();           // 0x47d260
     // dialogs
@@ -239,6 +242,10 @@ private:
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
     MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)
+    MenuNode* menuMts_ = nullptr;           // port addition (sub-menu; carries Enable's checkmark)
+    MenuNode* menuMtsEnable_ = nullptr;     // port addition
+    MenuNode* menuMtsCorrect_ = nullptr;    // port addition
+    std::string mtsScale_;                  // port addition (last scale name shown)
     MenuNode* menuSynth_[5][4] = {};  // [setting][0 prog, 1.., ..] radio items
     // the popup menu shown last: command id -> item
     std::vector<MenuNode*> commands_;

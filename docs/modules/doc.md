@@ -29,7 +29,10 @@ One `Cdoc` object (10400 bytes) serves all 16 voice slots. Per voice:
      ROM bank from osc 0's wavetable register (SQ-80 firmware bug; audible with one-shot waves).
 3. The mixed DOC sample (+ an alternating ±1e-10 anti-denormal offset) enters a 4-sample
    history. A **polynomial resampler** (30-bit phase, increment `docRate/sr · 2^30`) produces
-   one output per host sample. The order (0–4) is chosen in `update()` from the fastest table
+   one output per host sample. (port) The increment is per voice (`clock[v].phaseInc`), which
+   is how MTS-ESP retunes a voice without touching its frequency register — see
+   [tuning.md](tuning.md); it holds the nominal value for every voice unless a master is
+   active. The order (0–4) is chosen in `update()` from the fastest table
    step rate of the enabled oscillators (`freq << (size−1−res)` vs 576717 / 1631846 / 6918636):
    1 = linear, 2 = quadratic, 3/4 = cubic/quartic whose first coefficient continues the
    previous segment's slope (dropped when |slope| < 0.001).
@@ -48,10 +51,10 @@ filter (`FilterSQ::process`).
 | +0x0008 + v·0x200 | `voice[v]` (`DocVoice`) | voice state, see below |
 | +0x2008 | – | pointer to the decompressed wave ROM (C++: `data::kWaveRom`) |
 | +0x200c..+0x2064 | `dither[2]`, `phaseScale`, `jumpThreshold`, `amScale`, `amOffset`, `sampleScale`, `k0_25`..`k85_36` | constants set by `FUN_0045baac` (1e-10, −1e-10, 2^-30, 0.001, 0.6/127, 0.4, 1/127, 0.25, 0.5, 0.75, 1.5, 1.75, 2, 2.5, 3, 4, 1/6, 1/9, 1/18, 5/3, 11/36, 11/6, 85/36) |
-| +0x2068 | `phaseInc` | `Trunc(docRate / sr · 2^30)` |
+| +0x2068 | `phaseInc` | `Trunc(Single(docRate / sr · 2^30))` — note the `Single` rounding. (port) `clock[v].phaseInc` overrides it per voice, see [tuning.md](tuning.md) |
 | +0x206c..+0x207c | `dcB0 dcB1 dcB2 dcA1 dcA2` | DC blocker coefficients (normalised by a0) |
-| +0x2080 / +0x2088 | `smoothPole` / `smoothGain` | `0.01^(1/(0.002·docRate+1))`, `1 − pole` |
-| +0x2084 / +0x208c | `amSmoothPole` / `amSmoothGain` | same with 0.0002 s (AM amplitude path) |
+| +0x2080 / +0x2088 | `smoothPole` / `smoothGain` | `0.01^(1/(0.002·docRate+1))`, `1 − pole`. (port) `clock[v]` overrides both per voice, recomputed for that voice's clock |
+| +0x2084 / +0x208c | `amSmoothPole` / `amSmoothGain` | same with 0.0002 s (AM amplitude path); (port) likewise overridden per voice |
 | +0x2090 | `docRate` | 38455.855 |
 | +0x2094 / +0x2098 | `sampleRate` / `invSampleRate` | host rate, `1/sr` |
 | +0x209c | `releaseSamples` | `Round(0.07 · sr)`: **read by plugCore** (FUN_00464410) |

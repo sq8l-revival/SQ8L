@@ -15,6 +15,10 @@ constexpr float kControlRate = 83.592575f;  // 0x42a72f66, rate of LFOs/envelope
 constexpr size_t kChunkPolyMarker = 0x1b;
 constexpr size_t kChunkPolyVoices = 0x1c;
 constexpr uint8_t kChunkPolyMagic = 'V';
+// (port) OPTIONS -> MTS-ESP, in a third spare header byte. No marker is needed: the original
+// writes 0 there, and 0 means both switches off, which is their default.
+constexpr size_t kChunkMts = 0x1d;
+constexpr uint8_t kChunkMtsEnabled = 1, kChunkMtsCorrectPitch = 2;
 }  // namespace
 
 // The master's view of the Cdoc parameter block and of the LFO inputs alias the module
@@ -123,6 +127,11 @@ std::vector<uint8_t> Synth::getChunk() {
         chunk[kChunkPolyMarker] = kChunkPolyMagic;
         chunk[kChunkPolyVoices] = static_cast<uint8_t>(ovr);
     }
+    // (port) The MTS-ESP switches, for the same reason. Both off writes nothing, so a chunk
+    // without them stays byte-identical to the original's.
+    const uint8_t mts = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
+                                             (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0));
+    if (mts != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkMts] = mts;
     return chunk;
 }
 
@@ -140,6 +149,11 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
             if (v >= kMinPlayableVoices && v <= kMaxPlayableVoices) ovr = v;
         }
         master_->setPolyphonyOverride(ovr);
+        // (port) likewise the MTS-ESP switches: a chunk without them puts this instance back
+        // to both off.
+        const uint8_t mts = size == EditBuffer::kChunkSize ? data[kChunkMts] : 0;
+        mtsEnabled_ = (mts & kChunkMtsEnabled) != 0;
+        mtsCorrectPitch_ = (mts & kChunkMtsCorrectPitch) != 0;
         return 0;
     }
     return -1;
@@ -150,5 +164,8 @@ void Synth::setPolyphonyOverride(int voices) { master_->setPolyphonyOverride(voi
 int Synth::polyphonyOverride() const { return master_->polyphonyOverride(); }
 
 int Synth::polyphony() const { return master_->effectivePlayableVoices(); }
+
+// (port) MTS-ESP: the snapshot stays owned by the caller, which refreshes it per block.
+void Synth::setTuning(const Tuning* t) { master_->setTuning(t); }
 
 }  // namespace sq8l

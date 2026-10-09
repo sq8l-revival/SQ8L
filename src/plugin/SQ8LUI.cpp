@@ -108,6 +108,15 @@ public:
     }
     int polyphonyOverride() override { return p_.synth().polyphonyOverride(); }
 
+    // OPTIONS -> MTS-ESP. Per instance, saved with the plugin's state (Synth::getChunk); the
+    // host reads it back with getState when it saves, like every other edit the editor makes.
+    bool mtsEnabled() override { return p_.synth().mtsEnabled(); }
+    void setMtsEnabled(bool on) override { p_.synth().setMtsEnabled(on); }
+    bool mtsCorrectPitch() override { return p_.synth().mtsCorrectPitch(); }
+    void setMtsCorrectPitch(bool on) override { p_.synth().setMtsCorrectPitch(on); }
+    // The scale name of the connected master, refreshed per audio block.
+    std::string mtsScaleName() override { return p_.mtsScaleName(); }
+
     // (engine lock held) The host reads the value back with getState when it saves; the port
     // does not notify it of edits, like every other edit the editor makes.
     void setPolyphonyOverride(int voices) override { p_.synth().setPolyphonyOverride(voices); }

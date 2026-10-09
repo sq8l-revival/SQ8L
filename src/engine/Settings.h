@@ -37,6 +37,9 @@ struct Settings {
     // NOTE: polyphony is not here. It belongs to the program (EMU -> VOICES) and, as a
     // per-instance override, to the plugin's own state: a global would not be recalled with
     // a project and would be shared by every instance in it.
+    // NOTE: the MTS-ESP switches are not here either. Like the polyphony override they belong
+    // to the instance and travel in the plugin's own state (Synth::getChunk), so that a project
+    // recalls them and two instances can differ.
     static constexpr int kNumPort = 1;
     static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad"};
     static constexpr int kPortDefaults[kNumPort] = {1};

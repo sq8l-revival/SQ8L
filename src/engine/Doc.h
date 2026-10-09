@@ -106,6 +106,25 @@ struct DocVoice {
     int32_t reserved1b0[20];    // +0x1b0..+0x1ff
 };
 
+// (port) Per-voice resampler clock and the DCA/AM smoothing poles at that clock, used by
+// MTS-ESP retuning (see Tuning.h and docs/modules/tuning.md). Scaling a voice's phaseInc
+// shifts its oscillator pitch without touching the frequency register, so the wave ROM index
+// sequence and the three oscillators' relative detune stay exactly as the original computes
+// them; the poles follow the clock so the 2 ms / 0.2 ms time constants do not stretch with it.
+//
+// Deliberately NOT a DocVoice field: tests/capi_doc.cpp round-trips the voice blocks with a
+// whole-struct memcpy of 0x200 bytes, so anything kept inside DocVoice would be overwritten
+// from the original's image on load and written back into the compared image on save.
+struct VoiceClock {
+    uint32_t phaseInc = 0;        // this voice's resampler increment
+    float smoothPole = 0;         // DCA pole at this voice's clock
+    float smoothGain = 0;         // 1 - smoothPole
+    float amSmoothPole = 0;       // AM pole at this voice's clock
+    float amSmoothGain = 0;       // 1 - amSmoothPole
+    int32_t quantizedOffset = 0;  // residual the poles were computed for, 1/64 semitone units
+    bool valid = false;
+};
+
 class Doc {
 public:
     static constexpr uint32_t kMaxVoices = kMaxVoiceSlots;  // array size (the original: 16, see VoiceSlots.h)
@@ -171,6 +190,9 @@ public:
     int32_t releaseSamples = 0;             // +0x209c  Round(0.07 * sr); read by plugCore (FUN_00464410)
     DocVoiceParams param[kMaxVoices] = {};  // +0x20a0..+0x289f (object size 10400)
 
+    // (port) per-voice clock, outside the original's object image: see VoiceClock.
+    VoiceClock clock[kMaxVoices] = {};
+
     // ---- internal helpers (public for the differential tests) ----
     // DCA level (0..0x7f00) -> amplitude, interpolating kDocLevelTable (FUN_0045c568).
     float levelToAmp(int32_t level) const;
@@ -180,12 +202,25 @@ public:
     void computePitch(int32_t waveKey, int32_t pitchKey, int32_t* pitch, uint8_t* waveReg,
                       uint8_t* page, int32_t wave, int32_t fine, int32_t semitone) const;
 
+    // (port) The voice's base pitch in 1/256 semitone at semitone 0 / fine 0: the anchor the
+    // MTS-ESP retune is measured against.
+    int32_t basePitch(int32_t key, int32_t wave) const;
+    // (port) Scale voice v's resampler clock to `ratio` times nominal and recompute its
+    // smoothing poles for that clock. ratio == 1.0 copies the nominal values verbatim, so the
+    // untuned path cannot drift by a float LSB.
+    void setVoiceClock(uint32_t v, double ratio);
+    // (port) Every voice back to the nominal clock. Anything that writes `phaseInc` or the
+    // smoothing poles directly must call this afterwards, or `render` keeps using the old
+    // values: the per-voice fields mirror them. setSampleRate and setDocRate do; so does the
+    // differential tests' state load (tests/capi_doc.cpp).
+    void resetVoiceClocks();
+
 private:
     void initConstants();                   // FUN_0045baac
     void setDocRate(float rate);            // FUN_0045bc34
     void computeSmoothing();                // FUN_0045c628
     void computeDcBlocker();                // FUN_0045c6dc
-    void setAmpTarget(DocVoice& vc, int osc, float level);  // FUN_0045c5ec
+    void setAmpTarget(uint32_t v, DocVoice& vc, int osc, float level);  // FUN_0045c5ec
     int32_t stepOscillator(DocVoice& vc, int osc);          // one DOC step (inlined in FUN_0045c7f4)
 };
 

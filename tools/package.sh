@@ -18,7 +18,7 @@ if [ "$PLATFORM" = macos ]; then
 elif [ "$PLATFORM" = linux ]; then
     cp -R "$BUILD/bin/SQ8L.so" "$BUILD/bin/SQ8L.vst3" "$BUILD/bin/SQ8L.clap" "$BUILD/bin/SQ8L.lv2" "$STAGE/"
     ${STRIP:-strip} "$STAGE/SQ8L.so" "$STAGE"/SQ8L.vst3/Contents/*-linux/SQ8L.so "$STAGE/SQ8L.clap" \
-        "$STAGE/SQ8L.lv2/SQ8L_dsp.so" "$STAGE/SQ8L.lv2/SQ8L_ui.so"
+        "$STAGE/SQ8L.lv2/SQ8L.so"
 else
     cp -R "$BUILD/bin/SQ8L.dll" "$BUILD/bin/SQ8L.vst3" "$BUILD/bin/SQ8L.clap" "$STAGE/"
     ${STRIP:-x86_64-w64-mingw32-strip} "$STAGE/SQ8L.dll" "$STAGE/SQ8L.vst3/Contents/x86_64-win/SQ8L.vst3" "$STAGE/SQ8L.clap"

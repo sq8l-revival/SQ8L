@@ -47,6 +47,21 @@ int vfdFrame(char c, int attr) {
 
 int ledFrame(char c) { return static_cast<int>(std::string(EditorView::kNumLcdCharset).find(c)); }
 
+size_t area(const std::vector<Rect>& rs) {
+    size_t a = 0;
+    for (const Rect& r : rs) a += size_t(r.width()) * size_t(r.height());
+    return a;
+}
+
+Rect boundingBox(const std::vector<Rect>& rs) {
+    Rect b{};
+    for (const Rect& r : rs)
+        b = b.empty() ? r
+                      : Rect{std::min(b.left, r.left), std::min(b.top, r.top), std::max(b.right, r.right),
+                             std::max(b.bottom, r.bottom)};
+    return b;
+}
+
 std::string bits(uint32_t v) {
     char s[16];
     std::snprintf(s, sizeof s, "0x%05x", v);
@@ -125,13 +140,14 @@ int main(int argc, char** argv) {
     if (!dir.empty()) save(classic, dir + "/classic.ppm");
 
     HdRenderer hd(text);
-    const Rect all{0, 0, EditorView::kWidth, EditorView::kHeight};
+    const std::vector<Rect> all{Rect{0, 0, EditorView::kWidth, EditorView::kHeight}};
     for (double S : {1.0, 1.25, 1.5, 2.0, 3.0}) {
         Bitmap full;
         hd.capture(view);
-        const Rect r = hd.render(S, full, all);
+        const std::vector<Rect> r = hd.render(S, full, all);
         const int w = static_cast<int>(std::lround(626 * S)), h = static_cast<int>(std::lround(430 * S));
-        check(full.width() == w && full.height() == h && r.left == 0 && r.top == 0 && r.right == w && r.bottom == h,
+        check(full.width() == w && full.height() == h && r.size() == 1 && r[0].left == 0 && r[0].top == 0 &&
+                  r[0].right == w && r[0].bottom == h,
               "scale " + std::to_string(S).substr(0, 4) + ": " + std::to_string(full.width()) + "x" +
                   std::to_string(full.height()) + ", all redrawn");
         if (!dir.empty()) save(full, dir + "/hd_" + std::to_string(static_cast<int>(S * 100)) + ".ppm");
@@ -143,14 +159,19 @@ int main(int argc, char** argv) {
         view.button("buttOsc2").setAniIdx(2);
         view.ledAm().setValue(1);
         view.render(after);
-        const Rect dirty = HdRenderer::changedArea(before, after);
+        const std::vector<Rect> dirty = HdRenderer::changedTiles(before, after);
         hd.capture(view);
-        const Rect redrawn = hd.render(S, inc, dirty);
+        const std::vector<Rect> redrawn = hd.render(S, inc, dirty);
         hd.render(S, full, all);
-        check(inc.pixels() == full.pixels() && !redrawn.empty() && redrawn.width() < w,
+        check(inc.pixels() == full.pixels() && !redrawn.empty(),
               "  what changed redrawn alone: same pixels as a full redraw");
-        check(hd.render(S, inc, HdRenderer::changedArea(after, after)).empty(),
+        check(hd.render(S, inc, HdRenderer::changedTiles(after, after)).empty(),
               "  nothing changed: nothing redrawn");
+        // the point of the tiles: things far apart must not drag in what lies between them
+        check(area(redrawn) * 4 < size_t(w) * size_t(h),
+              "  redrawn area " + std::to_string(100 * area(redrawn) / (size_t(w) * size_t(h))) +
+                  "% of the window (a bounding rectangle would be " +
+                  std::to_string(100 * area({boundingBox(dirty)}) / (626 * 430)) + "%)");
         view.knob(2).setValue(-70);
         view.lcd().writeText(5, 1, "+7", 0);
         view.button("buttOsc2").setAniIdx(0);

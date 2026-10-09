@@ -341,12 +341,12 @@ protected:
         if (w > maxTexture_ || h > maxTexture_) return false;
         if (!texture_) createTexture();
         const bool full = !hdValid_ || hdOut_.width() != w || hdOut_.height() != h;
-        const Rect dirty =
-            full ? Rect{0, 0, EditorView::kWidth, EditorView::kHeight} : HdRenderer::changedArea(hdClassic_, frame_);
+        const std::vector<Rect> dirty = full ? std::vector<Rect>{Rect{0, 0, EditorView::kWidth, EditorView::kHeight}}
+                                             : HdRenderer::changedTiles(hdClassic_, frame_);
         glBindTexture(GL_TEXTURE_2D, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         if (!dirty.empty()) {
-            const Rect r = hdRenderer_.render(S, hdOut_, dirty);
+            const std::vector<Rect> redrawn = hdRenderer_.render(S, hdOut_, dirty);
             hdClassic_ = frame_;
             if (full) {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -357,18 +357,19 @@ protected:
                 hdValid_ = true;
                 textureK_ = 0;  // (the classic frame is uploaded again when it is shown)
                 shown_.clear();
-            } else if (!r.empty()) {
-                hdRgb_.resize(static_cast<size_t>(r.width()) * r.height() * 3);
-                uint8_t* o = hdRgb_.data();
-                for (int y = r.top; y < r.bottom; y++)
-                    for (const sq8l::gui::Color* p = hdOut_.row(y) + r.left, *e = p + r.width(); p < e; p++) {
-                        *o++ = static_cast<uint8_t>(*p >> 16);
-                        *o++ = static_cast<uint8_t>(*p >> 8);
-                        *o++ = static_cast<uint8_t>(*p);
-                    }
-                glTexSubImage2D(GL_TEXTURE_2D, 0, r.left, r.top, r.width(), r.height(), GL_RGB, GL_UNSIGNED_BYTE,
-                                hdRgb_.data());
-            }
+            } else
+                for (const Rect& r : redrawn) {  // one upload per redrawn part
+                    hdRgb_.resize(static_cast<size_t>(r.width()) * r.height() * 3);
+                    uint8_t* o = hdRgb_.data();
+                    for (int y = r.top; y < r.bottom; y++)
+                        for (const sq8l::gui::Color* p = hdOut_.row(y) + r.left, *e = p + r.width(); p < e; p++) {
+                            *o++ = static_cast<uint8_t>(*p >> 16);
+                            *o++ = static_cast<uint8_t>(*p >> 8);
+                            *o++ = static_cast<uint8_t>(*p);
+                        }
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, r.left, r.top, r.width(), r.height(), GL_RGB, GL_UNSIGNED_BYTE,
+                                    hdRgb_.data());
+                }
         }
         if (std::getenv("SQ8L_UI_FRAME")) {  // (the debugging aid above, at the window's size)
             hdRgb_.resize(static_cast<size_t>(w) * h * 3);

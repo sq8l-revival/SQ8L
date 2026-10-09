@@ -30,15 +30,18 @@ public:
     void capture(const EditorView& view);
 
     // Draw the editor as captured at `scale` window pixels per form pixel into `out` (resized
-    // to the window size). Only the part of the window covering `dirty` (form coordinates) is
-    // redrawn, the rest of `out` is kept. Returns the part of `out` that was redrawn (window
-    // pixels).
-    Rect render(double scale, Bitmap& out, const Rect& dirty) const;
+    // to the window size). Only the parts of the window covering `dirty` (form coordinates)
+    // are redrawn, the rest of `out` is kept. Returns the parts of `out` that were redrawn
+    // (window pixels), for the caller to upload; they may overlap.
+    std::vector<Rect> render(double scale, Bitmap& out, const std::vector<Rect>& dirty) const;
 
-    // The bounding rectangle of the pixels that differ (empty if none; everything if the sizes
-    // differ): what changed between two classic frames (EditorView::render), i.e. what to
-    // redraw.
-    static Rect changedArea(const Bitmap& before, const Bitmap& after);
+    // What changed between two classic frames (EditorView::render), i.e. what to redraw: the
+    // tiles of a coarse grid holding a pixel that differs, merged into runs (empty if none;
+    // everything if the sizes differ). Tiles rather than one bounding rectangle because that
+    // rectangle spans the panel as soon as two small things far apart change, which the
+    // commonest gesture does: turning a knob also rewrites its cell in the display.
+    static std::vector<Rect> changedTiles(const Bitmap& before, const Bitmap& after);
+    static constexpr int kTile = 32;  // form pixels
 
     // What is read from the original's bitmaps (tests): the segments a frame lights (VFD,
     // charGIF: bits 0-15 = a1 a2 b c d1 d2 e f g1 g2 h i j k l m, 16 = underline, 17 = decimal

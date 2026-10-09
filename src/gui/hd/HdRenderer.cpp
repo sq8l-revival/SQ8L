@@ -541,19 +541,64 @@ double HdRenderer::knobAngle(int frame) {
     return frame >= 0 && frame < int(m.angle.size()) ? m.angle[size_t(frame)] * 180.0 / kPi : 0.0;
 }
 
-Rect HdRenderer::changedArea(const Bitmap& before, const Bitmap& after) {
-    if (before.width() != after.width() || before.height() != after.height())
-        return Rect{0, 0, after.width(), after.height()};
-    Rect r{after.width(), after.height(), 0, 0};
-    for (int y = 0; y < after.height(); y++) {
+std::vector<Rect> HdRenderer::changedTiles(const Bitmap& before, const Bitmap& after) {
+    const int w = after.width(), h = after.height();
+    if (before.width() != w || before.height() != h) return {Rect{0, 0, w, h}};
+    const int cols = (w + kTile - 1) / kTile, rows = (h + kTile - 1) / kTile;
+    std::vector<char> hit(size_t(cols) * rows, 0);
+    for (int y = 0; y < h; y++) {
         const Color *a = before.row(y), *b = after.row(y);
-        int x0 = 0, x1 = after.width();
-        while (x0 < x1 && a[x0] == b[x0]) x0++;
-        if (x0 == x1) continue;
-        while (a[x1 - 1] == b[x1 - 1]) x1--;
-        r = Rect{std::min(r.left, x0), std::min(r.top, y), std::max(r.right, x1), y + 1};
+        char* line = hit.data() + size_t(y / kTile) * cols;
+        for (int x = 0; x < w; x++)
+            if (a[x] != b[x]) {
+                const int tx = x / kTile;
+                line[tx] = 1;
+                x = (tx + 1) * kTile - 1;  // the rest of this tile cannot say more
+            }
     }
-    return r.empty() ? Rect{} : r;
+    // runs of tiles across, each merged into the run above it when it covers the same columns
+    std::vector<Rect> out;
+    std::vector<size_t> prev, cur;  // where the previous / this tile row's runs sit in `out`
+    for (int ty = 0; ty < rows; ty++) {
+        cur.clear();
+        const char* line = hit.data() + size_t(ty) * cols;
+        for (int tx = 0; tx < cols;) {
+            if (!line[tx]) {
+                tx++;
+                continue;
+            }
+            int tx1 = tx;
+            while (tx1 < cols && line[tx1]) tx1++;
+            const int left = tx * kTile, right = std::min(tx1 * kTile, w);
+            const int top = ty * kTile, bottom = std::min((ty + 1) * kTile, h);
+            size_t at = out.size();
+            for (size_t i : prev)
+                if (out[i].left == left && out[i].right == right && out[i].bottom == top) {
+                    out[i].bottom = bottom;
+                    at = i;
+                    break;
+                }
+            if (at == out.size()) out.push_back(Rect{left, top, right, bottom});
+            cur.push_back(at);
+            tx = tx1;
+        }
+        prev.swap(cur);
+    }
+    // shrink every run to the pixels that really differ: the grid is only there to keep
+    // things far apart in separate rectangles, it should not round a small change up to a tile
+    for (Rect& r : out) {
+        Rect t{r.right, r.bottom, r.left, r.top};
+        for (int y = r.top; y < r.bottom; y++) {
+            const Color *a = before.row(y), *b = after.row(y);
+            int x0 = r.left, x1 = r.right;
+            while (x0 < x1 && a[x0] == b[x0]) x0++;
+            if (x0 == x1) continue;
+            while (a[x1 - 1] == b[x1 - 1]) x1--;
+            t = Rect{std::min(t.left, x0), std::min(t.top, y), std::max(t.right, x1), y + 1};
+        }
+        if (!t.empty()) r = t;
+    }
+    return out;
 }
 
 void HdRenderer::capture(const EditorView& v) {
@@ -666,15 +711,26 @@ void HdRenderer::capture(const EditorView& v) {
     }
 }
 
-Rect HdRenderer::render(double scale, Bitmap& out, const Rect& dirty) const {
+std::vector<Rect> HdRenderer::render(double scale, Bitmap& out, const std::vector<Rect>& dirty) const {
     const float S = float(scale);
     const int W = int(std::lround(EditorView::kWidth * scale)), H = int(std::lround(EditorView::kHeight * scale));
     if (out.width() != W || out.height() != H) out.resize(W, H, 0);
     const Rect full{0, 0, W, H};
-    // What to redraw: the dirty rectangle and, whole, every redrawn control that overlaps
+    // What to redraw: the dirty rectangles and, whole, every redrawn control that overlaps
     // what is redrawn (repeated, as a control's rectangle may overlap a neighbour's by a pixel).
-    std::vector<Rect> blits{toWindow(dirty, S).intersect(full)};
-    if (blits[0].empty()) return Rect{};
+    std::vector<Rect> blits;
+    for (const Rect& d : dirty) {
+        const Rect w = toWindow(d, S).intersect(full);
+        if (!w.empty()) blits.push_back(w);
+    }
+    if (blits.empty()) return {};
+    // A control's rectangle only joins the list when it reaches past what is already there:
+    // inside it, the blit it sits in already finds whatever the control overlaps.
+    auto covered = [&blits](const Rect& r) {
+        for (const Rect& b : blits)
+            if (r.left >= b.left && r.top >= b.top && r.right <= b.right && r.bottom <= b.bottom) return true;
+        return false;
+    };
     std::vector<bool> todo(items_.size(), false);
     for (bool grew = true; grew;) {
         grew = false;
@@ -684,23 +740,20 @@ Rect HdRenderer::render(double scale, Bitmap& out, const Rect& dirty) const {
             for (const Rect& b : blits)
                 if (!w.intersect(b).empty()) {
                     todo[i] = grew = true;
-                    blits.push_back(w);
+                    if (!covered(w)) blits.push_back(w);
                     break;
                 }
         }
     }
-    Rect updated = blits[0];
     for (const Rect& b : blits) {
         Hd hd{out, b};
         drawPanel(hd, S, text_);
-        updated = Rect{std::min(updated.left, b.left), std::min(updated.top, b.top), std::max(updated.right, b.right),
-                       std::max(updated.bottom, b.bottom)};
     }
     for (size_t i = 0; i < items_.size(); i++)
         if (todo[i]) {
             items_[i].draw(out, toWindow(items_[i].r, S).intersect(full), S);
         }
-    return updated;
+    return blits;
 }
 
 }  // namespace sq8l::gui

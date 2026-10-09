@@ -139,7 +139,10 @@ if(SQ8L_BUILD_PLUGIN)
   endif()
   # The target is named like the original's file (SQ8L.dll), so the plug-ins come out as
   # SQ8L.vst3, SQ8L.clap, SQ8L.component, SQ8L.lv2...
-  dpf_add_plugin(SQ8L ${SQ8L_DPF_OPTIONS}
+  # MONOLITHIC: the LV2 DSP and UI in one binary. The UI reaches the plugin instance directly
+  # (DISTRHO_PLUGIN_WANT_DIRECT_ACCESS), so DPF's manifest names a single binary for both;
+  # built apart, hosts looked for the UI in the DSP binary and showed none.
+  dpf_add_plugin(SQ8L ${SQ8L_DPF_OPTIONS} MONOLITHIC
     TARGETS ${SQ8L_FORMATS}
     UI_TYPE opengl
     FILES_DSP src/plugin/SQ8LPlugin.cpp

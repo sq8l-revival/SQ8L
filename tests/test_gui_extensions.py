@@ -8,8 +8,7 @@ matching the original; this checks the additions themselves:
   * EMU "VOICES" (program byte 0x197): the playable voices of the program, 1 to 64, with the
     original's 8 for every program that does not have the parameter;
   * OPTIONS "Polyphony...": the same per instance, 0 = set by the program;
-  * OPTIONS "Zoom..." ([port] zoom): the editor's size, 100% to 300%;
-  * OPTIONS "HD graphics" ([port] hd): the editor drawn at the window's resolution.
+  * OPTIONS "Zoom..." ([port] zoom): the editor's size, 100% to 300%.
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -30,7 +29,7 @@ NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
 # OPTIONS items: 0 voice stealing, 1 emulation, 2 line, 3 mouse restore, 4 rmb scroll, 5 line, 6-10
-OPT_POLY, OPT_SWAP, OPT_CONFIRM, OPT_ZOOM, OPT_HD = 6, 7, 8, 9, 10
+OPT_POLY, OPT_SWAP, OPT_CONFIRM, OPT_ZOOM = 6, 7, 8, 9
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -174,14 +173,12 @@ def main():
     print("With the additions:")
     ed = Editor(L, extensions=True)
     opts = ed.menu(OPTIONS)
-    check(len(opts) == 11 and opts[5]["separator"], f"OPTIONS has 6 more items ({len(opts)})")
+    check(len(opts) == 10 and opts[5]["separator"], f"OPTIONS has 5 more items ({len(opts)})")
     zoom = opts[OPT_ZOOM]
     check(text(zoom) == "Zoom..." and [text(i) for i in zoom.get("sub", [])] ==
           ["100%   (SQ8L)", "125%", "150%", "175%", "200%", "250%", "300%"] and
           [i["checked"] for i in zoom["sub"]] == [True] + [False] * 6 and all(i.get("radio") for i in zoom["sub"]),
           f"'{text(zoom)}' 100..300%, radio items, 100% checked (the host's size)")
-    check(text(opts[OPT_HD]) == "HD graphics" and not opts[OPT_HD]["checked"],
-          f"'{text(opts[OPT_HD])}' unchecked (the host's default)")
     poly = opts[OPT_POLY]
     items = [text(i) for i in poly.get("sub", []) if not i.get("separator")]
     check(text(poly) == "Polyphony..." and items ==

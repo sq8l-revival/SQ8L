@@ -106,14 +106,6 @@ public:
     void setZoom(int percent) override {
         if (applyZoom) applyZoom(percent);
     }
-    // OPTIONS -> HD graphics, answered by the UI.
-    std::function<bool()> currentHd;
-    std::function<void(bool)> applyHd;
-    bool hdGraphics() override { return currentHd && currentHd(); }
-    void setHdGraphics(bool on) override {
-        if (applyHd) applyHd(on);
-    }
-
     int polyphonyOverride() override { return p_.synth().polyphonyOverride(); }
 
     // (engine lock held) The host reads the value back with getState when it saves; the port
@@ -163,9 +155,6 @@ public:
                 static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
         host_.currentZoom = [this] { return zoom_; };
         host_.applyZoom = [this](int percent) { setZoom(percent); };
-        hd_ = plugin_.settings().hd;
-        host_.currentHd = [this] { return hd_; };
-        host_.applyHd = [this](bool on) { setHd(on); };
         rgb_.resize(static_cast<size_t>(EditorView::kWidth) * EditorView::kHeight * 3);
         view_->setTextRenderer(&text_);
 
@@ -297,10 +286,10 @@ protected:
         {
             Engine lock(*this);
             view_->render(frame_);
-            if (hd_) hdRenderer_.capture(*view_);
+            hdRenderer_.capture(*view_);
         }
         const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
-        if (hd_ && !(drawn_ && drawn_->hasOverlay()) && displayHd(W, H)) return;
+        if (!(drawn_ && drawn_->hasOverlay()) && displayHd(W, H)) return;
         hdValid_ = false;
         if (drawn_ && drawn_->hasOverlay()) {  // drawn menus and dialogs over the editor
             overlay_ = frame_;
@@ -612,16 +601,6 @@ private:
         sq8l::SharedLibrary::saveSettings();
     }
 
-    // OPTIONS -> HD graphics: remember the choice and redraw.
-    void setHd(bool on) {
-        if (on == hd_) return;
-        hd_ = on;
-        hdValid_ = false;
-        plugin_.settings().hd = on;
-        sq8l::SharedLibrary::saveSettings();
-        repaint();
-    }
-
     // Nearest-neighbour enlargement of an RGB24 editor frame by an integer factor.
     static void upscale(const std::vector<uint8_t>& src, int k, std::vector<uint8_t>& dst) {
         const int w = EditorView::kWidth, h = EditorView::kHeight, rowBytes = w * k * 3;
@@ -757,8 +736,7 @@ private:
         open           // settled: a resize is the user's, and sets the zoom
     };
     Opening opening_ = Opening::constructing;
-    sq8l::gui::HdRenderer hdRenderer_{text_};  // OPTIONS -> HD graphics
-    bool hd_ = false;
+    sq8l::gui::HdRenderer hdRenderer_{text_};  // the editor drawn at the window's resolution
     bool hdValid_ = false;           // the texture holds hdOut_
     sq8l::gui::Bitmap hdOut_;        // the editor at the window's size
     sq8l::gui::Bitmap hdClassic_;    // the classic frame hdOut_ was drawn from

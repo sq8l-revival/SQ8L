@@ -62,9 +62,6 @@ public:
     // also when the user dragged the window to a new size.
     virtual int zoom() { return 100; }
     virtual void setZoom(int percent) { (void)percent; }
-    // OPTIONS -> HD graphics: the editor drawn at the window's resolution ([port] hd).
-    virtual bool hdGraphics() { return false; }
-    virtual void setHdGraphics(bool on) { (void)on; }
     // OPTIONS -> Polyphony: the playable voices of this instance, 0 = set by the program
     // (EMU -> VOICES). Per instance and saved with the plugin's state, not in SQ8L.ini.
     virtual int polyphonyOverride() { return 0; }

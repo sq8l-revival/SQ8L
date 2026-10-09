@@ -48,9 +48,6 @@ struct Settings {
     static constexpr int kMinZoom = 100, kMaxZoom = 300;
     int zoom = kMinZoom;
     int zoomPercent() const { return zoom < kMinZoom ? kMinZoom : zoom > kMaxZoom ? kMaxZoom : zoom; }
-    // [port] hd: the editor drawn at the window's resolution (OPTIONS -> HD graphics) instead
-    // of the original's pixels enlarged. Off by default.
-    bool hd = false;
 
     // [gui] (only the editor uses these). getGuiBool = value > 0.
     bool restoreMouseAfterMenu() const { return gui[0] > 0; }
@@ -115,7 +112,6 @@ struct Settings {
         for (int i = 0; i < kNumSynth; i++) synth[i] = kSynthDefaults[i];
         for (int i = 0; i < kNumPort; i++) port[i] = kPortDefaults[i];
         zoom = kMinZoom;
-        hd = false;
         std::string section;
         size_t pos = 0;
         while (pos < text.size()) {
@@ -143,7 +139,6 @@ struct Settings {
                 for (int i = 0; i < kNumPort; i++)
                     if (key == lower(kPortKeys[i])) port[i] = strToIntDef(val, kPortDefaults[i]);
                 if (key == "zoom") zoom = strToIntDef(val, kMinZoom);
-                if (key == "hd") hd = strToIntDef(val, 0) != 0;
             }
         }
     }
@@ -160,7 +155,6 @@ struct Settings {
         for (int i = 0; i < kNumPort; i++)
             s += std::string(kPortKeys[i]) + "=" + std::to_string(port[i]) + "\r\n";
         s += "zoom=" + std::to_string(zoomPercent()) + "\r\n";
-        s += std::string("hd=") + (hd ? "1" : "0") + "\r\n";
         return s;
     }
 

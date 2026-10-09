@@ -1,5 +1,6 @@
-// HD graphics (OPTIONS -> HD graphics, a port addition): the editor drawn at the window's
-// resolution instead of its 626x430 pixels enlarged.
+// HD graphics: the editor drawn at the window's resolution instead of its 626x430 pixels
+// enlarged. Always on; the classic frame is shown only where this cannot be (a window
+// larger than the largest texture, and the drawn menus and dialogs).
 //
 // The panel (the original's background picture) is drawn as vector shapes (HdPanel), the
 // controls over it from their state: the knobs, the LEDs, the buttons, the VFD (16-segment

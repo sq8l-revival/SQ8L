@@ -196,7 +196,6 @@ void EditorController::buildMenus() {
                               {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
             zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
         o.push_back(zoom);
-        o.push_back(item("HD graphics", 0, [this](MenuNode& n) { hdClick(n); }));
     }
 
     // parents (for radio items) and the items the form references
@@ -234,7 +233,6 @@ void EditorController::buildMenus() {
         menuSwapProgUpDn_ = &optionsMenu_.items[7];
         menuConfirmLoad_ = &optionsMenu_.items[8];
         menuZoom_ = &optionsMenu_.items[9];
-        menuHd_ = &optionsMenu_.items[10];
     }
     pageMenu_.autoHotkeys = false;     // menuPagePopup: AutoHotkeys = maManual
     programMenu_.autoHotkeys = false;  // FUN_0043bb14
@@ -494,7 +492,6 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     if (menuConfirmLoad_) menuConfirmLoad_->setChecked(s.confirmLoading());
     if (menuZoom_)  // a size dragged to a value that is not in the list checks nothing
         for (MenuNode& n : menuZoom_->items) n.checked = n.tag == host_.zoom();
-    if (menuHd_) menuHd_->setChecked(host_.hdGraphics());
     if (menuPolyphony_) {
         const int ovr = host_.polyphonyOverride();
         for (MenuNode& n : menuPolyphony_->items)
@@ -1016,12 +1013,6 @@ void EditorController::zoomClick(MenuNode& item) {
     if (item.checked) return;
     item.setChecked(true);
     host_.setZoom(item.tag);
-}
-
-// Port addition: the editor drawn at the window's resolution ([port] hd), by the host.
-void EditorController::hdClick(MenuNode& item) {
-    item.setChecked(!item.checked);
-    host_.setHdGraphics(item.checked);
 }
 
 // Port addition: ask before loading a library, a bank or a SysEx bank ([port] confirmLoad).

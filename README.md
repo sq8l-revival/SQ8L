@@ -41,13 +41,12 @@ code and verified against the original plugin running inside an x86 emulator.
   list (the original needs a right or double click), the **VOICES** parameter on the EMU page
   (see below), and these items at the bottom of OPTIONS: *Polyphony* (see below), *Down arrow
   -> next program* (the original's hidden `swapProgUpDn` setting), *Ask before loading
-  banks/libraries* (on by default, like the original), *Zoom* and *HD graphics* (see below).
-- **Window size and HD graphics:** the editor can be enlarged from 100% to 300% with
-  OPTIONS → *Zoom* (or the window's corner, where the host allows it); the original's pixels
-  stay crisp at any size. OPTIONS → *HD graphics* draws the whole editor at the window's
-  resolution instead: the panel (labels, signal lines, frames, logo) as vector shapes
+  banks/libraries* (on by default, like the original) and *Zoom* (see below).
+- **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
+  the window's corner, where the host allows it). It is drawn at the window's resolution
+  rather than enlarged: the panel (labels, signal lines, frames, logo) as vector shapes
   measured from the original's picture, the knobs, buttons, LEDs and both displays from
-  their state. Both settings are global (saved in `SQ8L.ini`).
+  their state. The size is global (saved in `SQ8L.ini`).
 - **Polyphony:** 8 voices like the SQ-80 by default, 1 to 64 with the **VOICES** parameter on
   the EMU page, right below VSTEAL. It belongs to the sound, so it is stored in the program
   and travels with it: into banks and libraries, and into the project your host saves. Every

@@ -162,7 +162,6 @@ void Master::setVoices(int32_t playable, int32_t fade) {
     lockCount_++;
     numPlay_ = playable;
     numFade_ = fade;
-    fadeBase_ = playable;  // (port) the original's layout: the fade slots follow the playable
     portLayout_ = false;
     setNumVoices(playable + fade);
     lockCount_--;
@@ -173,7 +172,6 @@ void Master::setPortLayout() {
     lockCount_++;
     numPlay_ = kMaxPlayableVoices;
     numFade_ = kMaxPlayableVoices;
-    fadeBase_ = kFadeSlotBase;
     portLayout_ = true;
     setNumVoices(kMaxVoiceSlots);
     lockCount_--;
@@ -229,7 +227,7 @@ void Master::resetVoices() {
     }
     // (port) the slots the current layout does not use: kept free so that listRemove and the
     // scans find nothing there, as with the original's arrays.
-    for (int32_t i = numVoices_; i < kMaxVoices; i++) {
+    for (int32_t i = numVoices_ > kOriginalVoiceSlots ? numVoices_ : kOriginalVoiceSlots; i < kMaxVoices; i++) {
         clearVoice(i);
         list_[i] = {nullptr, -1};
         slotMap_[i] = i;
@@ -279,8 +277,8 @@ void Master::removeHeldKey(int16_t* stacks, uint8_t key) {
 int32_t Master::activeVoiceCount() {
     int32_t n = 0;
     // (port) the whole playable region: with the port layout it also counts the voices above
-    // a lowered limit that are still sounding. fadeBase_ == numPlay_ for the original.
-    for (int32_t i = 0; i < fadeBase_; i++)
+    // a lowered limit that are still sounding. fadeBase() == numPlay_ for the original.
+    for (int32_t i = 0; i < fadeBase(); i++)
         if (voiceAt(i).active != 0) n++;
     return n;
 }
@@ -407,9 +405,9 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             const bool retrigger = static_cast<int8_t>(prog[0x174]) > 0;
             int32_t found = -1;
             // (port) the scans below run over the whole playable region so that a voice above
-            // a lowered limit is still found, released and retargeted. fadeBase_ == numPlay_
+            // a lowered limit is still found, released and retargeted. fadeBase() == numPlay_
             // for the original, i.e. the original's scan.
-            for (int32_t i = 0; i < fadeBase_; i++) {
+            for (int32_t i = 0; i < fadeBase(); i++) {
                 Voice& v = voiceAt(i);
                 if (v.active != 0 && v.key == key && v.noteId == noteId) {
                     if (v.released == 0) release(slotMap_[i]);
@@ -423,7 +421,7 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             // mono
             bool wasReleased = false, wasMono = false;
             int32_t found = -1;
-            for (int32_t i = 0; i < fadeBase_; i++) {
+            for (int32_t i = 0; i < fadeBase(); i++) {
                 Voice& v = voiceAt(i);
                 if (v.active != 0 && v.noteId == noteId) {
                     wasReleased = v.released != 0;
@@ -442,7 +440,7 @@ void Master::noteEvent(int32_t key, int32_t velocity, int32_t noteId, NoteRecord
             pushNoteStack(stacks, key8, true);
         }
     } else {
-        for (int32_t i = 0; i < fadeBase_; i++) {
+        for (int32_t i = 0; i < fadeBase(); i++) {
             Voice& v = voiceAt(i);
             if (v.active != 0 && v.released == 0 && v.key == key &&
                 static_cast<int16_t>(v.noteId) == static_cast<int16_t>(noteId)) {
@@ -748,16 +746,16 @@ int32_t Master::allocate() {
 }
 
 int32_t Master::findStealTarget() {
-    // (port) fadeBase_ == numPlay_ and the fade slots are numFade_ without the port layout,
+    // (port) fadeBase() == numPlay_ and the fade slots are numFade_ without the port layout,
     // i.e. the original's scan. With it the fade slots are as many as the playable voices in
     // use, like the original's 8 + 8: that is what keeps 8 voices bit-exact, because the
     // original re-steals the oldest fade slot once they are all busy instead of finding a
     // free one (the heavy-stealing regression cases).
     const int32_t fades = portLayout_ ? effectivePlayableVoices() : numFade_;
-    int32_t result = fadeBase_;
-    uint32_t best = voiceAt(fadeBase_).age;
-    if (voiceAt(fadeBase_).active != 0) {
-        for (int32_t i = fadeBase_ + 1; i <= fadeBase_ + fades - 1; i++) {
+    int32_t result = fadeBase();
+    uint32_t best = voiceAt(fadeBase()).age;
+    if (voiceAt(fadeBase()).active != 0) {
+        for (int32_t i = fadeBase() + 1; i <= fadeBase() + fades - 1; i++) {
             const Voice& v = voiceAt(i);
             if (v.active == 0) {
                 result = i;

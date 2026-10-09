@@ -162,7 +162,7 @@ private:
     // port layout, where the playable region keeps its size and only the allocator's limit
     // (effectivePlayableVoices) changes. Everything reaches the voices through slotMap_, so
     // this moves the fade slots without touching anything else.
-    int32_t fadeBase_ = 0;
+    int32_t fadeBase() const { return portLayout_ ? kFadeSlotBase : numPlay_; }  // derived, never stale
     bool portLayout_ = false;
     int32_t polyOverride_ = 0;                        // 0 = set by the program
     int16_t noteStacks_[8] = {};                      // +0x0f54 [0..3] last keys, [4..7] held keys (mono)

@@ -23,7 +23,6 @@ Knob::Knob(std::string name) : Control(std::move(name), true) {
     // TGraphKnobB_v011 (0x479d08), the parts that matter without caption/value text.
     showCaption_ = true;   // +0x2b5 / +0x2b6 default True (the form sets False)
     showValue_ = true;
-    restoreMouse_ = true;  // +0x228
     setBounds(0, 0, 0x22, 0x36);
     layout(0x10);
     minFineFac_ = 0.2f;
@@ -144,6 +143,12 @@ void Knob::setAniGif(const Sprite* gif) {
     invalidate();
 }
 
+void Knob::setActive(bool a) {
+    if (a == active_) return;
+    active_ = a;
+    invalidate();
+}
+
 int Knob::frameIndex() const {
     if (!gif_ || !gif_->loaded()) return -1;
     float r = static_cast<float>(static_cast<double>(max_) - static_cast<double>(min_));
@@ -164,16 +169,20 @@ int Knob::frameIndex() const {
 
 void Knob::paint(Canvas& canvas) {
     loaded_ = true;
-    if (gif_ && gif_->loaded()) canvas.draw(frameX_, frameY_, gif_->frame(frameIndex()));
+    if (!gif_ || !gif_->loaded()) return;
+    const ImageView f = gif_->frame(frameIndex());
+    // The frame covers the whole control, so its own corner pixel is the backdrop the knob
+    // sits on: fading towards it sinks the knob into the panel without reading the form.
+    if (active_)
+        canvas.draw(frameX_, frameY_, f);
+    else
+        canvas.drawFaded(frameX_, frameY_, f, f ? f.at(0, 0) : 0, kFadeAmount);
 }
 
 // ------------------------------------------------------------------ drag
 
 void Knob::beginDrag(ShiftState, int x, int y) {
-    if (onGetMousePos)
-        onGetMousePos(*this);
-    else if (getCursorPos)
-        getCursorPos(savedMouseX, savedMouseY);
+    if (!dragActive_ && onEditBegin) onEditBegin(*this);
     downX_ = x;
     downY_ = y;
     lastX_ = x;
@@ -202,6 +211,16 @@ void Knob::dragMove(ShiftState shift, int x, int y) {
     }
     float delta = static_cast<float>(static_cast<double>(dy) * static_cast<double>(fac) * static_cast<double>(pixFactor_));
     acc_ = static_cast<float>(static_cast<double>(acc_) + static_cast<double>(delta));
+    // (port) The accumulator used to go on growing once the value had reached an end, so a
+    // drag that ran past it had to be wound all the way back before the knob moved again.
+    // The pointer lock takes the length limit off a drag, which made that unmissable. Hold
+    // it at the end instead: acc carries the value plus a snap zone of the value's sign.
+    const float accMin = min_ + (min_ >= 0.0f ? snapZone_ : -snapZone_);
+    const float accMax = max_ + (max_ >= 0.0f ? snapZone_ : -snapZone_);
+    if (acc_ > accMax)
+        acc_ = accMax;
+    else if (!(acc_ >= accMin))
+        acc_ = accMin;
     if (snapToZero_ && !(std::fabs(acc_) >= snapZone_))
         setValue(0.0f);
     else if (!(acc_ >= 0.0f))
@@ -216,14 +235,16 @@ void Knob::dragMove(ShiftState shift, int x, int y) {
 void Knob::endDrag() {
     if (!dragActive_) return;
     dragActive_ = false;
-    if (!restoreMouse_) return;
-    if (onRestoreMousePos)
-        onRestoreMousePos(*this);
-    else if (setCursorPos)
-        setCursorPos(savedMouseX, savedMouseY);
+    if (onEditEnd) onEditEnd(*this);
 }
 
-void Knob::cancelDrag() { dragActive_ = false; }
+// A drag the control loses rather than finishes (a double click, the capture taken away).
+// The editor still has to hear that it is over, or a hidden cursor would stay hidden.
+void Knob::cancelDrag() {
+    if (!dragActive_) return;
+    dragActive_ = false;
+    if (onEditEnd) onEditEnd(*this);
+}
 
 // ------------------------------------------------------------------ mouse
 
@@ -289,7 +310,6 @@ Knob::State Knob::state() const {
     s.intMode = intMode_;
     s.dragging = dragging_;
     s.dragActive = dragActive_;
-    s.restoreMouse = restoreMouse_;
     s.loaded = loaded_;
     s.force = force_;
     s.textValid = textValid_;
@@ -321,7 +341,6 @@ void Knob::setState(const State& s) {
     intMode_ = s.intMode;
     dragging_ = s.dragging;
     dragActive_ = s.dragActive;
-    restoreMouse_ = s.restoreMouse;
     loaded_ = s.loaded;
     force_ = s.force;
     textValid_ = s.textValid;

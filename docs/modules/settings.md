@@ -25,7 +25,7 @@ insensitive on Windows (the C++ parser too).
 | # | key | default | meaning |
 |---|---|---|---|
 | 0 | restMouseMenu | 1 | mouse position restored after popup menus (> 0 = on) |
-| 1 | restMouseKnob | 1 | mouse position restored after turning knobs |
+| 1 | restMouseKnob | 1 | (port) hide the cursor while a knob is turned (issue #25); the original restored the mouse position instead. The key keeps its name so that an ini shared with the original still round-trips |
 | 2 | keyCaptMode | 1 | keyboard capture while editing the name: -1 off, 0, 1 (readme E.10) |
 | 3 | compareOnWrite | 1 | COMPARE checked in the WRITE dialog |
 | 4 | swapProgUpDn | 0 | swap the program up/down arrow buttons |

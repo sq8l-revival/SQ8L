@@ -10,7 +10,6 @@
 //   bank + program number ("A000")               TLCD3 'numLcd' (+0x3b4)               view.numLcd().writeText
 //   knob range / value / pixel distance          TGraphKnobB lcdKnob0..9 (+0x4e8[]):   view.knob(i).setMinValue/...
 //                                                  +0x230/+0x234/+0x22c/+0x218
-//   knob DoRestoreMousePos                       TGraphKnobB +0x228                    setDoRestoreMousePos
 //   page scroll arrows (lit / dim)               TGraphButton pscrUp/DownButton +0x204 setAniIdx (0/1, 2/3)
 //   SYNC / AM / MONO LEDs                        TAniDisplay ledSync/ledAm/ledMono     setValue(0 / 1)
 //                                                  +0x20c

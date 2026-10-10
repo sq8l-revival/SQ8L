@@ -56,7 +56,6 @@ private:
     struct Metrics {
         SIZE check{};           // MENU_POPUPCHECK
         SIZE separator{};       // MENU_POPUPSEPARATOR
-        MARGINS checkMargins{}; // around the check mark
         MARGINS itemMargins{};  // around the item text
         int gutter = 0;         // check column; the text starts right after it
         int trailing = 0;       // accelerator and arrow columns, reserved whether used or not

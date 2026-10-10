@@ -237,7 +237,7 @@ LIB_PATH = os.environ.get("SQ8L_TESTAPI", os.path.join(ROOT, "build", "libsq8l_t
 W, H = 626, 430
 KNOB_FIELDS = ("value", "min", "max", "range", "step", "pixFactor", "snapZone", "minFineFac", "acc", "angle",
                "angleK", "maxPixDist", "maxFinePixDist", "radius", "fx", "fy", "downX", "downY", "lastX", "lastY",
-               "snapToZero", "intMode", "dragging", "dragActive", "restoreMouse", "loaded", "force", "textValid")
+               "snapToZero", "intMode", "dragging", "dragActive", "loaded", "force", "textValid")
 
 
 def _lib():
@@ -248,7 +248,7 @@ def _lib():
     sig = {
         "sq8l_gui_new": ([], vp), "sq8l_gui_free": ([vp], None),
         "sq8l_gui_render": ([vp, P(ctypes.c_uint8)], None), "sq8l_gui_find": ([vp, cp], vp),
-        "sq8l_gui_zorder": ([vp, cp, i32], i32), "sq8l_gui_set_cursor": ([vp, i32, i32], None),
+        "sq8l_gui_zorder": ([vp, cp, i32], i32),
         "sq8l_gui_events": ([vp, cp, i32], i32), "sq8l_gui_mouse": ([vp, i32, i32, i32, i32], None),
         "sq8l_gui_capture": ([vp, cp, i32], i32), "sq8l_gui_set_capture": ([vp, cp], None),
         "sq8l_gui_set_bounds": ([vp, i32, i32, i32, i32], None), "sq8l_gui_get_bounds": ([vp, P(i32)], None),
@@ -421,7 +421,6 @@ class CppGui:
             d["downX"], d["downY"] = s["downPos"]
             d["lastX"], d["lastY"] = s["lastPos"]
             d["dragging"], d["dragActive"] = s["dragging"], s["captured"]
-            d["restoreMouse"] = s["restoreMouse"]
             self.set_knob(name, d)
             assert s["gif"] == "KnobGif"
         for name, s in st["buttons"].items():

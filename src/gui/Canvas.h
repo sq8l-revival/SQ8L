@@ -31,6 +31,10 @@ public:
     // TCanvas.Draw(x, y, Graphic) of a non-transparent TBitmap: plain copy (StretchBlt
     // SRCCOPY at 1:1). A null view draws nothing.
     void draw(int x, int y, const ImageView& img);
+    // (port) No TCanvas equivalent: `draw` with every pixel faded towards `toward` by
+    // `amount` (0 = the image, 1 = the flat colour). Used for the knobs the display page
+    // does not use, which are drawn half sunk into their backdrop.
+    void drawFaded(int x, int y, const ImageView& img, Color toward, float amount);
     // TCanvas.TextOut with a transparent brush (bsClear). No-op without a TextRenderer.
     void textOut(int x, int y, const std::string& text);
     int textWidth(const std::string& text);

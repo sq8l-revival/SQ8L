@@ -69,6 +69,10 @@ public:
     // Mouse cursor in form coordinates (Mouse.CursorPos), used by the "jumping mouse".
     virtual Point cursorPos() = 0;
     virtual void setCursorPos(Point p) = 0;
+    // (port) Hide / show the cursor over the editor while a knob is being turned, the modern
+    // form of the original's "mouse position restored after knob turning" (issue #25). Calls
+    // are balanced by the caller, never nested. Platforms without it simply keep the cursor.
+    virtual void setCursorVisible(bool /*visible*/) {}
 
     // Keyboard focus moved to the form (FUN_00483a3c: ends program name editing).
     virtual void focusForm() {}

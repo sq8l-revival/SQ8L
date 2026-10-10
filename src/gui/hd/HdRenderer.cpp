@@ -477,7 +477,9 @@ const KnobModel& knobModel(const Sprite& sprite) {
 }
 
 
-void drawKnob(Hd& hd, const KnobModel& m, int frame, float ox, float oy, float S) {
+// `opacity` < 1 leaves the knob half sunk into the background it is drawn over: a knob the
+// display page has no parameter for (issue #24, Knob::active).
+void drawKnob(Hd& hd, const KnobModel& m, int frame, float ox, float oy, float S, float opacity = 1.f) {
     const Rect area =
         Rect{int(std::lround(ox)), int(std::lround(oy)), int(std::lround(ox + m.w * S)), int(std::lround(oy + m.h * S))}
             .intersect(hd.clip);
@@ -494,19 +496,19 @@ void drawKnob(Hd& hd, const KnobModel& m, int frame, float ox, float oy, float S
                 const Color body = bilinear(m.body, m.w, m.h, KnobModel::kCx + dx * k, KnobModel::kCy + dy * k);
                 c = a >= 1 ? body : mix(c, body, a);
             }
-            out[X] = c;
+            out[X] = opacity >= 1.f ? c : mix(out[X], c, opacity);
         }
     }
     const float cx = ox + KnobModel::kCx * S, cy = oy + KnobModel::kCy * S;
     for (int i = 0; i < 9; i++) {
         const float t = (-135.f + 33.75f * i) * kPi / 180.f, sx = std::sin(t), sy = -std::cos(t);
         hd.capsule(cx + sx * 15.9f * S, cy + sy * 15.9f * S, cx + sx * 17.8f * S, cy + sy * 17.8f * S, 0.62f * S, 1.f,
-                   m.tick);
+                   m.tick, opacity);
     }
     const float t = frame >= 0 && frame < int(m.angle.size()) ? m.angle[size_t(frame)] : 0.f;
     const float sx = std::sin(t), sy = -std::cos(t);
     hd.capsule(cx + sx * 0.8f * S, cy + sy * 0.8f * S, cx + sx * 11.9f * S, cy + sy * 11.9f * S, 0.75f * S, 1.f,
-               m.pointer);
+               m.pointer, opacity);
 }
 
 // ---------------------------------------------------------------- the editor
@@ -617,7 +619,8 @@ void HdRenderer::capture(const EditorView& v) {
         const KnobModel* m = &knobModel(*k.aniGif());
         const Rect r = absRect(k, k.frameX(), k.frameY(), m->w, m->h);
         const int frame = k.frameIndex();
-        add(r, [=](Hd& hd, float S) { drawKnob(hd, *m, frame, r.left * S, r.top * S, S); });
+        const float opacity = k.active() ? 1.f : 1.f - Knob::kFadeAmount;
+        add(r, [=](Hd& hd, float S) { drawKnob(hd, *m, frame, r.left * S, r.top * S, S, opacity); });
     }
     for (const AniDisplay* led : {&view.ledSync(), &view.ledAm(), &view.ledMono()}) {
         if (!led->visible() || !spriteIs(led->aniGif(), "LedGIF")) continue;

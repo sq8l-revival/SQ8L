@@ -192,6 +192,13 @@ struct TestUi : PlatformUi {
         events << "{\"ev\":\"write\",\"path\":" << jstr(path) << ",\"size\":" << data.size() << "}\n";
         return true;
     }
+    // (port) OPTIONS -> Mouse -> "Hide cursor when editing": > 0 while a knob is turned.
+    int cursorHidden = 0;
+    void setCursorVisible(bool visible) override {
+        cursorHidden += visible ? -1 : 1;
+        events << "{\"ev\":\"cursor\",\"visible\":" << (visible ? "true" : "false")
+               << "}\n";
+    }
     Point cursorPos() override { return cursor; }
     void setCursorPos(Point p) override {
         cursor = p;
@@ -297,6 +304,11 @@ SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
 SQ8L_API void* sq8l_gl_new_ext(int first) { return new Box(first, true); }
 // (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
 SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
+// (port) Knob::active: false for the knobs the current page has no parameter for, which are
+// drawn faded. Not in the state dump, which is compared field by field with the original.
+SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
+    return i >= 0 && i < 10 ? int32_t(B(v)->view.knob(i).active()) : -1;
+}
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }
@@ -475,8 +487,8 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
           << ",\"angleK\":" << fbits(k.angleK) << ",\"maxPixDist\":" << k.maxPixDist
           << ",\"maxFinePixDist\":" << k.maxFinePixDist << ",\"downX\":" << k.downX << ",\"downY\":" << k.downY
           << ",\"lastX\":" << k.lastX << ",\"lastY\":" << k.lastY << ",\"dragging\":" << int(k.dragging)
-          << ",\"dragActive\":" << int(k.dragActive) << ",\"restoreMouse\":" << int(k.restoreMouse)
-          << ",\"intMode\":" << int(k.intMode) << "}";
+          << ",\"dragActive\":" << int(k.dragActive) << ",\"intMode\":" << int(k.intMode)
+          << "}";
     }
     s << "],\"buttons\":{";
     bool first = true;
@@ -505,7 +517,8 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
     const MouseJump& mj = c.mouseJump();
     s << ",\"mouseJump\":[" << int(mj.saved()) << "," << mj.position().x + b->ui.formX << ","
       << mj.position().y + b->ui.formY << "]";
-    s << ",\"form\":{\"restMouseMenu\":" << int(c.restMouseMenu()) << ",\"restMouseKnob\":" << int(c.restMouseKnob())
+    s << ",\"form\":{\"restMouseMenu\":" << int(c.restMouseMenu())
+      << ",\"hideCursor\":" << int(c.hideCursorEnabled())
       << ",\"rmbScroll\":" << int(c.rmbScroll()) << ",\"swap\":" << int(c.swapProgUpDn())
       << ",\"keyCaptMode\":" << c.keyCaptMode() << ",\"lcdDragKnob\":" << c.lcdDragKnob()
       << ",\"tickDivider\":" << c.tickDivider() << ",\"midiIn\":" << c.midiInPort() << ",\"midiOut\":"

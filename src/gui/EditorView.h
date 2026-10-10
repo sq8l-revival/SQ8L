@@ -90,9 +90,19 @@ public:
     Control* mouseTarget(int x, int y, int& lx, int& ly);
     // Called after a right button up (where Windows would send WM_CONTEXTMENU).
     std::function<void(Control& target, int formX, int formY)> onContextMenu;
-    // Mouse.CursorPos (screen coordinates) for the knobs' DoRestoreMousePos.
-    std::function<void(int& x, int& y)> getCursorPos;
-    std::function<void(int x, int y)> setCursorPos;
+    // (port) Pointer lock, for turning a knob with the cursor hidden (issue #25). While it is
+    // on, the cursor is put back to `x, y` after every move and the controls are given the
+    // distance it has travelled since the lock started instead of where it is: the pointer
+    // can never reach the edge of the screen and stop the drag. Unlocking parks it at `x, y`,
+    // where the turn began. Without `warpCursor` the lock still tracks correctly, it just
+    // cannot pin anything.
+    void lockPointer(int x, int y);
+    void unlockPointer();
+    bool pointerLocked() const { return locked_; }
+    // Move the cursor to (x, y) in form coordinates and write back where it actually ended
+    // up -- a platform that refuses to move it (XWayland) reports the position unchanged, so
+    // the next movement is still measured from the right place.
+    std::function<void(int& x, int& y)> warpCursor;
 
     // ControlHost
     Control* mouseCapture() const override { return capture_; }
@@ -123,6 +133,10 @@ private:
     std::vector<Control*> windowed_;  // z-order
     std::vector<Control*> graphic_;   // form graphic controls (DFM order)
     Control* captureWin_ = nullptr;   // Windows capture (a windowed control or &form_)
+    // pointer lock: where the cursor is parked, where it was last seen, and the point the
+    // controls are given (the start plus everything the mouse has travelled since)
+    bool locked_ = false;
+    int anchorX_ = 0, anchorY_ = 0, lockX_ = 0, lockY_ = 0, virtX_ = 0, virtY_ = 0;
     Control* capture_ = nullptr;      // VCL capture control (may be a graphic control)
     Control* focus_ = nullptr;
     TextRenderer* text_ = nullptr;

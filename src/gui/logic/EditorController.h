@@ -96,7 +96,7 @@ public:
     const PopupMenuDef& optionsMenu() const { return optionsMenu_; }
     const PopupMenuDef& infoMenu() const { return infoMenu_; }
     bool restMouseMenu() const { return restMouseMenu_; }   // +0x504
-    bool restMouseKnob() const { return restMouseKnob_; }   // +0x505
+    bool hideCursorEnabled() const { return hideCursor_; }  // +0x505 (port: see setHideCursor)
     int lcdDragKnob() const { return lcdDragKnob_; }        // +0x508 (-1 none)
     int keyCaptMode() const { return keyCaptMode_; }        // +0x50c
     bool swapProgUpDn() const { return swapProgUpDn_; }     // +0x510
@@ -132,7 +132,11 @@ private:
     void refreshProgram();                    // FUN_00484304
     void updateLeds(bool redraw);             // FUN_004843cc
     void setRestMouseMenu(bool b);            // FUN_00483aac
-    void setRestMouseKnob(bool b);            // FUN_00483ac4
+    // (port) OPTIONS -> Mouse -> "Hide cursor when editing": the cursor disappears for
+    // the length of a knob turn and comes back where the turn started (issue #25).
+    void setHideCursor(bool b);
+    void hideCursor();  // a knob turn began / ended; both are no-ops unless the option is on
+    void showCursor();
     // status bar / VFD messages
     void setStatus(const std::string& s);     // FUN_0048367c
     void setVoicesText(const std::string& s); // FUN_004836cc
@@ -193,7 +197,7 @@ private:
     // OPTIONS / INFO
     void emuModeClick(MenuNode& item);
     void restMouseMenuClick(MenuNode& item);
-    void restMouseKnobClick(MenuNode& item);
+    void hideCursorClick(MenuNode& item);
     void rmbScrDispClick(MenuNode& item);
     void swapProgUpDnClick(MenuNode& item);  // port addition
     void confirmLoadClick(MenuNode& item);   // port addition
@@ -223,7 +227,8 @@ private:
     std::string openFileName_, saveFileName_;
     const Control* lastHint_ = nullptr;  // +0x500
     bool restMouseMenu_ = false;     // +0x504
-    bool restMouseKnob_ = false;     // +0x505
+    bool hideCursor_ = false;        // +0x505 (port)
+    bool cursorHidden_ = false;      // a knob turn is hiding it right now
     int lcdDragKnob_ = -1;           // +0x508
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
@@ -233,7 +238,7 @@ private:
     PopupMenuDef fileMenu_, optionsMenu_, infoMenu_, pageMenu_, programMenu_;
     // menu items referenced by the form (menu_restMouseMenu etc.)
     MenuNode* menuRestMouseMenu_ = nullptr;
-    MenuNode* menuRestMouseKnob_ = nullptr;
+    MenuNode* menuHideCursor_ = nullptr;
     MenuNode* menuRmbScrDisp_ = nullptr;
     MenuNode* menuSwapProgUpDn_ = nullptr;  // port addition (nullptr without portExtensions)
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition

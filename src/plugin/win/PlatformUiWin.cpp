@@ -302,6 +302,12 @@ void PlatformUiWin::setCursorPos(Point p) {
     SetCursorPos(s.x, s.y);
 }
 
+void PlatformUiWin::setCursorVisible(bool visible) {
+    // ShowCursor keeps a counter per thread, so the calls have to balance; the editor only
+    // ever hides once at a time (EditorController::hideCursor).
+    ShowCursor(visible ? TRUE : FALSE);
+}
+
 void PlatformUiWin::focusForm() {
     if (impl_->edit && IsWindowVisible(impl_->edit)) SetFocus(impl_->hwnd);
 }

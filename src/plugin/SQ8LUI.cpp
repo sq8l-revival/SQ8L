@@ -208,6 +208,7 @@ public:
                 return true;
             };
             dh.setCursorPos = [this](sq8l::gui::Point p) { native_->setCursorPos(p); };
+            dh.setCursorVisible = [this](bool v) { native_->setCursorVisible(v); };
 #else
             dh.fileDialog = [this](const sq8l::gui::FileDialogRequest& r, std::string& path) {
                 return fileBrowser(r, path);
@@ -222,6 +223,9 @@ public:
                 sq8l::x11::warpPointer(getWindow().getNativeWindowHandle(),
                                        static_cast<int>(p.x * static_cast<double>(getWidth()) / EditorView::kWidth),
                                        static_cast<int>(p.y * static_cast<double>(getHeight()) / EditorView::kHeight));
+            };
+            dh.setCursorVisible = [this](bool v) {
+                sq8l::x11::setCursorVisible(getWindow().getNativeWindowHandle(), v);
             };
 #endif
             drawn_ = std::make_unique<sq8l::gui::PlatformUiDrawn>(text_, dh);

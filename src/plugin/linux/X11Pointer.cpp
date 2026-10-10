@@ -30,4 +30,25 @@ void warpPointer(uintptr_t window, int x, int y) {
     XFlush(d);
 }
 
+void setCursorVisible(uintptr_t window, bool visible) {
+    Display* d = display();
+    if (!d || !window) return;
+    if (visible) {
+        XUndefineCursor(d, static_cast<::Window>(window));  // back to the parent's cursor
+    } else {
+        // X11 has no "no cursor": define one from an empty 1x1 bitmap. Kept for the life of
+        // the process, like the connection.
+        static ::Cursor blank = None;
+        if (blank == None) {
+            char zero[1] = {0};
+            Pixmap p = XCreateBitmapFromData(d, DefaultRootWindow(d), zero, 1, 1);
+            XColor black{};
+            blank = XCreatePixmapCursor(d, p, p, &black, &black, 0, 0);
+            XFreePixmap(d, p);
+        }
+        XDefineCursor(d, static_cast<::Window>(window), blank);
+    }
+    XFlush(d);
+}
+
 }  // namespace sq8l::x11

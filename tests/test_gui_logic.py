@@ -639,7 +639,7 @@ class OracleLogic:
         return dict(value=u(0x22C), min=u(0x230), max=u(0x234), range=u(0x238), step=u(0x23C), pixFactor=u(0x244),
                     snapZone=u(0x24C), acc=u(0x204), angle=u(0x278), angleK=u(0x27C), maxPixDist=s(0x218),
                     maxFinePixDist=s(0x21C), downX=s(0x208), downY=s(0x20C), lastX=s(0x210), lastY=s(0x214),
-                    dragging=b(0x200), dragActive=b(0x201), restoreMouse=b(0x228), intMode=b(0x240))
+                    dragging=b(0x200), dragActive=b(0x201), intMode=b(0x240))
 
     def label(self, name):
         p = self.e.u32(self.objs[name] + 0x54)
@@ -673,7 +673,7 @@ class OracleLogic:
         mj = e.u32(e.u32(MOUSEJUMP_PTR))
         st["mouseJump"] = [e.u8(mj + 4), e.s32(mj + 8), e.s32(mj + 0xC)]
         drag = e.u32(f + 0x508)
-        st["form"] = dict(restMouseMenu=e.u8(f + 0x504), restMouseKnob=e.u8(f + 0x505), rmbScroll=e.u8(f + 0x511),
+        st["form"] = dict(restMouseMenu=e.u8(f + 0x504), hideCursor=e.u8(f + 0x505), rmbScroll=e.u8(f + 0x511),
                           swap=e.u8(f + 0x510), keyCaptMode=e.s32(f + 0x50C),
                           lcdDragKnob=self.knob_objs.index(drag) if drag else -1, tickDivider=e.s32(f + 0x4E4),
                           midiIn=e.s32(f + 0x4F0), midiOut=e.s32(f + 0x4F4), sysexReq=e.s32(f + 0x4EC))

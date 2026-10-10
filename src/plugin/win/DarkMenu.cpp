@@ -125,8 +125,6 @@ bool DarkMenu::prepare(HMENU menu, HWND owner) {
     const COLORREF background = themeFillColor(theme_, dc, MENU_POPUPBACKGROUND, 0);
     GetThemePartSize(theme_, dc, MENU_POPUPCHECK, MC_CHECKMARKNORMAL, nullptr, TS_TRUE, &metrics_.check);
     GetThemePartSize(theme_, dc, MENU_POPUPSEPARATOR, 0, nullptr, TS_TRUE, &metrics_.separator);
-    GetThemeMargins(theme_, dc, MENU_POPUPCHECK, MC_CHECKMARKNORMAL, TMT_CONTENTMARGINS, nullptr,
-                    &metrics_.checkMargins);
     GetThemeMargins(theme_, dc, MENU_POPUPITEM, MPI_NORMAL, TMT_CONTENTMARGINS, nullptr, &metrics_.itemMargins);
     // The layout is the classic one -- the check column, the text, then the accelerator and
     // submenu arrow columns USER32 reserves whether an item uses them or not -- because that
@@ -274,9 +272,10 @@ bool DarkMenu::draw(const DRAWITEMSTRUCT* dis) const {
     DrawThemeBackground(theme_, dc, MENU_POPUPITEM, state, &rc, nullptr);
 
     if (item->separator) {
-        RECT line = rc;
-        line.left += metrics_.gutter + metrics_.checkMargins.cxLeftWidth + metrics_.checkMargins.cxRightWidth;
-        DrawThemeBackground(theme_, dc, MENU_POPUPSEPARATOR, 0, &line, nullptr);
+        // The whole width of the item, check column included: that is where USER32 puts the
+        // line in a menu it draws itself, and a line that starts after the gutter reads as
+        // right-aligned next to one that does not.
+        DrawThemeBackground(theme_, dc, MENU_POPUPSEPARATOR, 0, &rc, nullptr);
         return true;
     }
 

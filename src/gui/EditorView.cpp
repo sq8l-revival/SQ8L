@@ -95,17 +95,10 @@ EditorView::EditorView() {
         k->setMinFineFac(0.2f);
         k->setMaxFinePixDist(100);
         k->setMaxPixDist(200);
-        k->setDoRestoreMousePos(true);
         k->setRadius(20);
         k->setShowCaption(false);
         k->setShowValue(false);
         k->setAniGif(&assets::knobGif());
-        k->getCursorPos = [this](int& x, int& y) {
-            if (getCursorPos) getCursorPos(x, y);
-        };
-        k->setCursorPos = [this](int x, int y) {
-            if (setCursorPos) setCursorPos(x, y);
-        };
         knobs_[i] = std::move(k);
     }
 
@@ -286,6 +279,10 @@ void EditorView::render(Bitmap& out) {
 void EditorView::cancelMouseMode() {
     if (capture_) capture_->clicked = false;
     setMouseCapture(nullptr);
+    // A knob in the middle of a drag would otherwise only notice at the next mouse move,
+    // and the editor keeps the cursor hidden for as long as a drag lasts: a value menu
+    // opened by a double click would leave it hidden until the mouse moved again.
+    for (auto& k : knobs_) k->cancelDrag();
 }
 
 void EditorView::setMouseCapture(Control* c) {
@@ -397,7 +394,41 @@ void EditorView::dispatch(int msg, MouseButton button, int x, int y, uint32_t ke
     }
 }
 
-void EditorView::mouseMove(int x, int y, uint32_t keys) { dispatch(WM_MOUSEMOVE_, MouseButton::Left, x, y, keys); }
+void EditorView::lockPointer(int x, int y) {
+    locked_ = true;
+    anchorX_ = lockX_ = virtX_ = x;
+    anchorY_ = lockY_ = virtY_ = y;
+}
+
+void EditorView::unlockPointer() {
+    if (!locked_) return;
+    locked_ = false;
+    if (warpCursor) {  // leave it where the turn began
+        int x = anchorX_, y = anchorY_;
+        warpCursor(x, y);
+    }
+}
+
+void EditorView::mouseMove(int x, int y, uint32_t keys) {
+    if (!locked_) {
+        dispatch(WM_MOUSEMOVE_, MouseButton::Left, x, y, keys);
+        return;
+    }
+    const int dx = x - lockX_, dy = y - lockY_;
+    if (dx == 0 && dy == 0) return;  // the move our own warp caused, or no movement at all
+    virtX_ += dx;
+    virtY_ += dy;
+    lockX_ = x;
+    lockY_ = y;
+    if (warpCursor) {
+        lockX_ = anchorX_;
+        lockY_ = anchorY_;
+        warpCursor(lockX_, lockY_);  // corrects lockX_/lockY_ if the platform refused
+    }
+    // The capture is the control being dragged, so mouseTarget routes to it however far the
+    // travelled point is from the window.
+    dispatch(WM_MOUSEMOVE_, MouseButton::Left, virtX_, virtY_, keys);
+}
 
 void EditorView::mouseDown(MouseButton button, int x, int y, uint32_t keys) {
     int msg = button == MouseButton::Left ? WM_LBUTTONDOWN_ : button == MouseButton::Right ? WM_RBUTTONDOWN_ : WM_MBUTTONDOWN_;

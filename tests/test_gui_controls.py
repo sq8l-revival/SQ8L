@@ -59,7 +59,7 @@ def bf(b):
 KNOB_DW = dict(value=0x22C, min=0x230, max=0x234, range=0x238, step=0x23C, pixFactor=0x244, snapZone=0x24C,
                minFineFac=0x1FC, acc=0x204, angle=0x278, angleK=0x27C, maxPixDist=0x218, maxFinePixDist=0x21C,
                radius=0x250, fx=0x254, fy=0x258, downX=0x208, downY=0x20C, lastX=0x210, lastY=0x214)
-KNOB_B = dict(snapToZero=0x248, intMode=0x240, dragging=0x200, dragActive=0x201, restoreMouse=0x228, loaded=0x1F8,
+KNOB_B = dict(snapToZero=0x248, intMode=0x240, dragging=0x200, dragActive=0x201, loaded=0x1F8,
               force=0x1F9, textValid=0x2B4)
 assert set(KNOB_DW) | set(KNOB_B) == set(KNOB_FIELDS)
 
@@ -186,7 +186,7 @@ def test_defaults(og):
         k = cg.knob(n)
         check(cg.bounds(n) == s["bounds"], f"default: {n} bounds {cg.bounds(n)} {s['bounds']}")
         for f, of in (("radius", "radius"), ("minFineFac", "minFineFac"), ("maxFinePixDist", "maxFinePixDist"),
-                      ("snapToZero", "snapToZero"), ("restoreMouse", "restoreMouse")):
+                      ("snapToZero", "snapToZero")):
             check(k[f] == s[of], f"default: {n}.{f} {k[f]} {s[of]}")
         check([k["fx"], k["fy"]] == s["framePos"], f"default: {n} frame pos {[k['fx'], k['fy']]} {s['framePos']}")
     for n, s in st["leds"].items():
@@ -454,8 +454,8 @@ class Both:
         self.og.ed.mouse(msg, x, y, keys)
         self.cg.mouse(msg, x, y, keys)
         ev_o = self.tr.take()
-        # "setcursor": C++ knobs restore the cursor through EditorView.setCursorPos when no
-        # OnRestoreMousePos handler is installed (the original form installs mouseJump's).
+        # The original's form puts the cursor back after a knob turn (mouseJump); the port
+        # hides it for the duration instead, so the oracle's SetCursorPos has no counterpart.
         ev_c = [ev for ev in self.cg.events() if not ev.startswith("setcursor")]
         ev_o = [ev for ev in ev_o if not ev.startswith(ignore)] if ignore else ev_o
         check(ev_o == ev_c, f"events: {msg:#x} ({x},{y}) keys={keys}\n        orig {ev_o}\n        c++  {ev_c}")

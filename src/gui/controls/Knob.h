@@ -38,7 +38,10 @@ public:
     void setSnapToZero(bool s) { snapToZero_ = s; }
     void setRadius(int r);                     // FUN_0047af34 (layout)
     void setAniGif(const Sprite* gif);         // FUN_0047b158
-    void setDoRestoreMousePos(bool r) { restoreMouse_ = r; }
+    // (port) A knob the display page has no parameter for turns nothing: it is drawn faded
+    // into its backdrop so that it reads as doing nothing (issue #24). The original drew
+    // every knob the same and left the user to find out by dragging.
+    void setActive(bool a);
     // FUN_0047b1c0 / FUN_0047b1d4: caption above / value box below the knob (geometry only:
     // the text itself is not ported, SQ8L sets both to False).
     void setShowCaption(bool s) {
@@ -62,6 +65,9 @@ public:
     int frameX() const { return frameX_; }                  // +0x254
     int frameY() const { return frameY_; }                  // +0x258
     const Sprite* aniGif() const { return gif_; }
+    bool active() const { return active_; }
+    // How far a faded (inactive) knob is pulled towards its backdrop, 0.5 = half opaque.
+    static constexpr float kFadeAmount = 0.5f;
     // The sprite frame Paint would show for the current value.
     int frameIndex() const;
 
@@ -69,7 +75,7 @@ public:
     // editor for drags that start on the LCD, see lcdControl)
     void beginDrag(ShiftState shift, int x, int y);  // FUN_0047a1d0
     void dragMove(ShiftState shift, int x, int y);   // FUN_0047a27c
-    void endDrag();                                  // FUN_0047a248 (restores the mouse position)
+    void endDrag();                                  // FUN_0047a248
     void cancelDrag();                               // FUN_0047a268
     bool dragging() const { return dragging_; }      // +0x200 (mouse pressed on the knob)
     bool dragActive() const { return dragActive_; }  // +0x201
@@ -77,13 +83,11 @@ public:
 
     // ------------------------------------------------------------ events
     std::function<void(Knob&)> onChange;  // +0x2e0 (fired by drags only)
-    // +0x2e8: replaces reading Mouse.CursorPos at drag start; +0x2f0: replaces restoring it at
-    // the end (SQ8L's form installs both: mouseJump). Without them, the host's cursor
-    // position callbacks below are used.
-    std::function<void(Knob&)> onGetMousePos, onRestoreMousePos;
-    std::function<void(int& x, int& y)> getCursorPos;       // Mouse.CursorPos (screen)
-    std::function<void(int x, int y)> setCursorPos;         // Mouse.CursorPos := ...
-    int savedMouseX = 0, savedMouseY = 0;                    // +0x220 / +0x224
+    // +0x2e8 / +0x2f0 (OnGetMousePos / OnRestoreMousePos). The original saved the cursor
+    // position in the first and put it back in the second; the port hides the cursor for the
+    // duration instead (issue #25), so they are simply "a drag began" and "a drag ended".
+    // Exactly one onEditEnd follows every onEditBegin, a cancelled drag included.
+    std::function<void(Knob&)> onEditBegin, onEditEnd;
 
     void paint(Canvas& canvas) override;                                          // 0x47a554
     void mouseDown(MouseButton button, ShiftState shift, int x, int y) override;  // 0x47a3cc
@@ -95,7 +99,7 @@ public:
     struct State {
         float value, min, max, range, step, pixFactor, snapZone, minFineFac, acc, angle, angleK;
         int maxPixDist, maxFinePixDist, radius, frameX, frameY, downX, downY, lastX, lastY;
-        bool snapToZero, intMode, dragging, dragActive, restoreMouse, loaded, force, textValid;
+        bool snapToZero, intMode, dragging, dragActive, loaded, force, textValid;
     };
     State state() const;
     void setState(const State& s);
@@ -114,7 +118,6 @@ private:
     int lastX_ = 0, lastY_ = 0;    // +0x210 / +0x214
     int maxPixDist_ = 256;         // +0x218
     int maxFinePixDist_ = 200;     // +0x21c
-    bool restoreMouse_ = false;    // +0x228
     float value_ = 0;              // +0x22c
     float min_ = 0;                // +0x230
     float max_ = 127;              // +0x234
@@ -138,6 +141,7 @@ private:
     int captionHeight_ = 14, valueHeight_ = 14;
     int valueTop_ = 0;             // +0x2a8
     const Sprite* gif_ = nullptr;  // +0x2dc
+    bool active_ = true;           // (port) see setActive
 };
 
 }  // namespace sq8l::gui

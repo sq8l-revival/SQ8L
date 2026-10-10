@@ -51,7 +51,10 @@ struct Settings {
 
     // [gui] (only the editor uses these). getGuiBool = value > 0.
     bool restoreMouseAfterMenu() const { return gui[0] > 0; }
-    bool restoreMouseAfterKnob() const { return gui[1] > 0; }
+    // (port) gui[1] was "mouse position restored after turning knobs", which never worked
+    // reliably; it now hides the cursor for the duration of the turn instead (issue #25).
+    // The ini key keeps its name so that an ini shared with the original still round-trips.
+    bool hideCursorWhileEditing() const { return gui[1] > 0; }
     int keyCaptureMode() const { return gui[2]; }        // -1 off, 0, 1 (see readme E.10)
     bool compareOnWrite() const { return gui[3] > 0; }
     bool swapProgramUpDown() const { return gui[4] > 0; }

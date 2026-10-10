@@ -780,6 +780,10 @@ void PlatformUiDrawn::setCursorPos(Point p) {
     if (hooks_.setCursorPos) hooks_.setCursorPos(p);
 }
 
+void PlatformUiDrawn::setCursorVisible(bool visible) {
+    if (hooks_.setCursorVisible) hooks_.setCursorVisible(visible);
+}
+
 void PlatformUiDrawn::focusForm() {
     if (!name_->active) return;
     name_->active = false;

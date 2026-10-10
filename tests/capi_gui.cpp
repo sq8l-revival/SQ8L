@@ -29,7 +29,6 @@ struct Box {
     EditorView view;
     Bitmap frame;
     std::ostringstream log;
-    int cursorX = 0, cursorY = 0;
 
     Box() {
         // Record the events the logic layer would receive.
@@ -63,11 +62,6 @@ struct Box {
                 log << "celldbl " << s.name() << " " << col << " " << row << "\n";
             };
         }
-        view.getCursorPos = [this](int& x, int& y) {
-            x = cursorX;
-            y = cursorY;
-        };
-        view.setCursorPos = [this](int x, int y) { log << "setcursor " << x << " " << y << "\n"; };
     }
 };
 
@@ -99,11 +93,6 @@ SQ8L_API int32_t sq8l_gui_zorder(void* v, char* out, int32_t max) {
     for (Control* c : B(v)->view.windowedChildren()) s += c->name() + "\n";
     std::strncpy(out, s.c_str(), static_cast<size_t>(max));
     return static_cast<int32_t>(s.size());
-}
-
-SQ8L_API void sq8l_gui_set_cursor(void* v, int32_t x, int32_t y) {
-    B(v)->cursorX = x;
-    B(v)->cursorY = y;
 }
 
 SQ8L_API int32_t sq8l_gui_events(void* v, char* out, int32_t max) {
@@ -235,16 +224,15 @@ SQ8L_API void sq8l_gui_lcd_cell_at(void* c, int32_t x, int32_t y, int32_t* out) 
 
 // Field order (32-bit words, floats as bits): value, min, max, range, step, pixFactor,
 // snapZone, minFineFac, acc, angle, angleK, maxPixDist, maxFinePixDist, radius, frameX, frameY,
-// downX, downY, lastX, lastY, snapToZero, intMode, dragging, dragActive, restoreMouse, loaded,
-// force, textValid
+// downX, downY, lastX, lastY, snapToZero, intMode, dragging, dragActive, loaded, force,
+// textValid
 SQ8L_API void sq8l_gui_knob_get(void* c, uint32_t* o) {
     Knob::State s = static_cast<Knob*>(C(c))->state();
     uint32_t v[] = {fbits(s.value), fbits(s.min), fbits(s.max), fbits(s.range), fbits(s.step), fbits(s.pixFactor),
                     fbits(s.snapZone), fbits(s.minFineFac), fbits(s.acc), fbits(s.angle), fbits(s.angleK),
                     uint32_t(s.maxPixDist), uint32_t(s.maxFinePixDist), uint32_t(s.radius), uint32_t(s.frameX),
                     uint32_t(s.frameY), uint32_t(s.downX), uint32_t(s.downY), uint32_t(s.lastX), uint32_t(s.lastY),
-                    s.snapToZero, s.intMode, s.dragging, s.dragActive, s.restoreMouse, s.loaded, s.force,
-                    s.textValid};
+                    s.snapToZero, s.intMode, s.dragging, s.dragActive, s.loaded, s.force, s.textValid};
     std::memcpy(o, v, sizeof v);
 }
 
@@ -274,10 +262,9 @@ SQ8L_API void sq8l_gui_knob_set(void* c, const uint32_t* i) {
     s.intMode = i[21] != 0;
     s.dragging = i[22] != 0;
     s.dragActive = i[23] != 0;
-    s.restoreMouse = i[24] != 0;
-    s.loaded = i[25] != 0;
-    s.force = i[26] != 0;
-    s.textValid = i[27] != 0;
+    s.loaded = i[24] != 0;
+    s.force = i[25] != 0;
+    s.textValid = i[26] != 0;
     static_cast<Knob*>(C(c))->setState(s);
 }
 

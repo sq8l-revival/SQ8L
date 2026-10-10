@@ -37,8 +37,17 @@ code and verified against the original plugin running inside an x86 emulator.
 - Popup menus, message boxes, file pickers and the WRITE / MIDI-port dialogs use the
   operating system's native controls: on macOS they look like macOS. On Linux they are drawn
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
-- A few small additions to the editor: a left click on the program number opens the program
-  list (the original needs a right or double click), the **VOICES** parameter on the EMU page
+- **The mouse on a knob:** turning one hides the cursor until the button comes up and holds
+  it where the turn began, so the pointer never runs into the edge of the screen and stops
+  the turn — you can keep dragging as long as you like — and it reappears exactly where it
+  was. The original's OPTIONS → *Mouse position is restored after... → Knob turning* became
+  *Mouse → Hide cursor when editing*, on by default and shared with the original's
+  `restMouseKnob` setting.
+- A few small additions to the editor: a right click on a knob opens the list of its values
+  (the original has that on a double click, which still works), a knob the display page has
+  no parameter for is drawn half faded instead of looking like every other knob, a left click
+  on the program number opens the program list (the original needs a right or double click),
+  the **VOICES** parameter on the EMU page
   (see below), and these items at the bottom of OPTIONS: *Polyphony* (see below), *Down arrow
   -> next program* (the original's hidden `swapProgUpDn` setting), *Ask before loading
   banks/libraries* (on by default, like the original) and *Zoom* (see below).

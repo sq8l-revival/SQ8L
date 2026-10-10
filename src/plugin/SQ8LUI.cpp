@@ -238,6 +238,8 @@ public:
     }
 
     ~SQ8LUI() override {
+        // Debugging aid: SQ8L_UI_PAINTS=1 prints how many times the editor was redrawn.
+        if (std::getenv("SQ8L_UI_PAINTS")) std::fprintf(stderr, "SQ8L editor: %ld redraws\n", redraws_);
         // Debugging aid: SQ8L_UI_DUMP=/path/frame.ppm saves the last editor frame.
         if (const char* dump = std::getenv("SQ8L_UI_DUMP")) {
             if (FILE* f = std::fopen(dump, "wb")) {
@@ -279,17 +281,19 @@ protected:
             deliverNotifications();
             controller_->idle(ms > 200 ? 200 : ms);
         }
-        repaint();
+        repaintIfChanged();
     }
 
     void onDisplay() override {
+        redraws_++;
         {
             Engine lock(*this);
             view_->render(frame_);
             hdRenderer_.capture(*view_);
         }
         const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
-        if (!(drawn_ && drawn_->hasOverlay()) && displayHd(W, H)) return;
+        overlayShown_ = drawn_ && drawn_->hasOverlay();
+        if (!overlayShown_ && displayHd(W, H)) return;
         hdValid_ = false;
         if (drawn_ && drawn_->hasOverlay()) {  // drawn menus and dialogs over the editor
             overlay_ = frame_;
@@ -500,8 +504,7 @@ protected:
             deliverNotifications();
             controller_->pump();
         }
-        repaint();
-        return true;
+        return true;  // (drawn by the next idle tick, see repaintIfChanged)
     }
 
     bool onMotion(const MotionEvent& ev) override {
@@ -516,8 +519,7 @@ protected:
             view_->mouseMove(x, y, keysOf(ev.mod) | buttons_);
             controller_->pump();
         }
-        repaint();
-        return true;
+        return true;  // (drawn by the next idle tick, see repaintIfChanged)
     }
 
     bool onScroll(const ScrollEvent& ev) override {
@@ -589,6 +591,25 @@ private:
         const double scale = getScaleFactor();
         setSize(static_cast<uint>(EditorView::kWidth * scale * zoom_ / 100.0 + 0.5),
                 static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
+    }
+
+    // Ask for a redraw only when the editor's picture changed, and only from the idle tick
+    // (50 times a second at most). Every redraw ends in a buffer swap on the host's UI thread;
+    // asking for one on each mouse move, and on every tick whether or not anything had
+    // changed, kept that thread busy and slowed the host's own graphics down while the
+    // pointer was over the editor (#28). The picture is the classic frame: everything the
+    // editor shows, drawn menus and dialogs apart, follows from it.
+    void repaintIfChanged() {
+        const bool overlay = drawn_ && drawn_->hasOverlay();
+        if (overlay || overlayShown_) {  // (or one just closed: draw the editor without it)
+            repaint();
+            return;
+        }
+        {
+            Engine lock(*this);
+            view_->render(probe_);
+        }
+        if (probe_.pixels() != frame_.pixels()) repaint();
     }
 
     // OPTIONS -> Zoom: resize the window (the host may adjust) and remember the choice.
@@ -724,6 +745,9 @@ private:
     std::unique_ptr<sq8l::gui::PlatformUiDrawn> drawn_;
     std::unique_ptr<sq8l::gui::EditorController> controller_;
     sq8l::gui::Bitmap frame_;
+    sq8l::gui::Bitmap probe_{EditorView::kWidth, EditorView::kHeight};  // see repaintIfChanged
+    bool overlayShown_ = false;  // the last redraw had a drawn menu or dialog over the editor
+    long redraws_ = 0;
     sq8l::gui::Bitmap overlay_;
     std::vector<uint8_t> shown_;   // the frame in the texture (skip uploads when unchanged)
     std::vector<uint8_t> scaled_;  // the frame enlarged k times (sharp scaling)

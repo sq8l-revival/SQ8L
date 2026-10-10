@@ -1,0 +1,21 @@
+Do not wait for the display's refresh in a buffer swap (swap interval 0).
+
+An embedded editor swaps its buffers on the host's UI thread. With pugl's default
+swap interval of 1 (Windows, macOS) every swap waits for the next refresh, so an
+editor that redraws often keeps the host's UI thread waiting and the host's own
+graphics slow down (sq8l-revival/SQ8L#28, Renoise on Windows). Plug-in windows are
+composited by the system anyway, so there is no tearing to avoid.
+
+diff --git a/dgl/src/WindowPrivateData.cpp b/dgl/src/WindowPrivateData.cpp
+index d7a3c934..7198ca3d 100644
+--- a/dgl/src/WindowPrivateData.cpp
++++ b/dgl/src/WindowPrivateData.cpp
+@@ -293,6 +293,8 @@ void Window::PrivateData::initPre(const uint width, const uint height, const boo
+ 
+     puglSetViewHint(view, PUGL_RESIZABLE, resizable ? PUGL_TRUE : PUGL_FALSE);
+     puglSetViewHint(view, PUGL_IGNORE_KEY_REPEAT, PUGL_FALSE);
++    // (SQ8L) do not wait for the display's refresh in every buffer swap, see the patch
++    puglSetViewHint(view, PUGL_SWAP_INTERVAL, 0);
+    #if defined(DGL_USE_RGBA) && DGL_USE_RGBA
+     puglSetViewHint(view, PUGL_DEPTH_BITS, 24);
+    #else

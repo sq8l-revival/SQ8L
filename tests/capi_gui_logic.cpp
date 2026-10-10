@@ -297,6 +297,11 @@ SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
 SQ8L_API void* sq8l_gl_new_ext(int first) { return new Box(first, true); }
 // (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
 SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
+// (port) Knob::active: false for the knobs the current page has no parameter for, which are
+// drawn faded. Not in the state dump, which is compared field by field with the original.
+SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
+    return i >= 0 && i < 10 ? int32_t(B(v)->view.knob(i).active()) : -1;
+}
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }

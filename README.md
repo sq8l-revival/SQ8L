@@ -37,13 +37,15 @@ code and verified against the original plugin running inside an x86 emulator.
 - Popup menus, message boxes, file pickers and the WRITE / MIDI-port dialogs use the
   operating system's native controls: on macOS they look like macOS. On Linux they are drawn
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
-- A few small additions to the editor: a left click on the program number opens the program
-  list (the original needs a right or double click), the **VOICES** parameter on the EMU page
-  (see below), and these OPTIONS items: *Polyphony* (see below), *Down arrow -> next program*
-  (the original's hidden `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by
-  default, like the original), *MTS-ESP* (see below) and *Zoom* (see below). OPTIONS is also
-  regrouped: *Polyphony* leads, and the original's mouse-restore submenu and its separate
-  *Right click on display -> scroll page* item are now one *Mouse* submenu.
+- A few small additions to the editor: a knob the display page has no parameter for is drawn
+  half faded instead of looking like every other knob, a left click on the program number
+  opens the program list (the original needs a right or double click), the **VOICES**
+  parameter on the EMU page (see below), and these OPTIONS items: *Polyphony* (see below),
+  *Down arrow -> next program* (the original's hidden `swapProgUpDn` setting), *Ask before
+  loading banks/libraries* (on by default, like the original), *MTS-ESP* (see below) and
+  *Zoom* (see below). OPTIONS is also regrouped: *Polyphony* leads, and the original's
+  mouse-restore submenu and its separate *Right click on display -> scroll page* item are now
+  one *Mouse* submenu.
 - **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
   the window's corner, where the host allows it). It is drawn at the window's resolution
   rather than enlarged: the panel (labels, signal lines, frames, logo) as vector shapes

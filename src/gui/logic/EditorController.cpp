@@ -629,6 +629,9 @@ void EditorController::lcdKnobValue(int knob, int value) {  // LAB_004846c4
 void EditorController::lcdKnobRange(int knob, int min, int max) {  // FUN_00484700
     if (knob < 0 || knob >= kNumKnobs) return;
     Knob& k = view_.knob(knob);
+    // (port) An empty range is how a page without a parameter for this knob is reported
+    // (updateKnobRanges sends 0, 0): the knob is drawn faded then, see issue #24.
+    k.setActive(max > min);
     k.setMinValue(float(min));
     k.setMaxValue(float(max));
     // Trunc(Single((max - min + 1) * 1.5625)), clamped to 40..180

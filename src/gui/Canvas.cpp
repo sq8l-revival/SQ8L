@@ -74,6 +74,24 @@ void Canvas::draw(int x, int y, const ImageView& img) {
     }
 }
 
+void Canvas::drawFaded(int x, int y, const ImageView& img, Color toward, float amount) {
+    if (!img) return;
+    Rect d = boundsRect(x + ox_, y + oy_, img.width, img.height).intersect(effectiveClip());
+    if (d.empty()) return;
+    const int sx = d.left - (x + ox_), sy = d.top - (y + oy_);
+    const int t = static_cast<int>(amount * 256.0f + 0.5f);
+    const int tr = int((toward >> 16) & 0xFF), tg = int((toward >> 8) & 0xFF), tb = int(toward & 0xFF);
+    for (int yy = 0; yy < d.height(); yy++) {
+        const Color* s = img.px + (sy + yy) * img.stride + sx;
+        Color* o = t_.row(d.top + yy) + d.left;
+        for (int xx = 0; xx < d.width(); xx++) {
+            const Color c = s[xx];
+            const int r = int((c >> 16) & 0xFF), g = int((c >> 8) & 0xFF), b = int(c & 0xFF);
+            o[xx] = rgb(r + (tr - r) * t / 256, g + (tg - g) * t / 256, b + (tb - b) * t / 256);
+        }
+    }
+}
+
 void Canvas::textOut(int x, int y, const std::string& text) {
     if (text_ && !text.empty()) text_->drawText(t_, x + ox_, y + oy_, effectiveClip(), font, text);
 }

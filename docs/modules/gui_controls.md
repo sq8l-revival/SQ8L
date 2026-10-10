@@ -92,6 +92,11 @@ Field offsets are those of the original objects (used by `tests/test_gui_state.p
 * Not ported (unused by SQ8L): caption/value text and value TEdit, TImageList and vector
   renderers. **No mouse-wheel support** (the original ignores WM_MOUSEWHEEL, checked in the
   oracle).
+* Port addition — `setActive(false)`: the knob is drawn faded halfway towards the backdrop
+  the frame itself carries in its corner pixel (`Canvas::drawFaded`; the HD renderer blends
+  the whole knob over the background with the same amount, `Knob::kFadeAmount`). The editor
+  turns it off for the knobs the current display page has no parameter for, which turn
+  nothing — issue #24.
 
 ### GraphButton (TGraphButton, 0x47ba3c-0x47c80c)
 * frame = `AniIdx + (HasTwoFrames && pressed)`; layout (FUN_0047c100) resizes the control to
@@ -164,6 +169,8 @@ SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_co
 * **numLcd**: `writeText(0, 0, "A000", 0)` (bank letter + 3 digits, FUN_00484304).
 * **Knobs**: per parameter (FUN_00484700): `setMinValue(min)`, `setMaxValue(max)`,
   `setMaxPixDist(clamp(Trunc((max-min+1)*1.5625), 40, 180))`; ValueStep 1 → integer values.
+  A page without a parameter for a knob reports the range 0, 0, which the port also takes as
+  `setActive(false)` (the faded knob above).
   OnChange = lcdKnobChange. Drags can also start on the LCD: the form's lcd OnMouseDown finds
   the knob for the cell and calls `knob.beginDrag`, lcd OnMouseMove → `dragMove`, OnMouseUp →
   `endDrag` (plugEdit 0x48452c/0x484598/0x484570). The form installs OnGetMousePos /

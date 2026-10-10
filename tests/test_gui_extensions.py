@@ -8,7 +8,8 @@ matching the original; this checks the additions themselves:
   * EMU "VOICES" (program byte 0x197): the playable voices of the program, 1 to 64, with the
     original's 8 for every program that does not have the parameter;
   * OPTIONS "Polyphony": the same per instance, 0 = set by the program;
-  * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%.
+  * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
+  * the knobs a display page has no parameter for are marked inactive (drawn faded).
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -124,6 +125,9 @@ class Editor:
         self.L.sq8l_gl_settings(self.v, out)
         return list(out)
 
+    def knob_active(self, i):
+        return bool(self.L.sq8l_gl_knob_active(self.v, i))
+
     def knob(self, i):
         """The position of knob i (the state dump stores floats as their bits)."""
         bits = json.loads(self.cstr(self.L.sq8l_gl_state))["knobs"][i]["value"]
@@ -164,6 +168,7 @@ def main():
         ("sq8l_gl_settings", [vp, ctypes.POINTER(ctypes.c_int32)], None),
         ("sq8l_gl_port_setting", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_poly_override", [vp], ctypes.c_int32),
+        ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
         ("sq8l_gl_editbuffer", [vp, ctypes.c_char_p], None),
@@ -291,6 +296,17 @@ def main():
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     ed.idle()
     check(ed.knob(9) == 24.0, f"the knob follows the program's own value ({ed.knob(9)})")
+
+    # 7. the knobs a page does not use are inactive (issue #24: drawn faded)
+    print("Inactive knobs:")
+    for page, sub in ((EMU_PAGE, EMU_SUB), (0, 0)):
+        L.sq8l_gl_ctr(ed.v, 0, page, sub)
+        ed.idle()
+        used = ed.pages()[page]["subs"][sub]["knobs"]
+        want = [k >= 0 for k in used] + [False] * (10 - len(used))
+        got = [ed.knob_active(i) for i in range(10)]
+        check(got == want, f"page {page}.{sub}: active knobs {got} follow the page's {want}")
+    check(any(not a for a in got), "and at least one of them really is inactive")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

@@ -144,6 +144,12 @@ void Knob::setAniGif(const Sprite* gif) {
     invalidate();
 }
 
+void Knob::setActive(bool a) {
+    if (a == active_) return;
+    active_ = a;
+    invalidate();
+}
+
 int Knob::frameIndex() const {
     if (!gif_ || !gif_->loaded()) return -1;
     float r = static_cast<float>(static_cast<double>(max_) - static_cast<double>(min_));
@@ -164,7 +170,14 @@ int Knob::frameIndex() const {
 
 void Knob::paint(Canvas& canvas) {
     loaded_ = true;
-    if (gif_ && gif_->loaded()) canvas.draw(frameX_, frameY_, gif_->frame(frameIndex()));
+    if (!gif_ || !gif_->loaded()) return;
+    const ImageView f = gif_->frame(frameIndex());
+    // The frame covers the whole control, so its own corner pixel is the backdrop the knob
+    // sits on: fading towards it sinks the knob into the panel without reading the form.
+    if (active_)
+        canvas.draw(frameX_, frameY_, f);
+    else
+        canvas.drawFaded(frameX_, frameY_, f, f ? f.at(0, 0) : 0, kFadeAmount);
 }
 
 // ------------------------------------------------------------------ drag

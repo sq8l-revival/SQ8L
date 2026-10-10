@@ -77,6 +77,8 @@ oracle's GuiState.idle does: per 20 ms one timer tick and a pump.
 * `showModInfo(lines)`, `showAbout(text)` - TModInfoForm / TAboutForm (modal in the original,
   closed by a click or a key; nothing returns to the editor).
 * `cursorPos()` / `setCursorPos(p)` - the "jumping mouse" (form coordinates).
+* `setCursorVisible(v)` - (port) hide the cursor while a knob is turned (issue #25); the
+  default does nothing, so a platform without it simply keeps the cursor.
 * `focusForm()` - focus moves from the name edit to the form (the platform then reports the
   edit's focus loss with `nameEditFocus(false, text)`).
 
@@ -113,8 +115,13 @@ identical to the original's objects field by field (tested).
 * Value popups: ids = value + 0x10000; signed parameters start with an extra "0" item and a
   separator; empty disabled bar-break items fill later columns.
 * Import program: "try to load anyway" retries with the same header check (so it fails again).
-* Mouse jump: the first saved position is kept until restored; knob drags restore only with
-  "restore after knob turning".
+* Mouse jump: the first saved position is kept until restored. Popup menus are all it is
+  used for now. A knob turn hides the cursor and locks the pointer instead (port, issue
+  #25): `EditorController::hideCursor` calls `EditorView::lockPointer` at the point the
+  turn started, and unlocking parks the cursor back there. While it is locked the view
+  puts the cursor back after every move and hands the controls the distance travelled, so
+  the turn is not limited by the screen; `EditorView::warpCursor` reports where the cursor
+  really ended up, so a platform that refuses to move it (XWayland) still tracks right.
 * MIDI port dialog without ports: ItemIndex -1, OK returns -1 (ModalResult 8).
 * Dialog InitialDir: TOpenDialog.SetInitialDir drops the trailing backslash.
 * WM_MOUSEWHEEL is ignored (as in the original).

@@ -9,7 +9,9 @@ matching the original; this checks the additions themselves:
     original's 8 for every program that does not have the parameter;
   * OPTIONS "Polyphony": the same per instance, 0 = set by the program;
   * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
-  * the knobs a display page has no parameter for are marked inactive (drawn faded).
+  * the knobs a display page has no parameter for are marked inactive (drawn faded);
+  * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
+    length of a knob turn, so the turn has no bounds, and comes back where it started.
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -25,10 +27,16 @@ LIB_PATH = os.environ.get("SQ8L_TESTAPI", os.path.join(ROOT, "build", "libsq8l_t
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP = 0x200, 0x201, 0x202, 0x204, 0x205
 MK_LBUTTON, MK_RBUTTON = 1, 2
+# lcdKnob0-9 (DFM): 40 x 40 at these centres, 0-4 top row, 5-9 bottom row
+def knob_xy(i):
+    return 118 + 96 * (i % 5) + 20, (194 if i < 5 else 304) + 20
+
 # Form positions (DFM; numLcd is sized at run time, see test_gui_logic.py)
 NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
+# The "Mouse" submenu's children, which do keep their order (the parent is found by caption).
+MOUSE_HIDE_CURSOR = 1
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -76,6 +84,27 @@ class Editor:
             self.L.sq8l_gl_mouse(self.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
             self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y, 0)
         self.idle()
+
+    def drag_knob(self, i, dy=20, release=True):
+        """Turn knob i: the mouse messages the plugin UI would send."""
+        x, y = knob_xy(i)
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y - dy, MK_LBUTTON)
+        if release:
+            self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y - dy, 0)
+        self.idle()
+
+    def cursor_events(self, evs):
+        """Hide/show and position events in order: False/True, or (x, y) for a move."""
+        return [e["visible"] if e["ev"] == "cursor" else (e["x"], e["y"])
+                for e in evs if e["ev"] in ("cursor", "setcursor")]
+
+    def cursor_hidden_at(self, evs, point):
+        """True if the events are: hidden, pinned at `point` throughout, shown again."""
+        ev = self.cursor_events(evs)
+        return (len(ev) >= 3 and ev[0] is False and ev[-1] is True
+                and all(p == point for p in ev[1:-1]))
 
     def press(self, xy):
         """A press that opens a menu, as the plugin UI sees it.
@@ -128,9 +157,9 @@ class Editor:
     def knob_active(self, i):
         return bool(self.L.sq8l_gl_knob_active(self.v, i))
 
-    def knob(self, i):
-        """The position of knob i (the state dump stores floats as their bits)."""
-        bits = json.loads(self.cstr(self.L.sq8l_gl_state))["knobs"][i]["value"]
+    def knob(self, i, field="value"):
+        """A float field of knob i (the state dump stores floats as their bits)."""
+        bits = json.loads(self.cstr(self.L.sq8l_gl_state))["knobs"][i][field]
         return struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
 
     def lcd_row(self, y):
@@ -307,6 +336,106 @@ def main():
         got = [ed.knob_active(i) for i in range(10)]
         check(got == want, f"page {page}.{sub}: active knobs {got} follow the page's {want}")
     check(any(not a for a in got), "and at least one of them really is inactive")
+
+    # 8. the cursor disappears while a knob is turned (issue #25)
+    print("Hide cursor when editing:")
+    ed = Editor(L, extensions=True)
+    OPT_MOUSE = opt_index(ed.menu(OPTIONS), "Mouse")
+    mouse = ed.menu(OPTIONS)[OPT_MOUSE]
+    check([text(i) for i in mouse.get("sub", [])][MOUSE_HIDE_CURSOR] == "Hide cursor when editing",
+          f"OPTIONS '{text(mouse)}' holds the option where the knob restore used to be")
+    check(mouse["sub"][MOUSE_HIDE_CURSOR]["checked"], "'Hide cursor when editing' is on by default")
+    L.sq8l_gl_ctr(ed.v, 0, 0, 0)
+    ed.idle()
+    active = next(i for i in range(10) if ed.knob_active(i))
+    before = ed.knob(active)
+    up = 60 if before < ed.knob(active, "max") else -60  # a direction the value can move in
+    ed.events()
+    ed.drag_knob(active, dy=up)
+    evs = ed.events()
+    start = knob_xy(active)
+    check(ed.cursor_hidden_at(evs, start) and ed.knob(active) != before,
+          f"a turn hides the cursor, keeps it where it started, shows it "
+          f"({ed.cursor_events(evs)})")
+    # a turn the editor loses rather than finishes must not leave the cursor hidden
+    ed.drag_knob(active, dy=up, release=False)
+    L.sq8l_gl_cancel_mouse_mode(ed.v)
+    ed.L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, *knob_xy(active), MK_LBUTTON)
+    ed.idle()
+    check(ed.cursor_hidden_at(ed.events(), knob_xy(active)),
+          "a turn that loses the mouse is undone the same way")
+    # an inactive knob turns nothing, so it does not take the cursor either
+    inactive = next((i for i in range(10) if not ed.knob_active(i)), -1)
+    check(inactive >= 0, f"page 0.0 has an inactive knob ({inactive})")
+    ed.drag_knob(inactive)
+    check(ed.cursor_events(ed.events()) == [], "turning a faded knob leaves the cursor alone")
+    # A double click opens the value menu, and the host then cancels the capture, which is
+    # all the editor hears of it: the drag the second press started must still end, or the
+    # cursor would stay hidden until the next mouse move. VOICES on the EMU page has a menu
+    # (a two-value parameter would just toggle).
+    L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
+    ed.idle()
+    x, y = knob_xy(9)
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
+    ed.choose([])  # the value menu the double click opens, dismissed
+    ed.events()
+    L.sq8l_gl_mouse(ed.v, 0x203, x, y, MK_LBUTTON)  # WM_LBUTTONDBLCLK
+    L.sq8l_gl_cancel_mouse_mode(ed.v)               # the menu took the mouse
+    ed.idle()
+    evs = ed.events()
+    check(ed.popups(evs) and ed.cursor_events(evs)[-1:] == [True],
+          f"a double click that opens the value menu leaves the cursor visible "
+          f"({ed.cursor_events(evs)})")
+    # switched off in OPTIONS
+    ed.choose([OPT_MOUSE, MOUSE_HIDE_CURSOR])
+    ed.click(OPTIONS)
+    check(ed.settings()[1] == 0, f"switching it off writes gui[1] ({ed.settings()[1]})")
+    ed.events()
+    ed.drag_knob(9, dy=-60)
+    check(ed.cursor_events(ed.events()) == [], "with it off the cursor stays")
+
+    # The turn has no bounds: the cursor is pinned, so the mouse can keep moving away from
+    # the same screen point for as long as the user likes. Without the lock only the first
+    # of these moves would do anything -- the rest arrive at a point the cursor is already
+    # at -- which is what running into the edge of the monitor looks like.
+    ed = Editor(L, extensions=True)
+    L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
+    L.sq8l_gl_ctr(ed.v, 1, VOICES, 1)
+    ed.idle()
+    x, y = knob_xy(9)
+    ed.events()
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+    steps = []
+    for _ in range(5):  # small enough that five of them do not reach the top of the range
+        L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y - 8, MK_LBUTTON)
+        steps.append(ed.knob(9))
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y - 8, 0)
+    ed.idle()
+    check(len(set(steps)) == 5 and steps == sorted(steps) and steps[-1] < 64,
+          f"five moves from the same point keep turning the knob ({steps})")
+    check(ed.cursor_hidden_at(ed.events(), (x, y)),
+          "and the cursor sits at the start point the whole way")
+
+    # ...but it does stop at the end of the range: a turn driven well past the top used to
+    # pile the overshoot up in the accumulator, and the way back had to unwind all of it
+    # before the knob answered again.
+    L.sq8l_gl_ctr(ed.v, 1, VOICES, 32)
+    ed.idle()
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+    for _ in range(10):  # far past the top of 1..64
+        L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y - 40, MK_LBUTTON)
+    at_top = ed.knob(9)
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y + 40, MK_LBUTTON)
+    backed_off = ed.knob(9)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y + 40, 0)
+    ed.idle()
+    check(at_top == 64.0 and backed_off < at_top,
+          f"the overshoot is not stored: one move back off the top answers "
+          f"({at_top} -> {backed_off})")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

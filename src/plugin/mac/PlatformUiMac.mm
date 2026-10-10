@@ -370,6 +370,14 @@ void PlatformUiMac::setCursorPos(Point p) {
     CGAssociateMouseAndMouseCursorPosition(true);
 }
 
+void PlatformUiMac::setCursorVisible(bool visible) {
+    // [NSCursor hide] / unhide also count, and the editor balances them.
+    if (visible)
+        [NSCursor unhide];
+    else
+        [NSCursor hide];
+}
+
 void PlatformUiMac::focusForm() {
     if (impl_->nameField) [impl_->view.window makeFirstResponder:impl_->view];
 }

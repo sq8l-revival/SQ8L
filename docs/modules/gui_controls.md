@@ -82,13 +82,19 @@ Field offsets are those of the original objects (used by `tests/test_gui_state.p
   `pixFactor = range/(maxPixDist*0.5)`, angle factor; `setMaxPixDist` (0x47aa44):
   `pixFactor = range/maxPixDist` (no 0.5!); `setValueStep` (0x47add0).
 * Frame shown: `Round((value-min)/(max-min) * 128)` clamped to 0..127 (x87 53-bit, half-even).
-* Drag: MouseDown(left) → `beginDrag`: save cursor (OnGetMousePos +0x2e8 or Mouse.CursorPos),
-  `acc = value ± snapZone`. MouseMove while captured → `dragMove`:
+* Drag: MouseDown(left) → `beginDrag`: fire `onEditBegin` (+0x2e8, where the original
+  saved the cursor position), `acc = value ± snapZone`. MouseMove while captured → `dragMove`:
   `dx = min(|x-downX|+1, maxFinePixDist)`, `fac = Shift ? minFineFac : max(1-dx/maxFinePixDist,
   minFineFac)`, `acc += (lastY-y)*fac*pixFactor`, value = 0 inside the snap zone else
   `acc ∓ snapZone`; fires `onChange` (+0x2e0). A move without the capture ends the drag.
-  MouseUp → `endDrag`: restore the cursor (OnRestoreMousePos +0x2f0 or Mouse.CursorPos).
-  DblClick → `cancelDrag` (no restore) then OnDblClick, then MouseDown(ssDouble) starts a drag.
+  Port change: `acc` is held between the two ends of the range (each plus a snap zone of
+  its own sign, which is what `acc` carries). The original let it grow for as long as the
+  drag went on, so a drag that overshot had to be wound all the way back before the value
+  moved again - unmissable once the pointer lock took the length limit off a drag.
+  MouseUp → `endDrag`: fire `onEditEnd` (+0x2f0, where the original put the cursor back).
+  DblClick → `cancelDrag` then OnDblClick, then MouseDown(ssDouble) starts a drag. Port
+  change: `cancelDrag` fires `onEditEnd` too, so every `onEditBegin` has exactly one end
+  (the editor hides the cursor in between, issue #25).
 * Not ported (unused by SQ8L): caption/value text and value TEdit, TImageList and vector
   renderers. **No mouse-wheel support** (the original ignores WM_MOUSEWHEEL, checked in the
   oracle).
@@ -125,14 +131,18 @@ bar), `progNameEdit()`, `image(name)` (menuFileImage, menuOptImage, menuInfoImag
 menuPanicImage), `form()`. The constructor reproduces the form after FormShow (LCD 44x2,
 charGIF, gaps 1/3, frame 4, charset `kLcdCharset` + lowercase→uppercase; numLcd 4x1 numCharGIF,
 charset `kNumLcdCharset` = `" 0123456789ABCDPU"`; knobs Radius 20, no caption/value,
-MinFineFac 0.2, MaxFinePixDist 100, DoRestoreMousePos; scroll arrows' hover frame; z-order).
+MinFineFac 0.2, MaxFinePixDist 100; scroll arrows' hover frame; z-order).
 
 Input: `mouseMove/mouseDown/mouseUp/mouseDoubleClick(x, y, MK_* keys)` in form coordinates,
 routed like Windows + VCL: to the capture window if any, else the topmost visible child, else
 the form; inside a window to its graphic children (TWinControl.IsControlMouseMsg).
 WM_LBUTTONDOWN captures (csCaptureMouse) and sets csClicked, WM_LBUTTONUP releases and calls
 Click if inside, WM_LBUTTONDBLCLK = DblClick + MouseDown(ssDouble). `onContextMenu` is called
-after a right button up. `getCursorPos`/`setCursorPos` back the knobs' cursor restore.
+after a right button up. `lockPointer`/`unlockPointer` (port): while a knob is turned with
+the cursor hidden, moves are reported to the controls as the start point plus everything
+the mouse has travelled, and the cursor itself is put back to the start after each one
+(`warpCursor`) so it cannot reach the edge of the screen. The capture keeps routing the
+moves to the knob however far outside the window the travelled point lands.
 
 ## Verification
 
@@ -173,8 +183,9 @@ SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_co
   `setActive(false)` (the faded knob above).
   OnChange = lcdKnobChange. Drags can also start on the LCD: the form's lcd OnMouseDown finds
   the knob for the cell and calls `knob.beginDrag`, lcd OnMouseMove → `dragMove`, OnMouseUp →
-  `endDrag` (plugEdit 0x48452c/0x484598/0x484570). The form installs OnGetMousePos /
-  OnRestoreMousePos (mouseJump, FUN_00483a5c/FUN_00483a84) and OnDblClick (0x485148).
+  `endDrag` (plugEdit 0x48452c/0x484598/0x484570). The form installs onEditBegin /
+  onEditEnd (+0x2e8/+0x2f0, the original's mouseJump: FUN_00483a5c/FUN_00483a84) and
+  OnDblClick (0x485148).
 * **Buttons**: page buttons fire OnClick = pageButtonClick (Tag = page id: buttWav 15,
   buttOsc1 16, ...); the logic sets `AniIdx` (0 grey, 2 red, 4 green). Scroll arrows: up 0/1,
   down 2/3 (dim/lit); they cycle sub-pages.

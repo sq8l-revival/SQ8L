@@ -47,6 +47,7 @@ public:
         std::function<bool(const FileDialogRequest&, std::string&)> fileDialog;
         std::function<bool(Point&)> cursorPos;
         std::function<void(Point)> setCursorPos;
+        std::function<void(bool)> setCursorVisible;  // without it the cursor stays visible
     };
 
     PlatformUiDrawn(TextRenderer& text, Hooks hooks);
@@ -60,6 +61,7 @@ public:
     bool writeFile(const std::string& path, const std::vector<uint8_t>& data) override;
     Point cursorPos() override;
     void setCursorPos(Point p) override;
+    void setCursorVisible(bool visible) override;
     void focusForm() override;
     void runModal(ModalDialog& dialog) override;
     void showModInfo(const std::vector<std::string>& lines) override;

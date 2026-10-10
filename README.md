@@ -37,6 +37,12 @@ code and verified against the original plugin running inside an x86 emulator.
 - Popup menus, message boxes, file pickers and the WRITE / MIDI-port dialogs use the
   operating system's native controls: on macOS they look like macOS. On Linux they are drawn
   inside the plug-in window (the file picker is the desktop's, or a simple built-in one).
+- **The mouse on a knob:** turning one hides the cursor until the button comes up and holds
+  it where the turn began, so the pointer never runs into the edge of the screen and stops
+  the turn — you can keep dragging as long as you like — and it reappears exactly where it
+  was. The original's OPTIONS → *Mouse position is restored after... → Knob turning* became
+  *Mouse → Hide cursor when editing*, on by default and shared with the original's
+  `restMouseKnob` setting.
 - A few small additions to the editor: a knob the display page has no parameter for is drawn
   half faded instead of looking like every other knob, a left click on the program number
   opens the program list (the original needs a right or double click), the **VOICES**

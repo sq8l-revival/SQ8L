@@ -192,6 +192,13 @@ struct TestUi : PlatformUi {
         events << "{\"ev\":\"write\",\"path\":" << jstr(path) << ",\"size\":" << data.size() << "}\n";
         return true;
     }
+    // (port) OPTIONS -> Mouse -> "Hide cursor when editing": > 0 while a knob is turned.
+    int cursorHidden = 0;
+    void setCursorVisible(bool visible) override {
+        cursorHidden += visible ? -1 : 1;
+        events << "{\"ev\":\"cursor\",\"visible\":" << (visible ? "true" : "false")
+               << "}\n";
+    }
     Point cursorPos() override { return cursor; }
     void setCursorPos(Point p) override {
         cursor = p;
@@ -480,8 +487,8 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
           << ",\"angleK\":" << fbits(k.angleK) << ",\"maxPixDist\":" << k.maxPixDist
           << ",\"maxFinePixDist\":" << k.maxFinePixDist << ",\"downX\":" << k.downX << ",\"downY\":" << k.downY
           << ",\"lastX\":" << k.lastX << ",\"lastY\":" << k.lastY << ",\"dragging\":" << int(k.dragging)
-          << ",\"dragActive\":" << int(k.dragActive) << ",\"restoreMouse\":" << int(k.restoreMouse)
-          << ",\"intMode\":" << int(k.intMode) << "}";
+          << ",\"dragActive\":" << int(k.dragActive) << ",\"intMode\":" << int(k.intMode)
+          << "}";
     }
     s << "],\"buttons\":{";
     bool first = true;
@@ -510,7 +517,8 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
     const MouseJump& mj = c.mouseJump();
     s << ",\"mouseJump\":[" << int(mj.saved()) << "," << mj.position().x + b->ui.formX << ","
       << mj.position().y + b->ui.formY << "]";
-    s << ",\"form\":{\"restMouseMenu\":" << int(c.restMouseMenu()) << ",\"restMouseKnob\":" << int(c.restMouseKnob())
+    s << ",\"form\":{\"restMouseMenu\":" << int(c.restMouseMenu())
+      << ",\"hideCursor\":" << int(c.hideCursorEnabled())
       << ",\"rmbScroll\":" << int(c.rmbScroll()) << ",\"swap\":" << int(c.swapProgUpDn())
       << ",\"keyCaptMode\":" << c.keyCaptMode() << ",\"lcdDragKnob\":" << c.lcdDragKnob()
       << ",\"tickDivider\":" << c.tickDivider() << ",\"midiIn\":" << c.midiInPort() << ",\"midiOut\":"

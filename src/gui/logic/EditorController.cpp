@@ -197,8 +197,8 @@ void EditorController::buildMenus() {
     MenuNode rest = item("Mouse", 0, nullptr);
     rest.items.push_back(item("Restore position after popup menus", 0,
                               [this](MenuNode& n) { restMouseMenuClick(n); }));
-    rest.items.push_back(item("Restore position after knob turning", 0,
-                              [this](MenuNode& n) { restMouseKnobClick(n); }));
+    rest.items.push_back(item("Hide cursor when editing", 0,
+                              [this](MenuNode& n) { hideCursorClick(n); }));
     rest.items.push_back(line());
     rest.items.push_back(item("Right click on display -> scroll page", 0,
                               [this](MenuNode& n) { rmbScrDispClick(n); }));
@@ -260,7 +260,7 @@ void EditorController::buildMenus() {
     menuSynth_[4][2] = &e.items[3].items[3];  // menu_dcbOn
     menuSynth_[4][3] = &e.items[3].items[4];  // menu_dcbOff
     menuRestMouseMenu_ = &optionsMenu_.items[iMouse].items[0];
-    menuRestMouseKnob_ = &optionsMenu_.items[iMouse].items[1];
+    menuHideCursor_ = &optionsMenu_.items[iMouse].items[1];
     menuRmbScrDisp_ = &optionsMenu_.items[iMouse].items[3];  // after the separator
     if (host_.portExtensions()) {
         menuPolyphony_ = &optionsMenu_.items[iPoly];
@@ -302,11 +302,23 @@ void EditorController::show() {  // TplugEditForm_FormShow
 }
 
 void EditorController::wireControls() {
+    // (port) How the view moves the cursor while the pointer is locked, see hideCursor.
+    // Reading it back lets the lock notice a platform that refuses to move it.
+    view_.warpCursor = [this](int& x, int& y) {
+        ui_.setCursorPos(Point{x, y});
+        const Point at = ui_.cursorPos();
+        x = at.x;
+        y = at.y;
+    };
     // knobs (+0x2e8 / +0x2f0 / OnDblClick / OnMouseMove; OnChange from the DFM)
     for (int i = 0; i < kNumKnobs; i++) {
         Knob& k = view_.knob(i);
-        k.onGetMousePos = [this](Knob& kn) { saveMouse(&kn); };
-        k.onRestoreMousePos = [this](Knob& kn) { restoreMouse(&kn); };
+        // (port) The cursor goes away for the length of a turn (issue #25). Not on a knob the
+        // page has no parameter for: it is faded for a reason, and turning it does nothing.
+        k.onEditBegin = [this](Knob& kn) {
+            if (kn.active()) hideCursor();
+        };
+        k.onEditEnd = [this](Knob&) { showCursor(); };
         k.onDblClick = [this, i](Control&) {  // 0x485148
             LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
             if (p) ctr_->cellDoubleClick(p->x, p->y);
@@ -528,10 +540,10 @@ void EditorController::settingsChanged() {  // FUN_00483b08
         setRestMouseMenu(b);
         menuRestMouseMenu_->setChecked(b);
     }
-    b = s.restoreMouseAfterKnob();
-    if (b != restMouseKnob_) {
-        setRestMouseKnob(b);
-        menuRestMouseKnob_->setChecked(b);
+    b = s.hideCursorWhileEditing();
+    if (b != hideCursor_) {
+        setHideCursor(b);
+        menuHideCursor_->setChecked(b);
     }
     keyCaptMode_ = s.keyCaptureMode();
     swapProgUpDn_ = s.swapProgramUpDown();
@@ -571,9 +583,30 @@ void EditorController::setRestMouseMenu(bool b) {  // FUN_00483aac
     if (ctr_) ctr_->restoreMouse = b;
 }
 
-void EditorController::setRestMouseKnob(bool b) {  // FUN_00483ac4
-    restMouseKnob_ = b;
-    for (int i = 0; i < kNumKnobs; i++) view_.knob(i).setDoRestoreMousePos(b);
+void EditorController::setHideCursor(bool b) {
+    hideCursor_ = b;
+    if (!b) showCursor();  // turned off in the middle of a turn
+}
+
+// The knobs report the start and the end of every turn, a cancelled one included, so the
+// cursor can never be left hidden; the flag keeps the platform calls balanced.
+void EditorController::hideCursor() {
+    if (!hideCursor_ || cursorHidden_) return;
+    cursorHidden_ = true;
+    // A hidden cursor still travels with the mouse: it would run into the edge of the screen
+    // and the knob would stop turning, and it would come back wherever the turn ended. The
+    // lock pins it where the turn started and gives the knob the distance travelled instead,
+    // so the movement has no bounds at all.
+    const Point at = ui_.cursorPos();
+    ui_.setCursorVisible(false);
+    view_.lockPointer(at.x, at.y);
+}
+
+void EditorController::showCursor() {
+    if (!cursorHidden_) return;
+    cursorHidden_ = false;
+    view_.unlockPointer();  // parks it where the turn started, before it can be seen again
+    ui_.setCursorVisible(true);
 }
 
 // ==================================================================== display refresh
@@ -1037,10 +1070,10 @@ void EditorController::restMouseMenuClick(MenuNode& item) {  // menu_restMouseMe
     setRestMouseMenu(host_.settings().restoreMouseAfterMenu());
 }
 
-void EditorController::restMouseKnobClick(MenuNode& item) {  // menu_restMouseKnobClick
+void EditorController::hideCursorClick(MenuNode& item) {  // menu_restMouseKnobClick
     item.setChecked(!item.checked);
     host_.setGuiSetting(1, item.checked);
-    setRestMouseKnob(host_.settings().restoreMouseAfterKnob());
+    setHideCursor(host_.settings().hideCursorWhileEditing());
 }
 
 void EditorController::rmbScrDispClick(MenuNode& item) {  // menu_rmbScrDispClick

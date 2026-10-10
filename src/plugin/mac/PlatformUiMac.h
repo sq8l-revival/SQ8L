@@ -33,6 +33,7 @@ public:
     bool writeFile(const std::string& path, const std::vector<uint8_t>& data) override;
     Point cursorPos() override;
     void setCursorPos(Point p) override;
+    void setCursorVisible(bool visible) override;
     void focusForm() override;
     void runModal(ModalDialog& dialog) override;
     void showModInfo(const std::vector<std::string>& lines) override;

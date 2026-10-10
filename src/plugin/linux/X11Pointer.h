@@ -10,5 +10,8 @@ namespace sq8l::x11 {
 // Pointer position in `window` pixels; false if unavailable.
 bool queryPointer(uintptr_t window, int& x, int& y);
 void warpPointer(uintptr_t window, int x, int y);
+// Show the normal cursor over `window`, or a fully transparent one (the editor hides the
+// cursor while a knob is turned). Only affects the plugin's own window.
+void setCursorVisible(uintptr_t window, bool visible);
 
 }  // namespace sq8l::x11

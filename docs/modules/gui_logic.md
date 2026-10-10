@@ -114,6 +114,10 @@ identical to the original's objects field by field (tested).
 * OPTIONS -> DCA4 smoothing: the original checks the wrong item (value 1 = "HARD", tag 34).
 * Value popups: ids = value + 0x10000; signed parameters start with an extra "0" item and a
   separator; empty disabled bar-break items fill later columns.
+* Value popups are opened by a double click on the VFD cell or on the knob, and (port) by
+  a right click on the knob: `contextMenu` routes a point inside a knob with a parameter
+  to `cellDoubleClick`, so both gestures land in the same place. A knob the page does not
+  use falls through to the page popup, like the background.
 * Import program: "try to load anyway" retries with the same header check (so it fails again).
 * Mouse jump: the first saved position is kept until restored. Popup menus are all it is
   used for now. A knob turn hides the cursor and locks the pointer instead (port, issue

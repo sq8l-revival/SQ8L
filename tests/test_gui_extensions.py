@@ -11,7 +11,8 @@ matching the original; this checks the additions themselves:
   * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
   * the knobs a display page has no parameter for are marked inactive (drawn faded);
   * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
-    length of a knob turn, so the turn has no bounds, and comes back where it started.
+    length of a knob turn, so the turn has no bounds, and comes back where it started;
+  * a right click on a knob opens its value menu (the original: only a double click).
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -93,6 +94,12 @@ class Editor:
         self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y - dy, MK_LBUTTON)
         if release:
             self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y - dy, 0)
+        self.idle()
+
+    def context_menu(self, xy):
+        x, y = xy
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_context_menu(self.v, x, y)
         self.idle()
 
     def cursor_events(self, evs):
@@ -200,6 +207,7 @@ def main():
         ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
+        ("sq8l_gl_context_menu", [vp, ctypes.c_int32, ctypes.c_int32], None),
         ("sq8l_gl_editbuffer", [vp, ctypes.c_char_p], None),
     ]:
         getattr(L, name).argtypes = args
@@ -436,6 +444,50 @@ def main():
     check(at_top == 64.0 and backed_off < at_top,
           f"the overshoot is not stored: one move back off the top answers "
           f"({at_top} -> {backed_off})")
+
+    # 9. a right click on a knob opens its value menu (the original: a double click)
+    print("Right click on a knob:")
+    ed = Editor(L, extensions=True)
+    L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
+    ed.idle()
+    voices = 9  # the VOICES knob of the EMU page, 1..64
+    ed.choose([])
+    ed.context_menu(knob_xy(voices))
+    trees = ed.popups(ed.events())
+    items = [text(i) for i in trees[-1]] if trees else []
+    values = [i for i in items if i.isdigit()]
+    check(values[:1] == ["08"] and values[1:] == ["%02d" % v for v in range(1, 65)],
+          f"the value menu of VOICES: the current value, then 1..64 ({len(values)} items)")
+    # the same menu a double click opens
+    ed.choose([])
+    x, y = knob_xy(voices)
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
+    L.sq8l_gl_mouse(ed.v, 0x203, x, y, MK_LBUTTON)  # WM_LBUTTONDBLCLK
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
+    ed.idle()
+    dbl = ed.popups(ed.events())
+    check(bool(dbl) and [text(i) for i in dbl[-1]] == items, "a double click still opens it")
+    # choosing a value writes the parameter
+    ed.choose([items.index("24")])
+    ed.context_menu(knob_xy(voices))
+    check(ed.program_byte(0x197) == 24 and ed.knob(voices) == 24.0,
+          f"choosing an item sets the parameter ({ed.program_byte(0x197)})")
+    # a knob the page does not use keeps the page popup
+    faded = next(i for i in range(10) if not ed.knob_active(i))
+    ed.choose([])
+    ed.context_menu(knob_xy(faded))
+    trees = ed.popups(ed.events())
+    check(bool(trees) and text(trees[-1][0]) == "Modulation usage...",
+          "a faded knob still gets the page popup")
+    # and without the additions a knob gets the original's page popup
+    plain = Editor(L, extensions=False)
+    plain.choose([])
+    plain.context_menu(knob_xy(0))
+    trees = plain.popups(plain.events())
+    check(bool(trees) and text(trees[-1][0]) == "Modulation usage...",
+          "without the additions a knob gets the page popup, like the original")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

@@ -834,6 +834,22 @@ void EditorController::contextMenu(int x, int y) {
             break;
         }
     }
+    // (port) A right click on a knob opens its parameter's value menu, the same menu a double
+    // click opens. Double clicking still works; the page popup this replaces is on the
+    // display and the whole background anyway. A knob the page does not use (faded, issue
+    // #24) has no menu to show, so it falls through to the page popup like any other spot.
+    if (host_.portExtensions()) {
+        for (int i = 0; i < kNumKnobs; i++) {
+            const Knob& k = view_.knob(i);
+            if (!k.visible() || !k.bounds().contains(x, y)) continue;
+            LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
+            if (p) {
+                ctr_->cellDoubleClick(p->x, p->y);
+                return;
+            }
+            break;
+        }
+    }
     displayPanelContextPopup(x, y);
 }
 

@@ -68,7 +68,13 @@ EditorController::EditorController(EditorView& view, EditorHost& host, PlatformU
     buildMenus();
 }
 
-EditorController::~EditorController() = default;
+EditorController::~EditorController()
+{
+    if (hideCursorEnabled())
+    {
+      showCursor();
+    }
+}
 
 void EditorController::buildMenus() {
     // TPLUGEDITFORM menus (DFM): FILE, INFO, OPTIONS. Captions, tags, visibility, RadioItem.

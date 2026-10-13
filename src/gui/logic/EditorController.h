@@ -174,6 +174,11 @@ private:
     void amClick(int tag);
     void monoClick();
     void lcdKnobChange(Knob& k);
+    // (port, issue #43) Flip the two-state parameter of knob slot `knob`: what its soft button
+    // and a click on its field in the display both do. Nothing if the parameter has a range.
+    void toggleKnobParam(int knob);
+    // Whether the parameter the page gives knob slot `knob` has only two values.
+    bool knobIsTwoState(int knob) const;
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();
@@ -233,6 +238,9 @@ private:
     bool hideCursor_ = false;        // +0x505 (port)
     bool cursorHidden_ = false;      // a knob turn is hiding it right now
     int lcdDragKnob_ = -1;           // +0x508
+    // (port) The two-state field the left button went down on, flipped when it comes up again
+    // over the same one (the index inside the sub-page, -1 = none).
+    int lcdToggleParam_ = -1;
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
     bool rmbScroll_ = false;         // +0x511

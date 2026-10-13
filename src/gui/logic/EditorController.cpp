@@ -333,15 +333,23 @@ void EditorController::wireControls() {
     LcdDisplay& lcd = view_.lcd();
     lcd.onMouseDown = [this](Control&, MouseButton b, ShiftState s, int x, int y) {  // 0x48452c
         lcdDragKnob_ = -1;
+        lcdToggleParam_ = -1;
         if (b != MouseButton::Left) return;
         int col, row;
         view_.lcd().cellAt(x, y, col, row);
         LcdParam* p = ctr_->paramAt(col, row);     // FUN_004844f0
         const int k = p ? p->knob : -1;
-        if (k >= 0 && k < kNumKnobs) {
-            lcdDragKnob_ = k;
-            view_.knob(k).beginDrag(s, x, y);
+        if (k < 0 || k >= kNumKnobs)
+          return;
+        // (port, issue #43) A field with only two values is flipped by a click,
+        // like the soft button standing in for its knob; no drag starts, so the
+        // cursor stays put as well.
+        if (knobIsTwoState(k)) {
+          lcdToggleParam_ = p->index;
+          return;
         }
+        lcdDragKnob_ = k;
+        view_.knob(k).beginDrag(s, x, y);
     };
     lcd.onMouseMove = [this](Control&, ShiftState s, int x, int y) {  // 0x484598
         if (lcdDragKnob_ < 0) return;
@@ -352,11 +360,25 @@ void EditorController::wireControls() {
             view_.knob(lcdDragKnob_).dragMove(s, x, y);
         }
     };
-    lcd.onMouseUp = [this](Control&, MouseButton b, ShiftState, int, int) {  // FUN_00484570
-        if (b == MouseButton::Left && lcdDragKnob_ >= 0) {
-            view_.knob(lcdDragKnob_).endDrag();
-            lcdDragKnob_ = -1;
-        }
+    lcd.onMouseUp = [this](Control &, MouseButton b, ShiftState, int x,
+                           int y) { // FUN_00484570
+      if (b != MouseButton::Left)
+        return;
+      if (lcdDragKnob_ >= 0) {
+        view_.knob(lcdDragKnob_).endDrag();
+        lcdDragKnob_ = -1;
+      }
+      // (port, issue #43) The flip lands on the button coming up over the field
+      // it went down on, the way a push button fires; moving off it first
+      // cancels the click.
+      if (lcdToggleParam_ >= 0) {
+        int col, row;
+        view_.lcd().cellAt(x, y, col, row);
+        LcdParam *p = ctr_->paramAt(col, row);
+        if (p && p->index == lcdToggleParam_)
+          toggleKnobParam(p->knob);
+        lcdToggleParam_ = -1;
+      }
     };
     lcd.onCellMouseDown = [this](LcdDisplay&, MouseButton b, ShiftState, int col, int row) {  // 0x4845fc
         ctr_->cellMouseDown(int(b), col, row);
@@ -372,6 +394,13 @@ void EditorController::wireControls() {
             view_.knob(lcdDragKnob_).cancelDrag();
             lcdDragKnob_ = -1;
         }
+        // (port, issue #43) Each of the two clicks has flipped a two-state
+        // field already. FUN_0045b2b0 flips a range of two as well instead of
+        // showing a menu of it, which would leave a double click the other way
+        // round than clicking twice.
+        const LcdParam *p = ctr_->paramAt(col, row);
+        if (p && p->max - p->min == 1)
+          return;
         ctr_->cellDoubleClick(col, row);
     };
     // numLcd / progNameEdit
@@ -433,6 +462,19 @@ void EditorController::wireControls() {
             b->onClick = [this](Control&) { ctr_->prevSubPage(); };
         else if (n == "pscrDownButton")
             b->onClick = [this](Control&) { ctr_->nextSubPage(); };
+    }
+    // (port, issue #43) the soft buttons of the two-state slots: they flip
+    // their parameter and show its hint, like the knob they stand in for (the
+    // loop above gave them the static one)
+    for (int i = 0; i < kNumKnobs; i++) {
+      GraphButton &t = view_.toggle(i);
+      t.onClick = [this, i](Control &) { toggleKnobParam(i); };
+      t.onMouseMove = [this, i](Control &, ShiftState, int, int) {
+        LcdParam *p =
+            ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
+        if (p)
+          ctr_->cellMouseMove(p->x, p->y);
+      };
     }
     // menu areas
     view_.image("menuFileImage").onClick = [this](Control& c) {
@@ -662,6 +704,13 @@ void EditorController::lcdKnobValue(int knob, int value) {  // LAB_004846c4
 void EditorController::lcdKnobRange(int knob, int min, int max) {  // FUN_00484700
     if (knob < 0 || knob >= kNumKnobs) return;
     Knob& k = view_.knob(knob);
+    // (port, issue #43) A parameter with only two values gets a soft button in
+    // place of the knob: one click flips it, instead of a drag long enough to
+    // carry the value across. The knob stays as the model behind it (range,
+    // value), it is simply not shown.
+    const bool twoState = max - min == 1;
+    view_.toggle(knob).setVisible(twoState);
+    k.setVisible(!twoState);
     // (port) An empty range is how a page without a parameter for this knob is reported
     // (updateKnobRanges sends 0, 0): the knob is drawn faded then, see issue #24.
     k.setActive(max > min);
@@ -994,6 +1043,30 @@ void EditorController::lcdKnobChange(Knob& k) {  // TplugEditForm_lcdKnobChange
     ctr_->knobChanged(tag, v);
     LcdSubPage* sp = ctr_->currentSub();
     if (sp) highlightParam(sp->knobParam(tag));
+}
+
+bool EditorController::knobIsTwoState(int knob) const { // (port, issue #43)
+  if (knob < 0 || knob >= kNumKnobs)
+    return false;
+  LcdSubPage *sp = ctr_->currentSub();
+  const LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
+  return p && p->max - p->min == 1;
+}
+
+void EditorController::toggleKnobParam(int knob) { // (port, issue #43)
+  if (knob < 0 || knob >= kNumKnobs)
+    return;
+  LcdSubPage *sp = ctr_->currentSub();
+  LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
+  if (!p || p->max - p->min != 1)
+    return;
+  const int v = ctr_->currentValue(p->index) == p->min ? p->max : p->min;
+  // The knob behind the button is the value's home, as it is after a turn: set
+  // it first, then take the same route a turn takes (knobChanged does not write
+  // it back).
+  lcdKnobValue(knob, v);
+  ctr_->knobChanged(knob, v);
+  highlightParam(sp->knobParam(knob));
 }
 
 void EditorController::panicClick() {  // menuPanicImageClick

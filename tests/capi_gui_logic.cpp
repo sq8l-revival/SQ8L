@@ -302,6 +302,11 @@ SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride
 SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
     return i >= 0 && i < 10 ? int32_t(B(v)->view.knob(i).active()) : -1;
 }
+// (port, issue #43) Whether knob slot i shows its soft button instead of the knob, i.e. the
+// page's parameter there has only two values. Kept out of the state dump for the same reason.
+SQ8L_API int32_t sq8l_gl_toggle_shown(void* v, int32_t i) {
+    return i >= 0 && i < 10 ? int32_t(B(v)->view.toggle(i).visible()) : -1;
+}
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }
@@ -486,6 +491,9 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
     s << "],\"buttons\":{";
     bool first = true;
     for (GraphButton* g : ev.buttons()) {
+        // (port, issue #43) The soft buttons of the two-state slots have no counterpart in the
+        // original, and this dump is compared with it field by field: sq8l_gl_toggle_shown.
+        if (g->name().compare(0, 9, "lcdToggle") == 0) continue;
         s << (first ? "" : ",") << jstr(g->name()) << ":[" << g->aniIdx() << "," << g->pressed() << "," << int(g->hover())
           << "]";
         first = false;

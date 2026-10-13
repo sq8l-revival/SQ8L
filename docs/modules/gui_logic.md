@@ -114,10 +114,19 @@ identical to the original's objects field by field (tested).
 * OPTIONS -> DCA4 smoothing: the original checks the wrong item (value 1 = "HARD", tag 34).
 * Value popups: ids = value + 0x10000; signed parameters start with an extra "0" item and a
   separator; empty disabled bar-break items fill later columns.
+* A parameter of only two values is a soft button, not a knob (port, issue #43): the knob slot
+  shows `lcdToggle<i>` instead and a single click flips the value — on the button, or on the
+  parameter's field in the display, which no longer starts a drag (and so no longer hides the
+  cursor either). `lcdKnobRange` decides from the range it is handed; the knob behind the
+  button keeps the value, so a `knobChanged` is what the flip finally goes through.
+  FUN_0045b2b0 already flips a range of two rather than showing a two-item menu of it; with
+  the single click doing that, the double click must not, or clicking twice and double
+  clicking would end the other way round from each other.
 * Value popups are opened by a double click on the VFD cell or on the knob, and (port) by
   a right click on the knob: `contextMenu` routes a point inside a knob with a parameter
   to `cellDoubleClick`, so both gestures land in the same place. A knob the page does not
-  use falls through to the page popup, like the background.
+  use falls through to the page popup, like the background; so does a two-state slot, whose
+  knob is hidden under its soft button and which `contextMenu` therefore passes over.
 * Import program: "try to load anyway" retries with the same header check (so it fails again).
 * Mouse jump: the first saved position is kept until restored. Popup menus are all it is
   used for now. A knob turn hides the cursor and locks the pointer instead (port, issue

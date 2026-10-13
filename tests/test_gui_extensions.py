@@ -12,7 +12,9 @@ what it adds:
   * the knobs a display page has no parameter for are marked inactive (drawn faded);
   * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
     length of a knob turn, so the turn has no bounds, and comes back where it started;
-  * a right click on a knob opens its value menu (the original: only a double click).
+  * a right click on a knob opens its value menu (the original: only a double click);
+  * a parameter with only two values gets a soft button in place of its knob, and a click
+    on the button or on its field in the display flips it (issue #43).
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -28,9 +30,17 @@ LIB_PATH = os.environ.get("SQ8L_TESTAPI", os.path.join(ROOT, "build", "libsq8l_t
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP = 0x200, 0x201, 0x202, 0x204, 0x205
 MK_LBUTTON, MK_RBUTTON = 1, 2
-# lcdKnob0-9 (DFM): 40 x 40 at these centres, 0-4 top row, 5-9 bottom row
+# lcdKnob0-9 (DFM): 40 x 40 at these centres, 0-4 top row, 5-9 bottom row. The soft button of
+# a two-state slot (issue #43) is centred in the same 40 x 40, so these are its centre too.
 def knob_xy(i):
     return 118 + 96 * (i % 5) + 20, (194 if i < 5 else 304) + 20
+
+
+
+# The centre of VFD cell (col, row): the display sits at (34, 247) with a frame of 4 and
+# 11 x 18 characters at gaps of 1 / 3 (EditorView).
+def cell_xy(col, row):
+    return 38 + 12 * col + 5, 251 + 21 * row + 9
 
 # Form positions (DFM; numLcd is sized at run time)
 NUM_LCD = (40, 52)
@@ -164,6 +174,31 @@ class Editor:
     def knob_active(self, i):
         return bool(self.L.sq8l_gl_knob_active(self.v, i))
 
+    def toggle_shown(self, i):
+        """Whether knob slot i shows its soft button instead of the knob (issue #43)."""
+        return bool(self.L.sq8l_gl_toggle_shown(self.v, i))
+
+    def drag(self, xy, dy, release_at=None):
+        """Press at xy, move up by dy in steps, release there or at release_at."""
+        x, y = xy
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+        for step in (dy // 3, 2 * dy // 3, dy):
+            self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y - step, MK_LBUTTON)
+        rx, ry = release_at if release_at else (x, y - dy)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, rx, ry, 0)
+        self.idle()
+
+    def double_click(self, xy):
+        """Down, up, WM_LBUTTONDBLCLK (= DblClick + a down), up: what Windows sends."""
+        x, y = xy
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y, 0)
+        self.L.sq8l_gl_mouse(self.v, 0x203, x, y, MK_LBUTTON)
+        self.L.sq8l_gl_mouse(self.v, WM_LBUTTONUP, x, y, 0)
+        self.idle()
+
     def knob(self, i, field="value"):
         """A float field of knob i (the state dump stores floats as their bits)."""
         bits = json.loads(self.cstr(self.L.sq8l_gl_state))["knobs"][i][field]
@@ -188,6 +223,14 @@ def text(item):
     return item["text"].replace("&", "")
 
 
+def param_of(sub, name):
+    """A parameter of a sub-page of the pages dump, by name."""
+    for p in sub["params"]:
+        if p["name"] == name:
+            return p
+    raise AssertionError(f"the sub-page has no {name!r}: {[p['name'] for p in sub['params']]}")
+
+
 def main():
     L = ctypes.CDLL(LIB_PATH)
     vp = ctypes.c_void_p
@@ -205,6 +248,7 @@ def main():
         ("sq8l_gl_port_setting", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_poly_override", [vp], ctypes.c_int32),
         ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_toggle_shown", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
         ("sq8l_gl_context_menu", [vp, ctypes.c_int32, ctypes.c_int32], None),
@@ -346,7 +390,9 @@ def main():
     check(mouse["sub"][MOUSE_HIDE_CURSOR]["checked"], "'Hide cursor when editing' is on by default")
     L.sq8l_gl_ctr(ed.v, 0, 0, 0)
     ed.idle()
-    active = next(i for i in range(10) if ed.knob_active(i))
+    # a slot that really is a knob: a two-state parameter shows a soft button instead and is
+    # clicked rather than turned, so it has no turn to hide the cursor for (issue #43)
+    active = next(i for i in range(10) if ed.knob_active(i) and not ed.toggle_shown(i))
     before = ed.knob(active)
     up = 60 if before < ed.knob(active, "max") else -60  # a direction the value can move in
     ed.events()
@@ -472,6 +518,66 @@ def main():
     trees = ed.popups(ed.events())
     check(bool(trees) and text(trees[-1][0]) == "Modulation usage...",
           "a faded knob still gets the page popup")
+
+    # 10. a parameter with only two values is a soft button, not a knob (issue #43)
+    print("Two-state parameters:")
+    ed = Editor(L)
+    # MODE 1/3: SYNC, AM, MONO and GLIDE over RESTART- VC, ENV, OSC, CYC -- seven fields of
+    # two values and one with a range, so the same row shows both kinds.
+    MODE_PAGE, MODE_SUB = 17, 0
+    L.sq8l_gl_ctr(ed.v, 0, MODE_PAGE, MODE_SUB)
+    ed.idle(2000)  # past the welcome message, which holds the display for its first 66 ticks
+    sub = ed.pages()[MODE_PAGE]["subs"][MODE_SUB]
+    want = [False] * 10
+    for p in sub["params"]:
+        if p["knob"] >= 0 and p["max"] - p["min"] == 1:
+            want[p["knob"]] = True
+    check(1 < sum(want) < 10, "the MODE page mixes two-state fields with a knob and empty slots")
+    got = [ed.toggle_shown(i) for i in range(10)]
+    check(got == want, f"a button in every two-state slot and nowhere else: {got}")
+
+    sync, glide = param_of(sub, "SYNC"), param_of(sub, "GLIDE")
+
+    def shows(p):
+        """What p's value field reads on the display (the value follows p's label)."""
+        start = p["x"] + len(p["label"])
+        return ed.lcd_row(p["y"])[start:start + p["width"]].strip()
+
+    field = cell_xy(sync["x"] + len(sync["label"]), sync["y"])
+    button = knob_xy(sync["knob"])
+    off = shows(sync)
+    ed.click(button)
+    on = shows(sync)
+    check({off, on} == {"OFF", "ON"}, f"a click on the button flips SYNC: {off} -> {on}")
+    ed.click(button)
+    check(shows(sync) == off, "and a second click puts it back")
+    ed.click(field)
+    check(shows(sync) == on, "a click on its field in the display does the same")
+    ed.click(field)
+    check(shows(sync) == off, "and so does the next one")
+
+    # a drag is what the button replaces: it must not move the value, and (unlike a knob
+    # turn, issue #25) it must not take the cursor away either
+    ed.events()
+    ed.drag(field, 60)
+    check(shows(sync) == off, "dragging the field changes nothing")
+    check(ed.cursor_events(ed.events()) == [], "and does not hide the cursor, as a turn would")
+    ed.drag(button, 60)
+    check(shows(sync) == off, "a press dragged off the button is cancelled, as on any button")
+
+    # FUN_0045b2b0 flips a range of two instead of showing a menu of it; with the single
+    # click doing that, the double click must not, or two clicks and a double click differ
+    ed.events()
+    ed.double_click(field)
+    check(shows(sync) == off, "a double click is two clicks and lands where it started")
+    check(ed.popups(ed.events()) == [], "and opens no value menu")
+
+    # the slots that are not two-state are untouched
+    check(not ed.toggle_shown(glide["knob"]), "GLIDE, which has a range, keeps its knob")
+    before = ed.knob(glide["knob"])
+    ed.drag_knob(glide["knob"], dy=20)
+    check(ed.knob(glide["knob"]) != before,
+          f"and still turns ({before} -> {ed.knob(glide['knob'])})")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

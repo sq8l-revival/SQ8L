@@ -77,13 +77,23 @@ const ButtonDef kButtons[] = {
 // and the name is drawn after the panel so it sits on top.
 constexpr int kMtsLeft = 253, kMtsTop = 6, kMtsWidth = 309;
 
-const char* const kZOrder[] = {
-    "lcdKnob0", "lcdKnob1", "lcdKnob2", "lcdKnob3", "lcdKnob4", "lcdKnob9", "lcdKnob8", "lcdKnob7", "lcdKnob6",
-    "lcdKnob5", "StatusPanel2", "Panel1", "lcd", "upButton", "downButton", "writeButton", "initButton",
-    "progNameEdit", "sysExSendButton", "sysExReqButton", "numLcd", "ledSync", "buttOsc1", "buttOsc2", "buttOsc3",
-    "buttDca1", "buttDca2", "buttDca3", "buttFilt", "buttDca4", "buttModes", "buttSync", "ledAm", "buttAm",
-    "buttLfo1", "buttLfo2", "buttLfo3", "buttLfo4", "buttEnv1", "buttEnv2", "buttEnv3", "buttEnv4", "buttMat1",
-    "buttMat2", "buttMat3", "buttWav", "ledMono", "buttMono", "BankButton", "pscrUpButton", "pscrDownButton",
+const char *const kZOrder[] = {
+    "lcdKnob0",        "lcdKnob1",       "lcdKnob2",   "lcdKnob3",
+    "lcdKnob4",        "lcdKnob9",       "lcdKnob8",   "lcdKnob7",
+    "lcdKnob6",        "lcdKnob5",       "lcdToggle0", "lcdToggle1",
+    "lcdToggle2",      "lcdToggle3",     "lcdToggle4", "lcdToggle5",
+    "lcdToggle6",      "lcdToggle7",     "lcdToggle8", "lcdToggle9",
+    "StatusPanel2",    "Panel1",         "lcd",        "upButton",
+    "downButton",      "writeButton",    "initButton", "progNameEdit",
+    "sysExSendButton", "sysExReqButton", "numLcd",     "ledSync",
+    "buttOsc1",        "buttOsc2",       "buttOsc3",   "buttDca1",
+    "buttDca2",        "buttDca3",       "buttFilt",   "buttDca4",
+    "buttModes",       "buttSync",       "ledAm",      "buttAm",
+    "buttLfo1",        "buttLfo2",       "buttLfo3",   "buttLfo4",
+    "buttEnv1",        "buttEnv2",       "buttEnv3",   "buttEnv4",
+    "buttMat1",        "buttMat2",       "buttMat3",   "buttWav",
+    "ledMono",         "buttMono",       "BankButton", "pscrUpButton",
+    "pscrDownButton",
 };
 
 }  // namespace
@@ -153,6 +163,31 @@ EditorView::EditorView() {
         b->font.face = "Arial";
         b->font.italic = true;
         buttons_.push_back(std::move(b));
+    }
+
+    // ---- (port, issue #43) lcdToggle0..9: a grey soft button in each knob
+    // slot, for a parameter with only two values. Hidden until lcdKnobRange
+    // finds one; the display says which way it stands, so the button itself
+    // shows nothing but its own press.
+    //
+    // 44 x 22 over the knob's 40 x 40 slot, which leaves 2 pixels of overhang
+    // on either side. Lined up with the knob's body rather than with its slot:
+    // the body turns about (20.17, 22.10) with a radius of 11.6 (KnobModel), so
+    // it sits below the middle of the slot and a button centred in the slot
+    // reads high beside one. The 13 is that arithmetic settled by eye at the
+    // size the editor is actually used at.
+    for (int i = 0; i < 10; i++) {
+      auto b = std::make_unique<GraphButton>("lcdToggle" + std::to_string(i));
+      b->setPressDisplacement(0);
+      b->setBounds(118 + 96 * (i % 5) - 2, (i < 5 ? 194 : 304) + 13, 44, 22);
+      b->setAniGif(&assets::buttGif());
+      b->setAniIdx(0); // grey, like DCA1-4 and FILTER
+      b->setHasTwoFrames(true);
+      b->font.face = "Arial";
+      b->font.italic = true;
+      b->setVisible(false);
+      toggles_[size_t(i)] = b.get();
+      buttons_.push_back(std::move(b));
     }
     // FormShow: hover frame for the page scroll arrows.
     button("pscrUpButton").setFrameColor(fromTColor(0x5f7c0e));

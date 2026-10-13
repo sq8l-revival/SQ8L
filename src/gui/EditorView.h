@@ -50,6 +50,10 @@ public:
     LcdDisplay& lcd() { return *lcd_; }
     LcdDisplay& numLcd() { return *numLcd_; }
     Knob& knob(int i) { return *knobs_[i]; }  // lcdKnob0..9 (0-4 top row, 5-9 bottom row)
+    // (port, issue #43) lcdToggle0..9: the soft button shown in knob slot i instead of the
+    // knob when the page's parameter there has only two values, so that the state is flipped
+    // by a click rather than dragged in. Hidden otherwise; see EditorController::lcdKnobRange.
+    GraphButton& toggle(int i) { return *toggles_[i]; }
     GraphButton& button(const std::string& name);  // upButton, buttOsc1, pscrUpButton, ...
     AniDisplay& ledSync() { return *ledSync_; }
     AniDisplay& ledAm() { return *ledAm_; }
@@ -132,6 +136,7 @@ private:
     std::unique_ptr<LcdDisplay> lcd_, numLcd_;
     std::array<std::unique_ptr<Knob>, 10> knobs_;
     std::vector<std::unique_ptr<GraphButton>> buttons_;
+    std::array<GraphButton*, 10> toggles_{};  // (port) lcdToggle0..9, owned by buttons_
     std::unique_ptr<AniDisplay> ledSync_, ledAm_, ledMono_;
     std::unique_ptr<Panel> statusPanel2_, panel1_;
     std::unique_ptr<Label> statusLabel1_, statusLabel2_;

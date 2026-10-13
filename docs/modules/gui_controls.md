@@ -111,6 +111,12 @@ Field offsets are those of the original objects (used by `oracle/gui_state.py`).
 * MouseDown(left) → pressed; MouseMove: inside → Mouse.Capture := self + OnMouseMove, outside →
   release capture, hover off, press cancelled; MouseUp(left) → Click if still pressed.
   TControl.Click is overridden empty, so OnClick only comes from MouseUp.
+* Port addition — `lcdToggle0..9`, the soft buttons of the knob slots: a grey ButtGIF button
+  (AniIdx 0, two frames) 44x22 centred in a knob's 40x40 slot, hidden unless the display page
+  gives that slot a parameter of only two values, which is flipped by a click instead of being
+  dragged in — issue #43. The knob stays behind it as the value's model, simply not shown; the
+  display says which way the parameter stands, so the button itself shows nothing but its own
+  press. `EditorController::lcdKnobRange` is what shows and hides the two.
 
 ### AniDisplay (TAniDisplay, 0x47b3e4-0x47ba3c)
 `frame = Round((value-min)/(max-min)*(numFrames-1) + startFrame)` (index == count → blue
@@ -125,7 +131,8 @@ for StatusLabel2 / taRightJustify).
 ## EditorView (state model)
 
 `EditorView` owns: `lcd()`, `numLcd()`, `knob(0..9)` (lcdKnob0-9: 0-4 top row, 5-9 bottom row,
-x = 118 + 96*i), `button(name)` (33 TGraphButtons, form names), `ledSync()`, `ledAm()`,
+x = 118 + 96*i), `toggle(0..9)` (port: lcdToggle0-9, see below), `button(name)`
+(33 TGraphButtons, form names), `ledSync()`, `ledAm()`,
 `ledMono()`, `statusPanel2()`/`statusLabel2()` (voices), `panel1()`/`statusLabel1()` (status
 bar), `progNameEdit()`, `image(name)` (menuFileImage, menuOptImage, menuInfoImage,
 menuPanicImage), `form()`. The constructor reproduces the form after FormShow (LCD 44x2,

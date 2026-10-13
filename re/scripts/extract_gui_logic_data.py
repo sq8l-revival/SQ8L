@@ -9,9 +9,7 @@ parameters (hint text, edit buffer parameter index, formatter/popup-text callbac
 layout, change callback). We run it in the emulator, capture the definition strings it passes
 (trace of ClcdCtr_pageML.setText at 0x45a2dc on the top level page objects) and dump the
 resulting object tree. The C++ port parses the same definition strings with the ported parser
-and applies the per sub-page / per parameter setup recorded here; the retired
-tests/test_gui_logic.py (history up to fc79e1e) verified that the resulting tree was
-identical, field by field.
+and applies the per sub-page / per parameter setup recorded here.
 
 Also extracted: the VFD character maps of both TLCD3 displays and the text tables used by the
 value formatters (unit editBuffer 0x461114..0x461c1c), read from the emulated process memory.

@@ -1,7 +1,7 @@
 # GUI layers 1-2: graphics core, assets, controls, EditorView
 
-Port of the original editor's *look and controls* (not its logic), pixel-exact against the
-GUI oracle. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
+Port of the original editor's *look and controls* (not its logic), from the original's own
+artwork. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
 
 | File | What |
 |---|---|
@@ -18,7 +18,7 @@ GUI oracle. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
 | `src/gui/controls/AniDisplay.*` | TAniDisplay (unit AniDisplay) |
 | `src/gui/controls/StaticControls.*` | TPanel, TLabel, TEdit (program name), picture-less TImage (menu areas) |
 | `src/gui/EditorView.*` | the form: all controls at their runtime positions, z-order, composition, mouse routing |
-| `oracle/gui_state.py` | reads the original controls' state in the emulator (asset extraction; the comparison tests are retired, see Verification) |
+| `oracle/gui_state.py` | reads the original controls' state in the emulator, for the asset extraction |
 
 ## Assets
 
@@ -146,32 +146,8 @@ moves to the knob however far outside the window the travelled point lands.
 
 ## Verification
 
-**The comparison with the original is retired** (2026-10-13). The editor was ported against
-the original and verified as described below, but it is now free to improve on it (a
-regrouped OPTIONS menu, faded unused knobs, a value menu on a knob's right click, HD
-graphics), and a test that holds it to the original's every pixel and menu only gets in the
-way. The sound and the data formats are still compared with the original. The editor's own
-checks are `tests/test_gui_extensions.py` (the port's additions), `sq8l_hd_check`,
-`sq8l_drawn_check` and the Linux editor session in CI. The retired tests (`tests/test_gui_render.py`, `tests/test_gui_controls.py`,
-`tests/capi_gui.cpp`) are in the history
-up to fc79e1e; what follows records how the port was verified while it was made.
-
-* `test_gui_render.py`: 162 original states (start-up, all 21 page buttons with their
-  scrolled sub-pages, knob drags incl. horizontal distance and Shift on both rows, hover frames
-  and hints, pressed and press-cancelled buttons, MONO/SYNC/AM on/off, program up/down, bank
-  switches, LCD clicks/drags/double/right clicks, voices counter with notes playing, programs
-  45/135/301/383 at start-up). The state of every original control is read from emulator
-  memory and loaded into a fresh C++ EditorView: **0 differing pixels in 43 million pixels**
-  compared outside the masked text (116 distinct frames, 51 distinct LCD contents, 62 knob
-  frames). Masked: StatusLabel1, StatusLabel2 (label rectangles clipped to their panels) and
-  the progNameEdit rectangle; their non-text pixels around are compared.
-* `test_gui_controls.py`: all 435 sprite frames + background; EditorView defaults (411 checks);
-  4000 random TGraphKnobB method calls on an original knob vs the C++ knob, all 28 fields
-  bit-exact after every call + frame index; 1500 random `writeText` calls (cells, dirty flags);
-  600 TAniDisplay setter calls; 25 random knob/LED value frames; 30 incremental LCD repaints on
-  a persistent C++ view (dirty-cell path); 715 mouse messages replayed on both (knob drags,
-  double clicks, right clicks, button hover/press/leave/cross-moves, LCD cell events, menu
-  areas, form) with identical capture, event streams and control state after each message.
+`sq8l_hd_check`, `sq8l_drawn_check` and `tests/test_gui_extensions.py` (through
+`tests/capi_gui_logic.cpp`), all three in CI.
 
 ## Notes for the editor-logic port (layer 3)
 

@@ -24,11 +24,9 @@ code and verified against the original plugin running inside an x86 emulator.
   samples per channel, zero differences. Each DSP module (DOC 5503 oscillators, filter,
   LFOs, envelopes, amplifier, voice management) was also verified call by call on real
   captured states — tens of millions of calls in total.
-- **Editor: the original's, then improved.** The window was ported from the original artwork
-  and drawing logic and checked pixel by pixel (162 editor states, 0 differing pixels, text
-  excepted), its page and parameter logic in 26,705 interactions. It is now free to improve
-  on the original (sharp at any size, faded unused knobs, a tidier OPTIONS menu), so it is no
-  longer compared with it; the sound and the files still are.
+- **Editor: the original's, then improved.** The window was ported from the original's own
+  artwork and drawing logic, and is free to improve on it: sharp at any size, faded unused
+  knobs, a tidier OPTIONS menu.
 - **Compatibility.** Same VST2 unique ID (`SQ8L`), same 512 programs and the same chunk
   format as the original: projects saved with the original plugin load with their sound.
   Library files (`.8XL`), bank files and SQ-80/ESQ-1 SysEx are read and written exactly

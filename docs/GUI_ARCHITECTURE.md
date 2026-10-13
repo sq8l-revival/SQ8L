@@ -3,10 +3,9 @@
 The original editor (Delphi VCL form `TplugEditForm`, 626×430) is almost entirely bitmap
 based: a JPEG background, sprite strips (TAniGIF) for knobs, buttons, LEDs, the VFD
 character set and the 7-segment program number, plus a few text elements (status bar,
-program name edit box, popup menus, dialogs). The port reproduced it **pixel-exact** by
-software-rendering into an RGB framebuffer, and has since been free to improve on it (HD
-graphics, see `src/gui/hd`); the plugin framework (DPF) only blits the framebuffer and
-forwards input.
+program name edit box, popup menus, dialogs). The port renders it by software into an RGB
+framebuffer from the original's own artwork, and is free to improve on it (HD graphics, see
+`src/gui/hd`); the plugin framework (DPF) only blits the framebuffer and forwards input.
 
 ## Reference: the GUI oracle
 
@@ -51,10 +50,6 @@ input arrives as `mouseDown/Move/Up/DoubleClick(x, y, buttons)` in form coordina
 
 ## Verification
 
-While the editor was ported, a C API (`tests/capi_gui*.cpp`) created the editor model with a
-given program/state, injected the same input sequence as the oracle driver, rendered, and
-compared pixels and state with the original's (`tests/test_gui_*.py`): exact outside text
-areas. Those comparisons are retired since the editor began to improve on the original (the
-history up to fc79e1e has them; `docs/modules/gui_controls.md` and `gui_logic.md` record the
-results). The editor's checks now are the port's own: `tests/test_gui_extensions.py`,
-`sq8l_hd_check`, `sq8l_drawn_check` and the Linux editor session in CI.
+A C API (`tests/capi_gui_logic.cpp`) creates the editor model with a given program and state
+and injects input into it; `tests/test_gui_extensions.py` drives it. With `sq8l_hd_check`,
+`sq8l_drawn_check` and the Linux editor session, that is what CI runs on the editor.

@@ -7,9 +7,8 @@ re/extracted/classes.json), and decodes each control's fields (offsets from the
 disassembly of units LCD3, graphKnobB, GraphButton, AniDisplay, AniGIF; see
 docs/modules/gui_controls.md).
 
-Used by re/scripts/extract_gui_assets.py (decoded sprite frames / background). The port's
-editor is no longer compared with this state (the GUI is free to differ from the original's);
-the reader stays as a tool for looking at what the original does.
+Used by re/scripts/extract_gui_assets.py (decoded sprite frames / background), and a tool
+for looking at what the original does.
 
 Run directly to dump the start-up state:  python oracle/gui_state.py
 """

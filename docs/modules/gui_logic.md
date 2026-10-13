@@ -4,7 +4,7 @@ Port of the original editor's *behaviour* (unit plugEdit = TplugEditForm, unit l
 ClcdCtr, the page set up FUN_0047e340, the value formatters of unit editBuffer, the jumping
 mouse, the dialogs) on top of the ported controls of layers 1-2 (`docs/modules/gui_controls.md`).
 Layer numbers refer to `docs/GUI_ARCHITECTURE.md`. Ported against the original running in the
-emulator; that comparison is now retired (see Verification).
+emulator.
 
 | File | What |
 |---|---|
@@ -141,63 +141,9 @@ platform grabs the keyboard accordingly.
 
 ## Verification
 
-**The comparison with the original is retired** (2026-10-13). The editor was ported against
-the original and verified as described below, but it is now free to improve on it (a
-regrouped OPTIONS menu, faded unused knobs, a value menu on a knob's right click, HD
-graphics), and a test that holds it to the original's every pixel and menu only gets in the
-way. The sound and the data formats are still compared with the original. The editor's own
-checks are `tests/test_gui_extensions.py` (the port's additions), `sq8l_hd_check`,
-`sq8l_drawn_check` and the Linux editor session in CI. The retired tests are in the history
-up to fc79e1e; what follows records how the port was verified while it was made.
-
-The original editor runs in the emulator (oracle/gui_driver.Editor); the port is an EditorView +
-EditorController with the same engine state (library, edit buffer, settings copied from the
-emulated process). Both get the same input (Win32 mouse messages in form coordinates, timer
-ticks, WM_CONTEXTMENU, focus, MIDI input) and the same scripted answers (popup menu paths,
-message box results, file paths, dialog actions). After every step the complete state is
-compared: VFD and program display cells (character + attribute), all knob fields, button / LED
-states, status texts, name edit, page controller (page, sub-page, locks, message timer, every
-field's value / text / highlight), form fields, mouse jump, the edit buffer image, settings,
-optionally the library, and every event: message boxes, file dialogs, modal dialog contents,
-info windows, SetCursorPos, MIDI output.
-
-The OPTIONS layout is not asserted in `tests/test_gui_extensions.py`; it locates the items it
-clicks by caption. The grouping is left to inspection.
-
-To run the modal dialogs of the original the test patches PeekMessage / DispatchMessage (the
-VCL modal loop gets the posted messages, then the messages of the scripted user actions) and
-emulates the LISTBOX / multi-line EDIT / check box messages the dialogs use, the file dialogs
-(answers written into OPENFILENAME, files in `oracle/sandbox/T/gl`) and winmm MIDI (port names,
-open, SysEx out recorded, SysEx in through the input callback).
-
-| Scenario | Content | Checks |
-|---|---|---|
-| pages | page tree field by field; every value (min-1 .. max+1) of every parameter of every sub-page through the page controller; the value popup of every parameter | 22 241 |
-| basic | every page button and sub-page: 10 knob drags (vertical, horizontal fine), VFD click / double click with a popup choice / drags up and down on every field | 2 821 |
-| programs/menus | up / down / bank, program popups (numLcd, name), page popup at many places, every OPTIONS item, FILE / INFO, buttons, hints over every control and VFD cell | 319 |
-| dialogs | 17 WRITE / compare dialog scripts, modulation usage of 40 programs, about, program name editing | 73 |
-| files | library / bank save-load-init (answers OK / cancel, junk / empty / missing files), SysEx program and bank import / export | 96 |
-| midi | port dialogs (open failing / succeeding), SEND dump bytes, REQ, received dumps (complete, short, foreign, corrupt) | 38 |
-| host | 30 program changes from the host | 66 |
-| random | 3 seeds x 350 random actions of all kinds | 1 050 |
-
-Result (full run, about 55 s): 26 705 checks, 0 differences. Events compared: 931 popup menus,
-63 message boxes, 36 file dialogs, 109 modal dialogs, 54 modulation usage windows, 6 about
-windows, 10 MIDI outputs, 2 527 cursor jumps.
-
-Coverage (pages x parameters x actions), printed at the end of the run:
-
-| Action | Parameters (of 364) |
-|---|---|
-| set through the page controller, every value | 364 |
-| value popup shown | 364 |
-| selected by a VFD click | 248 |
-| changed by a VFD drag | 234 |
-| changed by a knob drag / horizontal fine drag | 200 / 216 |
-| changed by a popup choice | 117 (+21 random) |
-| changed by any GUI gesture | 248 of the 248 editable ones (the other 116 are labels, min = max) |
-
-All 18 pages and 33 sub-pages; all 21 page buttons; every OPTIONS / FILE / INFO item.
+`tests/test_gui_extensions.py` (through `tests/capi_gui_logic.cpp`), in CI. The OPTIONS
+layout is not asserted there: the test locates the items it clicks by caption, and the
+grouping is left to inspection.
 
 ## OPTIONS layout (port)
 

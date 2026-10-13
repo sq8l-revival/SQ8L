@@ -1,0 +1,86 @@
+Audio Unit: own the preset names the host hands over and gets back.
+
+AudioUnitProperties.h, kAudioUnitProperty_PresentPreset: "the client of the audio
+unit owns the CFString when it retrieves the preset with PresentPreset and is
+expected to release this". DPF copied the AUPreset both ways without a CFRetain:
+
+- setting a user preset kept the host's name without a reference, so once the
+  host released its own the name was freed, and the next ClassInfo put the freed
+  string in the state dictionary. Logic sets a user preset for its own patches,
+  then reads ClassInfo: EXC_BAD_ACCESS in PluginAU::retrieveClassInfo
+  (sq8l-revival/SQ8L#37);
+- getting PresentPreset gave the host a reference it did not have, which the
+  host's release then took from the plug-in's own name.
+
+Also refuse a factory preset number past the end, and ignore one in a saved
+state, instead of reading past the end of the preset table.
+
+diff --git a/distrho/src/DistrhoPluginAU.cpp b/distrho/src/DistrhoPluginAU.cpp
+index 919faa71..1821e997 100644
+--- a/distrho/src/DistrhoPluginAU.cpp
++++ b/distrho/src/DistrhoPluginAU.cpp
+@@ -1074,6 +1074,8 @@ public:
+             {
+                 std::memcpy(outData, &fUserPresetData, sizeof(AUPreset));
+             }
++            // (SQ8L) the host owns the name it gets and releases it, see the patch
++            CFRetain(static_cast<AUPreset*>(outData)->presetName);
+             return noErr;
+ 
+        #if DISTRHO_PLUGIN_WANT_MIDI_AS_MPE
+@@ -1521,6 +1523,10 @@ public:
+                #if DISTRHO_PLUGIN_WANT_PROGRAMS
+                 if (presetNumber >= 0)
+                 {
++                    // (SQ8L) a factory preset that does not exist would be read past the end
++                    // (fFactoryPresetsData holds one "Default" entry when there are no programs)
++                    DISTRHO_SAFE_ASSERT_INT_RETURN(static_cast<uint32_t>(presetNumber) < (fProgramCount != 0 ? fProgramCount : 1),
++                                                   presetNumber, kAudioUnitErr_InvalidPropertyValue);
+                     if (fCurrentProgram != presetNumber)
+                     {
+                         fCurrentProgram = presetNumber;
+@@ -1532,13 +1538,11 @@ public:
+                 else
+                 {
+                     fCurrentProgram = presetNumber;
+-                    CFRelease(fUserPresetData.presetName);
+-                    std::memcpy(&fUserPresetData, inData, sizeof(AUPreset));
++                    setUserPreset(*static_cast<const AUPreset*>(inData));
+                 }
+                #else
+                 DISTRHO_SAFE_ASSERT_INT_RETURN(presetNumber < 0, presetNumber, kAudioUnitErr_InvalidPropertyValue);
+-                CFRelease(fUserPresetData.presetName);
+-                std::memcpy(&fUserPresetData, inData, sizeof(AUPreset));
++                setUserPreset(*static_cast<const AUPreset*>(inData));
+                #endif
+             }
+             return noErr;
+@@ -2478,6 +2482,17 @@ private:
+ 
+     // ----------------------------------------------------------------------------------------------------------------
+ 
++    // (SQ8L) Keep a reference to the name of a user preset the host sets: the host releases
++    // its own once the call returns, and the name is used again for PresentPreset and ClassInfo.
++    void setUserPreset(const AUPreset& preset)
++    {
++        CFStringRef name = preset.presetName != nullptr ? preset.presetName : CFSTR("");
++        CFRetain(name);
++        CFRelease(fUserPresetData.presetName);
++        fUserPresetData.presetNumber = preset.presetNumber;
++        fUserPresetData.presetName = name;
++    }
++
+     CFMutableDictionaryRef retrieveClassInfo()
+     {
+         CFMutableDictionaryRef clsInfo = CFDictionaryCreateMutable(nullptr,
+@@ -2657,6 +2672,10 @@ private:
+             SInt32 program = -1;
+             if (CFNumberGetValue(programRef, kCFNumberSInt32Type, &program))
+             {
++                // (SQ8L) a saved program number past the end would be read past the end
++                if (program >= static_cast<SInt32>(fProgramCount != 0 ? fProgramCount : 1))
++                    program = -1;
++
+                 fCurrentProgram = program;
+ 
+                 if (program >= 0)

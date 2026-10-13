@@ -40,6 +40,8 @@ jobs:
           cp -R pkg/SQ8L/SQ8L.component ~/Library/Audio/Plug-Ins/Components/
           killall -9 AudioComponentRegistrar || true
           auval -v aumu SQ8L SQ8L
+      - name: Audio Unit presets and state as a host drives them
+        run: MallocScribble=1 ./build/sq8l_au_check pkg/SQ8L/SQ8L.component
       - uses: actions/upload-artifact@v7
         with:
           name: SQ8L-macOS-universal

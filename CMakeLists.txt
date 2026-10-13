@@ -78,7 +78,7 @@ option(SQ8L_BUILD_PLUGIN "Build the SQ8L plugin (VST2/VST3/AU/CLAP)" ON)
 if(SQ8L_BUILD_PLUGIN)
   # Local DPF / pugl patches (kept out of the submodules): apply once if not yet applied.
   foreach(entry "dpf-vst2-compat.patch=third_party/DPF" "dpf-msvc-enum.patch=third_party/DPF"
-                "dpf-swap-interval.patch=third_party/DPF"
+                "dpf-swap-interval.patch=third_party/DPF" "dpf-au-preset-name.patch=third_party/DPF"
                 "pugl-x11-nested-update.patch=third_party/DPF/dgl/src/pugl-upstream")
     string(REPLACE "=" ";" entry "${entry}")
     list(GET entry 0 patch)
@@ -185,6 +185,12 @@ target_link_libraries(sq8l_drawn_check PRIVATE sq8l_gui_drawn)
 # HD graphics without a window (tests/hd_check.cpp).
 add_executable(sq8l_hd_check tests/hd_check.cpp)
 target_link_libraries(sq8l_hd_check PRIVATE sq8l_gui)
+
+# The Audio Unit's presets and state as a host drives them (tests/au_check.cpp).
+if(APPLE)
+  add_executable(sq8l_au_check tests/au_check.cpp)
+  target_link_libraries(sq8l_au_check PRIVATE "-framework AudioToolbox" "-framework CoreFoundation")
+endif()
 
 # Native full-render checker (tests/render_check.cpp), see tests/export_golden_raw.py.
 add_executable(sq8l_render_check tests/render_check.cpp)

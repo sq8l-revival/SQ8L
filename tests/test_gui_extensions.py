@@ -14,7 +14,10 @@ what it adds:
     length of a knob turn, so the turn has no bounds, and comes back where it started;
   * a right click on a knob opens its value menu (the original: only a double click);
   * a parameter with only two values gets a soft button in place of its knob, and a click
-    on the button or on its field in the display flips it (issue #43).
+    on the button or on its field in the display flips it (issue #43);
+  * the mouse wheel over a knob or its display field steps the parameter, one notch at a time
+    whatever the device's delta scale, and OPTIONS "Mouse" -> "Natural scrolling" inverts it
+    (issue #35).
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -29,7 +32,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIB_PATH = os.environ.get("SQ8L_TESTAPI", os.path.join(ROOT, "build", "libsq8l_testapi.dylib"))
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP = 0x200, 0x201, 0x202, 0x204, 0x205
-MK_LBUTTON, MK_RBUTTON = 1, 2
+MK_LBUTTON, MK_RBUTTON, MK_CONTROL = 1, 2, 8
+# A notch with Ctrl held moves this many steps (EditorController::kWheelCtrlStep).
+WHEEL_CTRL_STEP = 10
 # lcdKnob0-9 (DFM): 40 x 40 at these centres, 0-4 top row, 5-9 bottom row. The soft button of
 # a two-state slot (issue #43) is centred in the same 40 x 40, so these are its centre too.
 def knob_xy(i):
@@ -47,7 +52,8 @@ NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
 # The "Mouse" submenu's children, which do keep their order (the parent is found by caption).
-MOUSE_HIDE_CURSOR = 1
+# 0 restore after menus, 1 hide cursor, 2 line, 3 natural scrolling, 4 line, 5 display scroll.
+MOUSE_HIDE_CURSOR, MOUSE_NATURAL = 1, 3
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -178,6 +184,13 @@ class Editor:
         """Whether knob slot i shows its soft button instead of the knob (issue #43)."""
         return bool(self.L.sq8l_gl_toggle_shown(self.v, i))
 
+    def wheel(self, xy, delta, keys=0):
+        """One wheel event at xy, `delta` as the platform would report it (issue #35)."""
+        x, y = xy
+        self.L.sq8l_gl_mouse(self.v, WM_MOUSEMOVE, x, y, 0)
+        self.L.sq8l_gl_wheel(self.v, x, y, delta, keys)
+        self.idle()
+
     def drag(self, xy, dy, release_at=None):
         """Press at xy, move up by dy in steps, release there or at release_at."""
         x, y = xy
@@ -249,6 +262,7 @@ def main():
         ("sq8l_gl_poly_override", [vp], ctypes.c_int32),
         ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_toggle_shown", [vp, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_wheel", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_double, ctypes.c_int32], None),
         ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
         ("sq8l_gl_context_menu", [vp, ctypes.c_int32, ctypes.c_int32], None),
@@ -578,6 +592,77 @@ def main():
     ed.drag_knob(glide["knob"], dy=20)
     check(ed.knob(glide["knob"]) != before,
           f"and still turns ({before} -> {ed.knob(glide['knob'])})")
+
+    # 11. the mouse wheel over a knob, or over the display field of one (issue #35)
+    print("Mouse wheel:")
+    ed = Editor(L)
+    L.sq8l_gl_ctr(ed.v, 0, MODE_PAGE, MODE_SUB)
+    ed.idle(2000)
+    sub = ed.pages()[MODE_PAGE]["subs"][MODE_SUB]
+    glide, sync = param_of(sub, "GLIDE"), param_of(sub, "SYNC")
+    knob = knob_xy(glide["knob"])
+    field = cell_xy(glide["x"] + len(glide["label"]), glide["y"])
+
+    start = ed.knob(glide["knob"])
+    ed.wheel(knob, 1.0)
+    check(ed.knob(glide["knob"]) == start + 1, f"a notch up adds one ({start} -> {ed.knob(glide['knob'])})")
+    ed.wheel(knob, -1.0)
+    check(ed.knob(glide["knob"]) == start, "and a notch down takes it off again")
+    ed.wheel(field, 1.0)
+    check(ed.knob(glide["knob"]) == start + 1, "the wheel over its field in the display does the same")
+    ed.wheel(field, -1.0)
+
+    # a delta several notches long steps that many times: the notch is the unit, not the event
+    ed.wheel(knob, 3.0)
+    check(ed.knob(glide["knob"]) == start + 3, f"a delta of three notches steps three times ({ed.knob(glide['knob'])})")
+    ed.wheel(knob, -3.0)
+
+    ed.wheel(knob, 1.0, MK_CONTROL)
+    check(ed.knob(glide["knob"]) == start + WHEEL_CTRL_STEP,
+          f"Ctrl makes a notch a jump of {WHEEL_CTRL_STEP} ({ed.knob(glide['knob'])})")
+    ed.wheel(knob, -1.0, MK_CONTROL)
+    check(ed.knob(glide["knob"]) == start, "and back")
+
+    # what one notch is worth is learned from the smallest delta the device ever reports, so a
+    # device that trickles is not ten times slower than one that sends a detent at a time
+    fine = Editor(L)
+    L.sq8l_gl_ctr(fine.v, 0, MODE_PAGE, MODE_SUB)
+    fine.idle(2000)
+    base = fine.knob(glide["knob"])
+    fine.wheel(knob, 0.1)                    # the first delta is taken for one notch
+    check(fine.knob(glide["knob"]) == base + 1, "a trickling device still steps once per notch")
+    fine.wheel(knob, 1.0)                    # ten of those notches at once
+    check(fine.knob(glide["knob"]) == base + 11,
+          f"and a delta ten notches long steps ten times ({fine.knob(glide['knob'])})")
+
+    # the fields that are buttons now, and the slots the page does not use, ignore it
+    before_sync = ed.lcd_row(sync["y"])[sync["x"]:sync["x"] + len(sync["label"]) + sync["width"]]
+    ed.wheel(knob_xy(sync["knob"]), 1.0)
+    check(ed.lcd_row(sync["y"])[sync["x"]:sync["x"] + len(sync["label"]) + sync["width"]] == before_sync,
+          "a two-state slot ignores the wheel, as it is a button now")
+    faded = next(i for i in range(10) if not ed.knob_active(i))
+    ed.wheel(knob_xy(faded), 1.0)
+    check(ed.knob(glide["knob"]) == start, f"and a slot the page does not use ({faded}) turns nothing")
+
+    # natural scrolling inverts it, for a touchpad. Off the floor of the range first, or an
+    # inverted notch would only hit the clamp and prove nothing.
+    ed.wheel(knob, 5.0)
+    mid = ed.knob(glide["knob"])
+    check(mid == start + 5, f"five notches up from the floor of the range ({mid})")
+    opts = ed.menu(OPTIONS)
+    OPT_MOUSE = opt_index(opts, "Mouse")
+    mouse = opts[OPT_MOUSE]
+    check([text(i) for i in mouse.get("sub", [])][MOUSE_NATURAL] == "Natural scrolling",
+          f"OPTIONS '{text(mouse)}' holds 'Natural scrolling'")
+    check(not mouse["sub"][MOUSE_NATURAL]["checked"], "off by default, so the wheel keeps working as it did")
+    ed.choose([OPT_MOUSE, MOUSE_NATURAL])
+    ed.click(OPTIONS)
+    check(L.sq8l_gl_port_setting(ed.v, 1) == 1,
+          f"switching it on writes port[1] ({L.sq8l_gl_port_setting(ed.v, 1)})")
+    ed.wheel(knob, 1.0)
+    check(ed.knob(glide["knob"]) == mid - 1, f"a notch up now takes one off ({ed.knob(glide['knob'])})")
+    ed.wheel(knob, -1.0)
+    check(ed.knob(glide["knob"]) == mid, "and a notch down adds it back")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

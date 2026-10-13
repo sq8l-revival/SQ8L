@@ -59,3 +59,17 @@ differentially tested since they live in the voice code):
 Verified: values read by the original from 8 ini variants (original file, changed values,
 missing keys/sections, empty/missing file, number formats and ranges) and the copy into the
 master fields.
+
+## [port] (additions of the port)
+
+A section the original does not read or write, so an ini shared with it round-trips: the
+original leaves these keys alone. Everything that belongs to a *project* rather than to the
+user is deliberately not here — the polyphony override and the MTS-ESP switches travel in the
+plugin's own state (`Synth::getChunk`) so that two instances can differ and a project recalls
+them.
+
+| ini key | default | meaning |
+|---|---|---|
+| confirmLoad | 1 | ask before loading a library, a bank or a SysEx bank over existing programs |
+| naturalScroll | 0 | invert the mouse wheel over a knob or a display field, for a touchpad (issue #35) |
+| zoom | 100 | editor size in percent, 100 (the original's 626x430) to 300 |

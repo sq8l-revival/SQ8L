@@ -307,6 +307,10 @@ SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
 SQ8L_API int32_t sq8l_gl_toggle_shown(void* v, int32_t i) {
     return i >= 0 && i < 10 ? int32_t(B(v)->view.toggle(i).visible()) : -1;
 }
+// (port, issue #35) The mouse wheel at a form point; `delta` as the platform would report it.
+SQ8L_API void sq8l_gl_wheel(void* v, int32_t x, int32_t y, double delta, int32_t keys) {
+    B(v)->ctl->wheel(x, y, delta, uint32_t(keys));
+}
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }
@@ -491,9 +495,6 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
     s << "],\"buttons\":{";
     bool first = true;
     for (GraphButton* g : ev.buttons()) {
-        // (port, issue #43) The soft buttons of the two-state slots have no counterpart in the
-        // original, and this dump is compared with it field by field: sq8l_gl_toggle_shown.
-        if (g->name().compare(0, 9, "lcdToggle") == 0) continue;
         s << (first ? "" : ",") << jstr(g->name()) << ":[" << g->aniIdx() << "," << g->pressed() << "," << int(g->hover())
           << "]";
         first = false;

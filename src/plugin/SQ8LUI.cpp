@@ -588,10 +588,21 @@ protected:
     }
 
     bool onScroll(const ScrollEvent& ev) override {
-        if (!drawn_ || !drawn_->modal()) return false;
         int x, y;
         toForm(ev.pos.getX(), ev.pos.getY(), x, y);
-        drawn_->wheel(x, y, ev.delta.getY() > 0 ? 1 : -1);
+        // An open drawn menu or dialog takes the input, and wants notches, not magnitudes.
+        if (drawn_ && drawn_->modal()) {
+            drawn_->wheel(x, y, ev.delta.getY() > 0 ? 1 : -1);
+            return true;
+        }
+        if (editorWaiting()) return true;  // (the file dialog is open)
+        // (port, issue #35) The editor gets the delta as the platform reports it: it works out
+        // for itself what one notch of this device is worth, so nothing may round it first.
+        {
+            Engine lock(*this);
+            controller_->wheel(x, y, ev.delta.getY(), keysOf(ev.mod));
+            controller_->pump();
+        }
         return true;
     }
 

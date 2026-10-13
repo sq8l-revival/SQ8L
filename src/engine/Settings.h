@@ -40,12 +40,15 @@ struct Settings {
     // NOTE: the MTS-ESP switches are not here either. Like the polyphony override they belong
     // to the instance and travel in the plugin's own state (Synth::getChunk), so that a project
     // recalls them and two instances can differ.
-    static constexpr int kNumPort = 1;
-    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad"};
-    static constexpr int kPortDefaults[kNumPort] = {1};
-    int port[kNumPort] = {1};
+    static constexpr int kNumPort = 2;
+    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "naturalScroll"};
+    static constexpr int kPortDefaults[kNumPort] = {1, 0};
+    int port[kNumPort] = {1, 0};
     // Ask before loading a library, a bank or a SysEx bank over existing programs.
     bool confirmLoading() const { return port[0] > 0; }
+    // (port, issue #35) Invert the mouse wheel over a knob or a display field, which is what a
+    // touchpad wants. Off, so that an ini written before this existed keeps the wheel as it was.
+    bool naturalScrolling() const { return port[1] > 0; }
     // [port] zoom: size of the editor window in percent (OPTIONS -> Zoom), 100 = the original's
     // 626x430. A preference of the user, not of a project: every editor opens at it.
     static constexpr int kMinZoom = 100, kMaxZoom = 300;

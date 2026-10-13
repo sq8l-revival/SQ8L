@@ -82,6 +82,11 @@ public:
     // WM_CONTEXTMENU at form client coordinates (Windows sends it after a right click; the
     // VCL gives it to a graphic control with an auto-popup menu first, else to the form).
     void contextMenu(int x, int y);
+    // (port, issue #35) The mouse wheel at form client coordinates, which the original ignores.
+    // `delta` is the platform's own value, positive away from the user; its scale does not
+    // matter, the smallest one ever seen is taken for a notch. Ctrl makes a notch a jump.
+    // `keys` are the MK_* flags the view's mouse entry points take.
+    void wheel(int x, int y, double delta, uint32_t keys);
     // progNameEdit focus (WM_SETFOCUS / WM_KILLFOCUS through the hooked window procedure
     // FUN_004839a4) with the edit text, and its OnKeyDown (VK_RETURN ends editing).
     void nameEditFocus(bool focused, const std::string& text);
@@ -179,6 +184,10 @@ private:
     void toggleKnobParam(int knob);
     // Whether the parameter the page gives knob slot `knob` has only two values.
     bool knobIsTwoState(int knob) const;
+    // (port, issue #35) The knob slot a point is over and that has something to turn, else -1.
+    int knobAt(int x, int y) const;
+    // (port, issue #35) Move knob slot `knob`'s parameter by `by`, the way a turn moves it.
+    void stepKnobParam(int knob, int by);
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();
@@ -207,6 +216,7 @@ private:
     void rmbScrDispClick(MenuNode& item);
     void swapProgUpDnClick(MenuNode& item);  // port addition
     void confirmLoadClick(MenuNode& item);   // port addition
+    void naturalScrollClick(MenuNode& item); // port addition (issue #35)
     void polyphonyClick(MenuNode& item);     // port addition
     void zoomClick(MenuNode& item);          // port addition
     void mtsEnableClick(MenuNode& item);     // port addition
@@ -241,6 +251,14 @@ private:
     // (port) The two-state field the left button went down on, flipped when it comes up again
     // over the same one (the index inside the sub-page, -1 = none).
     int lcdToggleParam_ = -1;
+    // (port, issue #35) The wheel. `wheelStep_` is the smallest delta the device has ever
+    // reported, taken for one notch; `wheelAccum_` is what has come in since the last notch
+    // fired, and belongs to `wheelKnob_` alone so a part notch cannot carry to another knob.
+    // A notch with Ctrl held moves this many steps instead of one.
+    static constexpr int kWheelCtrlStep = 10;
+    double wheelAccum_ = 0.0, wheelStep_ = 0.0;
+    int wheelKnob_ = -1;
+    bool naturalScroll_ = false;     // port addition (issue #35)
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
     bool rmbScroll_ = false;         // +0x511
@@ -253,6 +271,7 @@ private:
     MenuNode* menuRmbScrDisp_ = nullptr;
     MenuNode* menuSwapProgUpDn_ = nullptr;  // port addition
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
+    MenuNode* menuNaturalScroll_ = nullptr; // port addition (issue #35)
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
     MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)
     MenuNode* menuMts_ = nullptr;           // port addition (sub-menu; carries Enable's checkmark)

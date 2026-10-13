@@ -96,8 +96,10 @@ Field offsets are those of the original objects (used by `oracle/gui_state.py`).
   change: `cancelDrag` fires `onEditEnd` too, so every `onEditBegin` has exactly one end
   (the editor hides the cursor in between, issue #25).
 * Not ported (unused by SQ8L): caption/value text and value TEdit, TImageList and vector
-  renderers. **No mouse-wheel support** (the original ignores WM_MOUSEWHEEL, checked in the
-  oracle).
+  renderers. The control itself has **no mouse-wheel support** — the original ignores
+  WM_MOUSEWHEEL, checked in the oracle — and the port did not add any here: the wheel is
+  handled a layer up, by `EditorController::wheel`, which knows the parameter behind the knob
+  (issue #35, see `docs/modules/gui_logic.md`).
 * Port addition — `setActive(false)`: the knob is drawn faded halfway towards the backdrop
   the frame itself carries in its corner pixel (`Canvas::drawFaded`; the HD renderer blends
   the whole knob over the background with the same amount, `Knob::kFadeAmount`). The editor

@@ -1,6 +1,7 @@
 #include "EditorController.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -200,11 +201,22 @@ void EditorController::buildMenus() {
     // the original had as a submenu plus a separate top-level item. The children are reworded
     // because the original captions only read correctly under "...is restored after...".
     MenuNode rest = item("Mouse", 0, nullptr);
+    // Recorded as they go in, like the top level below, so that the cached MenuNode pointers
+    // survive an item being added or moved rather than silently naming its neighbour.
+    size_t iRestMouse = 0, iHideCur = 0, iNatural = 0, iRmbScr = 0;
+    iRestMouse = rest.items.size();
     rest.items.push_back(item("Restore position after popup menus", 0,
                               [this](MenuNode& n) { restMouseMenuClick(n); }));
+    iHideCur = rest.items.size();
     rest.items.push_back(item("Hide cursor when editing", 0,
                               [this](MenuNode& n) { hideCursorClick(n); }));
+    // (port, issue #35) Inverts the wheel over a knob or a display field, for a touchpad.
     rest.items.push_back(line());
+    iNatural = rest.items.size();
+    rest.items.push_back(item("Natural scrolling", 0,
+                              [this](MenuNode& n) { naturalScrollClick(n); }));
+    rest.items.push_back(line());
+    iRmbScr = rest.items.size();
     rest.items.push_back(item("Right click on display scroll pages", 0,
                               [this](MenuNode& n) { rmbScrDispClick(n); }));
     iMouse = o.size();
@@ -262,9 +274,11 @@ void EditorController::buildMenus() {
     menuSynth_[4][1] = &e.items[3].items[2];  // menu_dcbSmart
     menuSynth_[4][2] = &e.items[3].items[3];  // menu_dcbOn
     menuSynth_[4][3] = &e.items[3].items[4];  // menu_dcbOff
-    menuRestMouseMenu_ = &optionsMenu_.items[iMouse].items[0];
-    menuHideCursor_ = &optionsMenu_.items[iMouse].items[1];
-    menuRmbScrDisp_ = &optionsMenu_.items[iMouse].items[3];  // after the separator
+    MenuNode& mouse = optionsMenu_.items[iMouse];
+    menuRestMouseMenu_ = &mouse.items[iRestMouse];
+    menuHideCursor_ = &mouse.items[iHideCur];
+    menuNaturalScroll_ = &mouse.items[iNatural];
+    menuRmbScrDisp_ = &mouse.items[iRmbScr];
     menuPolyphony_ = &optionsMenu_.items[iPoly];
     menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
     menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
@@ -592,6 +606,8 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     swapProgUpDn_ = s.swapProgramUpDown();
     if (menuSwapProgUpDn_) menuSwapProgUpDn_->setChecked(swapProgUpDn_);
     if (menuConfirmLoad_) menuConfirmLoad_->setChecked(s.confirmLoading());
+    naturalScroll_ = s.naturalScrolling();
+    if (menuNaturalScroll_) menuNaturalScroll_->setChecked(naturalScroll_);
     if (menuMtsEnable_) {
         const bool on = host_.mtsEnabled();
         menuMtsEnable_->setChecked(on);
@@ -1054,6 +1070,77 @@ void EditorController::lcdKnobChange(Knob& k) {  // TplugEditForm_lcdKnobChange
     if (sp) highlightParam(sp->knobParam(tag));
 }
 
+// (port, issue #35) The knob slot under a point, or -1: a slot showing its soft button has no
+// knob to turn (its knob is hidden), and one the page has no parameter for turns nothing.
+int EditorController::knobAt(int x, int y) const {
+  for (int i = 0; i < kNumKnobs; i++) {
+    const Knob &k = view_.knob(i);
+    if (!k.visible() || !k.bounds().contains(x, y))
+      continue;
+    LcdSubPage *sp = ctr_->currentSub();
+    return (sp && sp->paramForKnob(i)) ? i : -1;
+  }
+  return -1;
+}
+
+// (port, issue #35) The wheel over a knob, or over the display field of one. `delta` is the
+// platform's own, whatever its scale: what one notch of it is worth is learned rather than
+// assumed, since a device may report a whole detent at once or a trickle of small values.
+void EditorController::wheel(int x, int y, double delta, uint32_t keys) {
+  if (delta == 0.0)
+    return;
+  int knob = knobAt(x, y);
+  LcdDisplay &lcd = view_.lcd();
+  if (knob < 0 && lcd.visible() && lcd.bounds().contains(x, y)) {
+    int col, row;
+    lcd.cellAt(x - lcd.left(), y - lcd.top(), col, row);
+    const LcdParam *p = ctr_->paramAt(col, row);
+    // A field of two values is a button now, not something to scroll (issue #43).
+    if (p && p->knob >= 0 && p->max - p->min != 1)
+      knob = p->knob;
+  }
+  if (knob < 0) { // nothing here answers the wheel
+    wheelAccum_ = 0.0;
+    wheelKnob_ = -1;
+    return;
+  }
+  // The smallest movement ever reported is taken for one notch, so a wheel that sends a
+  // detent at a time and a touchpad that sends a trickle both step once per notch.
+  const double mag = std::fabs(delta);
+  wheelStep_ = wheelStep_ == 0.0 ? mag : std::min(wheelStep_, mag);
+  // Half a notch left on one knob must not carry into the next one the pointer meets.
+  if (knob != wheelKnob_) {
+    wheelAccum_ = 0.0;
+    wheelKnob_ = knob;
+  }
+  wheelAccum_ += delta;
+  const int by = (keys & MK_CONTROL_) ? kWheelCtrlStep : 1;
+  while (std::fabs(wheelAccum_) >= wheelStep_ * 0.75) {
+    const int dir = wheelAccum_ < 0 ? -1 : 1;
+    wheelAccum_ -= dir * wheelStep_;
+    stepKnobParam(knob, (naturalScroll_ ? -dir : dir) * by);
+  }
+}
+
+// (port, issue #35) Move the parameter of a knob slot by `by`, the way a turn moves it.
+void EditorController::stepKnobParam(int knob, int by) {
+  LcdSubPage *sp = ctr_->currentSub();
+  LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
+  if (!p)
+    return;
+  const int was = ctr_->currentValue(p->index);
+  int v = was + by;
+  if (v < p->min)
+    v = p->min;
+  if (v > p->max)
+    v = p->max;
+  if (v == was)
+    return;
+  lcdKnobValue(knob, v);
+  ctr_->knobChanged(knob, v);
+  highlightParam(sp->knobParam(knob));
+}
+
 bool EditorController::knobIsTwoState(int knob) const { // (port, issue #43)
   if (knob < 0 || knob >= kNumKnobs)
     return false;
@@ -1218,6 +1305,12 @@ void EditorController::mtsCorrectPitchClick(MenuNode& item) {
 void EditorController::confirmLoadClick(MenuNode& item) {
     item.setChecked(!item.checked);
     host_.setPortSetting(0, item.checked ? 1 : 0);
+}
+
+// Port addition (issue #35): invert the wheel ([port] naturalScroll).
+void EditorController::naturalScrollClick(MenuNode& item) {
+    item.setChecked(!item.checked);
+    host_.setPortSetting(1, item.checked ? 1 : 0);
 }
 
 void EditorController::showModInfo() {  // FUN_0047c9c0

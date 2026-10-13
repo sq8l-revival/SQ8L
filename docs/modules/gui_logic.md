@@ -137,7 +137,19 @@ identical to the original's objects field by field (tested).
   really ended up, so a platform that refuses to move it (XWayland) still tracks right.
 * MIDI port dialog without ports: ItemIndex -1, OK returns -1 (ModalResult 8).
 * Dialog InitialDir: TOpenDialog.SetInitialDir drops the trailing backslash.
-* WM_MOUSEWHEEL is ignored (as in the original).
+* The mouse wheel (port, issue #35; the original ignores WM_MOUSEWHEEL): `wheel(x, y, delta,
+  keys)` turns the knob under the point, or the one behind the display field under it. A
+  two-state field is a button and ignores it (issue #43), as does a slot the page has no
+  parameter for. One notch is one step, or `kWheelCtrlStep` with Ctrl held; Shift means
+  nothing, a notch being already the smallest move there is. OPTIONS -> Mouse -> Natural
+  scrolling ([port] naturalScroll) inverts it for a touchpad.
+  **What a notch is, is learned, not assumed**: platforms report wildly different magnitudes,
+  so the smallest delta ever seen is taken for one notch and a notch fires once 0.75 of it has
+  accumulated. A device sending a whole detent at once and one trickling small values
+  therefore both step once per notch, and a delta several notches long steps several times.
+  The accumulator belongs to one knob at a time and is dropped when the pointer reaches
+  another, so a part notch cannot leak across controls. The platform must pass the delta
+  **unrounded** (`SQ8LUI::onScroll`), or there is nothing to calibrate from.
 
 ## Key capture (CkeyCapt)
 

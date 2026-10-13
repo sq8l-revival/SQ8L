@@ -37,7 +37,7 @@ public:
     bool prepare(HMENU menu, HWND owner);
 
     bool active() const { return !items_.empty(); }
-    bool measure(MEASUREITEMSTRUCT* mis) const;
+    bool measure(MEASUREITEMSTRUCT* mis);
     bool draw(const DRAWITEMSTRUCT* dis) const;
     void reset();
 
@@ -50,7 +50,10 @@ private:
         bool separator = false;
         bool radio = false;     // MFT_RADIOCHECK: a bullet instead of a check mark
         bool submenu = false;   // owner-drawn items get no arrow from the system
-        bool column = false;    // in a column after a break: draws the divider on its left
+        bool divided = false;   // in a column after a break: draws the divider on its left
+        HMENU menu = nullptr;   // the menu it is in; column heights only compare within one
+        int column = 0;         // which column of that menu it is in
+        int height = 0;         // what measure() reported, which is how tall the system made it
     };
     // The parts of the menu layout USER32 would have measured with, read from the theme once.
     struct Metrics {
@@ -67,8 +70,10 @@ private:
 
     void convert(HMENU menu);
     bool owns(const Item* it) const;
+    int dividerTail(const Item* it) const;
 
     std::vector<std::unique_ptr<Item>> items_;
+    int columns_ = 0;  // hands out a column number per menu and per break within it
     Metrics metrics_;
     HTHEME theme_ = nullptr;
     HBRUSH background_ = nullptr;

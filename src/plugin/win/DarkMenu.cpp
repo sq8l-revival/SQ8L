@@ -178,7 +178,8 @@ bool DarkMenu::prepare(HMENU menu, HWND owner) {
 
 void DarkMenu::convert(HMENU menu) {
     const int count = GetMenuItemCount(menu);
-    bool column = false;  // true once a break has started a second column
+    int column = columns_++;  // this menu's first column; every break opens the next
+    bool divided = false;     // true once a break has started a second column
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW read{};
         read.cbSize = sizeof(read);
@@ -186,12 +187,17 @@ void DarkMenu::convert(HMENU menu) {
         if (!GetMenuItemInfoW(menu, UINT(i), TRUE, &read)) continue;
         if (read.hSubMenu) convert(read.hSubMenu);
 
-        if (read.fType & (MFT_MENUBREAK | MFT_MENUBARBREAK)) column = true;
+        if (read.fType & (MFT_MENUBREAK | MFT_MENUBARBREAK)) {
+            divided = true;
+            column = columns_++;
+        }
 
         auto item = std::make_unique<Item>();
         item->separator = (read.fType & MFT_SEPARATOR) != 0;
         item->radio = (read.fType & MFT_RADIOCHECK) != 0;
         item->submenu = read.hSubMenu != nullptr;
+        item->divided = divided;
+        item->menu = menu;
         item->column = column;
         if (!item->separator) item->text = itemText(menu, i);
 
@@ -217,16 +223,40 @@ bool DarkMenu::owns(const Item* it) const {
     return std::any_of(items_.begin(), items_.end(), [it](const std::unique_ptr<Item>& p) { return p.get() == it; });
 }
 
-bool DarkMenu::measure(MEASUREITEMSTRUCT* mis) const {
+// How far below its own last item a column's divider has to keep going. The system lays the
+// columns out top-aligned and makes the menu as tall as the tallest of them, so in a shorter
+// column the items run out before the menu does and the line -- which the items draw, a piece
+// each -- would stop early. Zero for every item but the last one of its column.
+int DarkMenu::dividerTail(const Item* it) const {
+    int tallest = 0, mine = 0, run = 0, column = -1;
+    const Item* last = nullptr;
+    for (const std::unique_ptr<Item>& p : items_) {
+        if (p->menu != it->menu) continue;
+        if (p->column != column) {
+            column = p->column;
+            run = 0;
+        }
+        run += p->height;
+        if (run > tallest) tallest = run;
+        if (column == it->column) {
+            mine = run;
+            last = p.get();
+        }
+    }
+    return last == it ? tallest - mine : 0;
+}
+
+bool DarkMenu::measure(MEASUREITEMSTRUCT* mis) {
     if (!mis || mis->CtlType != ODT_MENU || !theme_) return false;
-    const Item* item = reinterpret_cast<const Item*>(mis->itemData);
+    Item* item = reinterpret_cast<Item*>(mis->itemData);
     if (!owns(item)) return false;
 
     const MARGINS& im = metrics_.itemMargins;
-    const int indent = item->column ? metrics_.divider : 0;
+    const int indent = item->divided ? metrics_.divider : 0;
     if (item->separator) {
         mis->itemWidth = UINT(indent + metrics_.gutter);
         mis->itemHeight = UINT(metrics_.separatorHeight);
+        item->height = int(mis->itemHeight);
         return true;
     }
 
@@ -245,6 +275,7 @@ bool DarkMenu::measure(MEASUREITEMSTRUCT* mis) const {
     if (textHeight > height) height = textHeight;
     if (metrics_.check.cy > height) height = metrics_.check.cy;
     mis->itemHeight = UINT(height);
+    item->height = height;
     return true;
 }
 
@@ -262,10 +293,12 @@ bool DarkMenu::draw(const DRAWITEMSTRUCT* dis) const {
 
     // The divider between two columns: one line per item, which together make the continuous
     // line the whole column long. It stays outside the item, so the highlight does not cover it.
+    // The last item of the column carries the line on past itself to the foot of the menu --
+    // the menu DC is clipped to the whole popup, not to the item, so it may paint there.
     RECT rc = dis->rcItem;
-    if (item->column) {
+    if (item->divided) {
         const int air = (metrics_.divider - metrics_.separator.cx) / 2;
-        RECT line{rc.left + air, rc.top, rc.left + air + metrics_.separator.cx, rc.bottom};
+        RECT line{rc.left + air, rc.top, rc.left + air + metrics_.separator.cx, rc.bottom + dividerTail(item)};
         FillRect(dc, &line, divider_);
         rc.left += metrics_.divider;
     }
@@ -317,6 +350,7 @@ bool DarkMenu::draw(const DRAWITEMSTRUCT* dis) const {
 
 void DarkMenu::reset() {
     items_.clear();
+    columns_ = 0;
     if (theme_) CloseThemeData(theme_);
     if (background_) DeleteObject(background_);
     if (divider_) DeleteObject(divider_);

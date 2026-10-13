@@ -1,6 +1,7 @@
 #include "PlatformUiDrawn.h"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 
@@ -48,7 +49,17 @@ std::string stripAmp(const std::string& s) {
     return out;
 }
 
-void fill(Bitmap& b, const Rect& r, Color c) {
+// Where the menus and dialogs are drawn: the editor frame, in form pixels (s = 1), or the
+// HD picture at the window's size, `s` window pixels per form pixel. The layout stays in
+// form pixels either way; only the drawing below scales it.
+struct Surface {
+    Bitmap& b;
+    double s = 1;
+    int px(int v) const { return s == 1 ? v : static_cast<int>(std::lround(v * s)); }
+    Rect px(const Rect& r) const { return s == 1 ? r : Rect{px(r.left), px(r.top), px(r.right), px(r.bottom)}; }
+};
+
+void fillPixels(Bitmap& b, const Rect& r, Color c) {
     const Rect k = r.intersect(Rect{0, 0, b.width(), b.height()});
     for (int y = k.top; y < k.bottom; y++) {
         Color* row = b.row(y);
@@ -56,7 +67,10 @@ void fill(Bitmap& b, const Rect& r, Color c) {
     }
 }
 
-void frame(Bitmap& b, const Rect& r, Color c) {
+// Edges are rounded, not sizes: rectangles that share an edge in form pixels still do.
+void fill(Surface& b, const Rect& r, Color c) { fillPixels(b.b, b.px(r), c); }
+
+void frame(Surface& b, const Rect& r, Color c) {
     fill(b, Rect{r.left, r.top, r.right, r.top + 1}, c);
     fill(b, Rect{r.left, r.bottom - 1, r.right, r.bottom}, c);
     fill(b, Rect{r.left, r.top, r.left + 1, r.bottom}, c);
@@ -64,7 +78,8 @@ void frame(Bitmap& b, const Rect& r, Color c) {
 }
 
 // Darken the editor behind a dialog.
-void dim(Bitmap& b) {
+void dim(Surface& surface) {
+    Bitmap& b = surface.b;
     for (int y = 0; y < b.height(); y++) {
         Color* row = b.row(y);
         for (int x = 0; x < b.width(); x++) {
@@ -74,33 +89,40 @@ void dim(Bitmap& b) {
     }
 }
 
-void text(Bitmap& b, TextRenderer& tr, int x, int y, const std::string& s, Color c, const Rect& clip,
+void text(Surface& b, TextRenderer& tr, int x, int y, const std::string& s, Color c, const Rect& clip,
           bool bold = false) {
     const Font f = uiFont(c);
-    tr.drawText(b, x, y, clip, f, s);
-    if (bold) tr.drawText(b, x + 1, y, clip, f, s);
+    if (b.s == 1) {
+        tr.drawText(b.b, x, y, clip, f, s);
+        if (bold) tr.drawText(b.b, x + 1, y, clip, f, s);
+        return;
+    }
+    // the same layout, enlarged: drawTextScaled keeps drawText's advances
+    const float k = static_cast<float>(b.s), base = static_cast<float>(y + tr.textAscent(f)) * k;
+    tr.drawTextScaled(b.b, x * k, base, k, b.px(clip), f, s);
+    if (bold) tr.drawTextScaled(b.b, (x + 1) * k, base, k, b.px(clip), f, s);
 }
 
 int textW(TextRenderer& tr, const std::string& s) { return tr.textWidth(uiFont(), s); }
 int textH(TextRenderer& tr) { return tr.textHeight(uiFont()); }
 
-void checkMark(Bitmap& b, int x, int y, Color c) {  // 7x7 tick, top-left at (x, y)
+void checkMark(Surface& b, int x, int y, Color c) {  // 7x7 tick, top-left at (x, y)
     static const int pts[][2] = {{0, 3}, {1, 4}, {2, 5}, {3, 4}, {4, 3}, {5, 2}, {6, 1}};
     for (auto& p : pts)
         for (int t = 0; t < 2; t++) fill(b, boundsRect(x + p[0], y + p[1] + t, 1, 1), c);
 }
 
-void radioDot(Bitmap& b, int cx, int cy, Color c) {
+void radioDot(Surface& b, int cx, int cy, Color c) {
     for (int dy = -3; dy <= 3; dy++)
         for (int dx = -3; dx <= 3; dx++)
             if (dx * dx + dy * dy <= 9) fill(b, boundsRect(cx + dx, cy + dy, 1, 1), c);
 }
 
-void arrowRight(Bitmap& b, int x, int cy, Color c) {
+void arrowRight(Surface& b, int x, int cy, Color c) {
     for (int i = 0; i < 4; i++) fill(b, Rect{x + i, cy - 3 + i, x + i + 1, cy + 4 - i}, c);
 }
 
-void button(Bitmap& b, TextRenderer& tr, const Rect& r, const std::string& caption, bool pressed, bool isDefault) {
+void button(Surface& b, TextRenderer& tr, const Rect& r, const std::string& caption, bool pressed, bool isDefault) {
     fill(b, r, pressed ? kButtonDown : kButton);
     frame(b, r, isDefault ? kText : kBorder);
     const std::string t = stripAmp(caption);
@@ -147,7 +169,7 @@ class PlatformUiDrawn::Layer {
 public:
     virtual ~Layer() = default;
     virtual bool dims() const { return false; }  // darken the editor behind it
-    virtual void render(Bitmap& b, TextRenderer& tr) = 0;
+    virtual void render(Surface& b, TextRenderer& tr) = 0;
     virtual void mouseDown(MouseButton, int, int, bool) {}
     virtual void mouseUp(MouseButton, int, int) {}
     virtual void mouseMove(int, int) {}
@@ -173,7 +195,7 @@ public:
 
     int result = 0;
 
-    void render(Bitmap& b, TextRenderer& tr) override {
+    void render(Surface& b, TextRenderer& tr) override {
         for (const Level& l : levels_) {
             fill(b, l.box, kBg);
             frame(b, l.box, kBorder);
@@ -428,7 +450,7 @@ public:
     int result = kIdOk;
     bool dims() const override { return true; }
 
-    void render(Bitmap& b, TextRenderer& tr) override {
+    void render(Surface& b, TextRenderer& tr) override {
         fill(b, box_, kBg);
         frame(b, box_, kBorder);
         const Rect cap{box_.left + 1, box_.top + 1, box_.right - 1, box_.top + kCaptionH};
@@ -492,7 +514,7 @@ public:
 
     bool dims() const override { return true; }
 
-    void render(Bitmap& b, TextRenderer& tr) override {
+    void render(Surface& b, TextRenderer& tr) override {
         fill(b, box_, kBg);
         frame(b, box_, kBorder);
         int y = box_.top + 12;
@@ -558,7 +580,7 @@ public:
 
     bool dims() const override { return true; }
 
-    void render(Bitmap& b, TextRenderer& tr) override {
+    void render(Surface& b, TextRenderer& tr) override {
         if (d_.modalResult != 0) done = true;
         fill(b, box_, kBg);
         frame(b, box_, kBorder);
@@ -842,7 +864,8 @@ bool PlatformUiDrawn::modal() const { return !layers_.empty(); }
 bool PlatformUiDrawn::wantsKeyboard() const { return modal() || name_->active; }
 bool PlatformUiDrawn::hasOverlay() const { return modal() || name_->active; }
 
-void PlatformUiDrawn::render(Bitmap& frame) {
+void PlatformUiDrawn::render(Bitmap& target, double scale) {
+    Surface frame{target, scale};
     if (name_->active) {
         const NameBox& n = *name_;
         fill(frame, n.r, 0);

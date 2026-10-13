@@ -75,7 +75,9 @@ public:
     bool modal() const;          // a menu or dialog is open: it takes all mouse and keyboard input
     bool wantsKeyboard() const;  // modal, or the name box is being edited
     bool hasOverlay() const;     // something to draw over the editor
-    void render(Bitmap& frame);  // draw it over the editor frame
+    // Draw it over the editor: the classic frame (scale 1), or the HD picture at `scale`
+    // window pixels per form pixel.
+    void render(Bitmap& frame, double scale = 1);
     void mouseDown(MouseButton b, int x, int y, bool doubleClick);
     void mouseUp(MouseButton b, int x, int y);
     void mouseMove(int x, int y);

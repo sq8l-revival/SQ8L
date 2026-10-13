@@ -318,7 +318,7 @@ protected:
         }
         const int W = static_cast<int>(getWidth()), H = static_cast<int>(getHeight());
         overlayShown_ = drawn_ && drawn_->hasOverlay();
-        if (!overlayShown_ && displayHd(W, H)) return;
+        if (displayHd(W, H)) return;
         hdValid_ = false;
         if (drawn_ && drawn_->hasOverlay()) {  // drawn menus and dialogs over the editor
             overlay_ = frame_;
@@ -358,8 +358,9 @@ protected:
     }
 
     // HD graphics (src/gui/hd): the editor drawn at the window's size, redrawn where the
-    // classic frame changed and uploaded 1:1. False when the window is larger than the
-    // largest texture (the classic frame is shown then).
+    // classic frame changed and uploaded 1:1, with the drawn menus and dialogs (Linux) over it
+    // at the same size. False when the window is larger than the largest texture (the classic
+    // frame is shown then).
     bool displayHd(int W, int H) {
         using sq8l::gui::HdRenderer;
         using sq8l::gui::Rect;
@@ -374,9 +375,43 @@ protected:
                                              : HdRenderer::changedTiles(hdClassic_, frame_);
         glBindTexture(GL_TEXTURE_2D, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        std::vector<Rect> redrawn;
         if (!dirty.empty()) {
-            const std::vector<Rect> redrawn = hdRenderer_.render(S, hdOut_, dirty);
+            redrawn = hdRenderer_.render(S, hdOut_, dirty);
             hdClassic_ = frame_;
+        }
+        if (drawn_ && drawn_->hasOverlay()) {  // a menu or dialog: over the picture, at its size
+            // Drawn again only when it or the editor under it changed (the classic frame with
+            // the menu over it tells), since it means copying and uploading the whole picture.
+            overlay_ = frame_;
+            drawn_->render(overlay_);
+            if (full || !redrawn.empty() || !hdComposed_ || overlay_.pixels() != hdOverlayClassic_.pixels()) {
+                hdOverlayClassic_ = overlay_;
+                hdComposite_ = hdOut_;
+                drawn_->render(hdComposite_, S);
+                hdRgb_.resize(static_cast<size_t>(w) * h * 3);
+                hdComposite_.toRGB24(hdRgb_.data());
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, hdRgb_.data());
+                hdValid_ = true;
+                hdComposed_ = true;
+                textureK_ = 0;
+                shown_.clear();
+            }
+            if (std::getenv("SQ8L_UI_FRAME")) {  // (the debugging aid of onDisplay)
+                hdRgb_.resize(static_cast<size_t>(w) * h * 3);
+                hdComposite_.toRGB24(hdRgb_.data());
+                saveFrame(w, h, hdRgb_);
+            }
+            drawTexture(W, H);
+            return true;
+        }
+        if (hdComposed_) {  // the menu or dialog has closed: the picture alone, all of it
+            hdComposed_ = false;
+            if (!full) redrawn = {Rect{0, 0, w, h}};
+        }
+        if (!redrawn.empty()) {
             if (full) {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -831,6 +866,11 @@ private:
     bool hdValid_ = false;           // the texture holds hdOut_
     sq8l::gui::Bitmap hdOut_;        // the editor at the window's size
     sq8l::gui::Bitmap hdClassic_;    // the classic frame hdOut_ was drawn from
+    // A drawn menu or dialog over the HD picture: the picture with it, the classic frame
+    // with it that was last drawn so (to tell when it changed), and whether the texture
+    // holds the composite rather than hdOut_.
+    sq8l::gui::Bitmap hdComposite_, hdOverlayClassic_;
+    bool hdComposed_ = false;
     std::vector<uint8_t> hdRgb_;     // upload buffer
     GLint maxTexture_ = 0;
     bool fileDone_ = false;

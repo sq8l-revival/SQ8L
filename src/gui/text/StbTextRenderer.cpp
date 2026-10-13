@@ -97,6 +97,8 @@ int StbTextRenderer::textHeight(const Font& font) {
     return s.ascent + s.descent;
 }
 
+int StbTextRenderer::textAscent(const Font& font) { return sized(font).ascent; }
+
 void StbTextRenderer::drawText(Bitmap& target, int x, int y, const Rect& clip, const Font& font, const std::string& text) {
     Sized& s = sized(font);
     const Rect c = clip.intersect(Rect{0, 0, target.width(), target.height()});

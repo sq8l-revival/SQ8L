@@ -25,6 +25,8 @@ public:
     virtual int textWidth(const Font& font, const std::string& text) = 0;
     // Line height (tmHeight = ascent + descent) in pixels.
     virtual int textHeight(const Font& font) = 0;
+    // Ascent (tmAscent): from the top of the cell drawText places at y down to the baseline.
+    virtual int textAscent(const Font& font) { return textHeight(font) * 4 / 5; }
     // Draw `text` with its top-left cell corner at (x, y) (TA_TOP | TA_LEFT, transparent
     // background), clipped to `clip` (target coordinates).
     virtual void drawText(Bitmap& target, int x, int y, const Rect& clip, const Font& font,

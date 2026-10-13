@@ -1,5 +1,6 @@
 #include "EditorController.h"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
@@ -716,10 +717,18 @@ void EditorController::lcdKnobRange(int knob, int min, int max) {  // FUN_004847
     k.setActive(max > min);
     k.setMinValue(float(min));
     k.setMaxValue(float(max));
-    // Trunc(Single((max - min + 1) * 1.5625)), clamped to 40..180
-    const float f = static_cast<float>(static_cast<double>(max - min + 1) * 1.5625);
-    const int px = static_cast<int>(f);
-    k.setMaxPixDist(px < 0x29 ? 0x28 : (px < 0xb4 ? px : 0xb4));
+    // (port) How far the mouse travels to cross the whole range. The original:
+    // Trunc(Single((max - min + 1) * 1.5625)) clamped to 40..180, in Delphi's Single
+    // arithmetic; nothing in it needs a float, so this is the same shape in integers.
+    //
+    // The bounds are the port's, and the floor is the point of them. At 1.5625 px per entry
+    // every parameter between 25 and 83 entries came out at the same ~0.64 units per pixel,
+    // which means the smaller its range the fewer pixels crossed all of it: RES (32 entries)
+    // swept end to end in 50 px while FREQ (128) took the full 180, and the small ranges felt
+    // twitchy beside the big ones. A floor of 144 px gives every range a comparable sweep
+    // rather than a comparable speed; the cap is 208 so that the widest ones stay settled.
+    const int px = (max - min + 1) * 2;
+    k.setMaxPixDist(std::clamp(px, 144, 208));
 }
 
 void EditorController::lcdDrawn() {  // FUN_004847a4

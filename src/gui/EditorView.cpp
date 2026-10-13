@@ -114,7 +114,7 @@ EditorView::EditorView() {
         k->setValueStep(1);
         k->setValue(1);
         k->setSnapToZero(true);
-        k->setMinFineFac(0.2f);
+        k->setMinFineFac(0.15f);
         k->setMaxFinePixDist(100);
         k->setMaxPixDist(200);
         k->setRadius(20);

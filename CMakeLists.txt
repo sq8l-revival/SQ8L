@@ -153,7 +153,8 @@ if(SQ8L_BUILD_PLUGIN)
              $<$<PLATFORM_ID:Darwin>:${CMAKE_SOURCE_DIR}/src/plugin/mac/PlatformUiMac.mm>
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/PlatformUiWin.cpp>
              $<$<PLATFORM_ID:Windows>:${CMAKE_SOURCE_DIR}/src/plugin/win/DarkMenu.cpp>
-             $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/X11Pointer.cpp>)
+             $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/X11Pointer.cpp>
+             $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/ModalFiber.cpp>)
   target_include_directories(SQ8L PUBLIC src/plugin)
   target_link_libraries(SQ8L PUBLIC sq8l_engine)
   target_link_libraries(SQ8L-dsp PUBLIC sq8l_engine)

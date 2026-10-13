@@ -48,6 +48,7 @@ using NativePlatform = sq8l::gui::PlatformUiWin;
 #else
 #include <GL/gl.h>
 #include "Application.hpp"  // DGL: getApp().idle() for the nested loops
+#include "linux/ModalFiber.h"
 #include "linux/X11Pointer.h"
 #define SQ8L_NATIVE_UI 0
 #endif
@@ -257,6 +258,12 @@ public:
                 std::fclose(f);
             }
         }
+#if !SQ8L_NATIVE_UI
+        // A menu or dialog still open: every wait now answers "cancel" (nestedLoopStep), so
+        // the logic runs out instead of being left on the fiber's stack with the engine locked.
+        closing_ = true;
+        for (int i = 0; fiber_.suspended() && i < 100000; i++) fiber_.resume();
+#endif
         {
             Engine lock(*this);
             host_.setController(nullptr);
@@ -277,6 +284,11 @@ protected:
             askHostForSize();
             opening_ = Opening::open;  // the window is up: a resize is the user's from here on
         }
+        if (editorWaiting()) {  // a menu or dialog waits for the user: has the answer come?
+            resumeEditor();
+            repaint();
+            return;
+        }
         if (drawn_ && drawn_->modal()) {  // (a host timer inside a nested loop: the dialog runs)
             repaint();
             return;
@@ -285,11 +297,11 @@ protected:
         if (now - lastTick_ < std::chrono::milliseconds(20)) return;
         int ms = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick_).count());
         lastTick_ = now;
-        {
+        runEditor([this, ms] {  // (the timers and notifications run editor logic too)
             Engine lock(*this);
             deliverNotifications();
             controller_->idle(ms > 200 ? 200 : ms);
-        }
+        });
         repaintIfChanged();
     }
 
@@ -473,12 +485,16 @@ protected:
             } else {
                 drawn_->mouseUp(b, x, y);
             }
+            resumeEditor();  // (the answer may be in: go on with it right away)
             repaint();
             return true;
         }
-        {
+        if (editorWaiting()) return true;  // (the file dialog is open)
+        const bool press = ev.press;
+        const uint time = ev.time;
+        runEditor([this, x, y, b, keys, dbl, press, time] {
             Engine lock(*this);
-            if (ev.press) {
+            if (press) {
                 buttons_ |= bit(b);
                 // The program name box is an edit control: a left click focuses it.
                 const sq8l::gui::NameEdit& edit = view_->progNameEdit();
@@ -488,7 +504,7 @@ protected:
                     if (!nameEditing()) beginNameEdit(r.left, r.top, r.width(), r.height(), edit.text);
                     else if (drawn_) drawn_->mouseDown(b, x, y, false);  // move the caret
                     repaint();
-                    return true;
+                    return;
                 }
                 if (nameEditing()) focusName();
                 const int loops = modalLoops_;
@@ -497,7 +513,7 @@ protected:
                     lastTime_ = 0;
                 } else {
                     view_->mouseDown(b, x, y, keys | buttons_);
-                    lastTime_ = ev.time;
+                    lastTime_ = time;
                 }
                 lastButton_ = b;
                 lastX_ = x;
@@ -512,7 +528,7 @@ protected:
             }
             deliverNotifications();
             controller_->pump();
-        }
+        });
         return true;  // (drawn by the next idle tick, see repaintIfChanged)
     }
 
@@ -523,6 +539,7 @@ protected:
             drawn_->mouseMove(x, y);
             if (drawn_->modal()) return true;
         }
+        if (editorWaiting()) return true;  // (the file dialog is open)
         {
             Engine lock(*this);
             view_->mouseMove(x, y, keysOf(ev.mod) | buttons_);
@@ -565,13 +582,18 @@ protected:
             vk = ev.key >= 'a' && ev.key <= 'z' ? static_cast<int>(ev.key - 'a' + 'A') : static_cast<int>(ev.key);
             break;
         }
-        drawn_->keyDown(vk);
+        if (drawn_->modal()) {
+            drawn_->keyDown(vk);
+            resumeEditor();  // (the answer may be in: go on with it right away)
+        } else if (!editorWaiting()) {
+            runEditor([this, vk] { drawn_->keyDown(vk); });  // (the name box hands keys to the logic)
+        }
         repaint();
         return true;
     }
 
     bool onCharacterInput(const CharacterInputEvent& ev) override {
-        if (!drawn_ || !drawn_->nameEditing() || drawn_->modal()) return false;
+        if (!drawn_ || !drawn_->nameEditing() || drawn_->modal() || editorWaiting()) return false;
         drawn_->character(ev.character);
         repaint();
         return true;
@@ -672,14 +694,45 @@ private:
 #elif SQ8L_NATIVE_UI
         return false;
 #else
+        if (fiber_.inside()) {  // give the host its thread back until its next call (#36)
+            fiber_.yield();
+            return !closing_;
+        }
+        // (not on the fiber: the editor opening) a loop of our own, which holds the host up
         getApp().idle();  // pugl dispatches the window's events (patches/pugl-x11-nested-update.patch)
         std::this_thread::sleep_for(std::chrono::milliseconds(8));
         return true;
 #endif
     }
 
+    // Editor logic that may wait for a drawn menu or dialog, on the fiber (see ModalFiber.h).
+    // With the system's menus and dialogs (Windows, macOS) it simply runs.
+    void runEditor(std::function<void()> logic) {
+#if !SQ8L_NATIVE_UI
+        fiber_.start(std::move(logic));
+#else
+        logic();
+#endif
+    }
+    // The logic is waiting for the user; until it has the answer the editor takes no input
+    // but the drawn menu's or dialog's (the file dialog is a window of its own).
+    bool editorWaiting() const {
+#if !SQ8L_NATIVE_UI
+        return fiber_.suspended();
+#else
+        return false;
+#endif
+    }
+    // Let the waiting logic look whether its answer has come, and go on if it has.
+    void resumeEditor() {
+#if !SQ8L_NATIVE_UI
+        fiber_.resume();
+#endif
+    }
+
 #if DISTRHO_UI_FILE_BROWSER
-    // DPF's file browser (xdg portal or its X11 dialog), waited for in a nested loop.
+    // DPF's file browser (xdg portal or its X11 dialog), waited for like a drawn dialog:
+    // on the fiber the wait hands the host its thread back (nestedLoopStep).
     bool fileBrowser(const sq8l::gui::FileDialogRequest& req, std::string& path) {
         std::string name = req.fileName;
         const size_t slash = name.find_last_of("\\/");
@@ -778,6 +831,10 @@ private:
     GLint maxTexture_ = 0;
     bool fileDone_ = false;
     std::string fileChosen_;
+#if !SQ8L_NATIVE_UI
+    sq8l::linux_ui::ModalFiber fiber_;  // the editor logic's own stack, see runEditor
+    bool closing_ = false;              // the editor is going: every wait answers "cancel"
+#endif
     std::vector<uint8_t> rgb_;
     GLuint texture_ = 0;
     int depth_ = 0;

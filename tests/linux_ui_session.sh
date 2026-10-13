@@ -2,7 +2,7 @@
 # Drive the Linux editor in a virtual X server (Xvfb + xdotool): the VST2 plugin runs in
 # tests/uihost/linux_host.cpp, every step is followed by a screenshot <out>/<n>.png.
 #   tests/linux_ui_session.sh build/bin/SQ8L.so out "c 105,12; m 120,40; k Escape; t abc"
-#   c x,y = left click, r x,y = right click, m x,y = move, k Key = xdotool key, t text = typing
+#   c x,y = left click, r x,y = right click, m x,y = move, k Key = xdotool key, t text = typing, w s = wait
 set -e
 PLUGIN=$1; OUT=$2; STEPS=$3
 mkdir -p "$OUT" /tmp/sq8l-home
@@ -33,6 +33,7 @@ echo "$STEPS" | tr ';' '\n' | while read -r cmd arg; do
         m) xdotool mousemove "$x" "$y" ;;
         k) xdotool key "$arg" ;;
         t) xdotool type --delay 60 "$arg" ;;
+        w) sleep "$arg" ;;
     esac
     sleep 0.7
     if [ -n "$FULL" ]; then import -window root "$OUT/$n.png"; else import -window root -crop 626x430+0+0 "$OUT/$n.png"; fi

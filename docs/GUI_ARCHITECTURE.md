@@ -39,6 +39,11 @@ pixels may differ from a real Windows XP; everything else is the original's own 
    except that a menu split into columns (the program list, the longer LCD value lists) is
    not drawn in the host's dark theme by Windows, so `win/DarkMenu` owner-draws those from
    the theme parts USER32 would have used.
+   On Linux the menus and dialogs are drawn in the plug-in window (`src/gui/drawn`), and the
+   editor logic that waits for them runs on a stack of its own (`linux/ModalFiber`): the
+   wait hands the host's thread back, and each later call from the host resumes the logic,
+   which goes on once the answer is there. A loop of ours in the host's call held the host
+   up for as long as a menu stayed open, and GNOME reported it as not responding (#36).
 
 `EditorModel::render(Bitmap&)` composes the whole window exactly like the VCL paint order;
 input arrives as `mouseDown/Move/Up/DoubleClick(x, y, buttons)` in form coordinates.

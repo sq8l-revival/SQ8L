@@ -1,6 +1,7 @@
 // Minimal VST2 host for Linux: opens the plugin editor in an X11 window at (0, 0) and idles
 // it like a host's GUI thread, until `seconds` have passed or the file `stop` appears.
-// Used with Xvfb + xdotool to drive the editor (see tests/linux_ui_session.sh).
+// Used with Xvfb + xdotool to drive the editor (see tests/linux_ui_session.sh). At the end
+// it prints the longest idle call: how long the plugin ever held the host's thread (#36).
 //
 //   linux_host plugin.so seconds [stopfile]
 #include <X11/Xlib.h>
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
     e->dispatcher(e, 14, 0, 0, reinterpret_cast<void*>(win), 0);  // effEditOpen
     std::printf("editor open %dx%d\n", w, hh);
     std::fflush(stdout);
+    double longest = 0;  // ms
     const auto start = std::chrono::steady_clock::now();
     while (std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() < seconds) {
         struct stat st;
@@ -63,7 +65,10 @@ int main(int argc, char** argv) {
             XEvent ev;
             XNextEvent(d, &ev);
         }
+        const auto t0 = std::chrono::steady_clock::now();
         e->dispatcher(e, 19, 0, 0, nullptr, 0);  // effEditIdle
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        if (ms > longest) longest = ms;
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
     e->dispatcher(e, 15, 0, 0, nullptr, 0);  // effEditClose
@@ -71,6 +76,7 @@ int main(int argc, char** argv) {
     XCloseDisplay(d);
     e->dispatcher(e, 12, 0, 0, nullptr, 0);
     e->dispatcher(e, 1, 0, 0, nullptr, 0);   // effClose
+    std::printf("longest idle call: %.0f ms\n", longest);
     std::printf("closed\n");
     return 0;
 }

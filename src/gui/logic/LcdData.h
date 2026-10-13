@@ -81,9 +81,8 @@ namespace data {
 extern const PageSetup kPages[kNumPages];
 // (port) the EMU page, the only one the port adds a control to (VOICES, see below).
 constexpr int kPortEmuPage = 17;
-// (port) kPages[page], or that page with the port's additions when the editor host allows
-// them (EditorHost::portExtensions): page kPortEmuPage then has the VOICES control.
-const PageSetup& pageSetup(int page, bool portExtensions);
+// (port) kPages[page] with the port's additions: page kPortEmuPage has the VOICES control.
+const PageSetup& pageSetup(int page);
 extern const char* const kWaveNames[75];        // ShortString[6]
 extern const char* const kModSourceNames[147];  // ShortString[7], source -1..145
 extern const char* const kLfoWaveNames[5];      // ShortString[3]

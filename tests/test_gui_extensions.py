@@ -1,7 +1,7 @@
 """Additions of the port to the editor (not in the original), on the C++ logic alone.
 
-The differential GUI tests (test_gui_logic.py) run with the additions off and must keep
-matching the original; this checks the additions themselves:
+The editor is no longer compared with the original, so these are the port's own checks of
+what it adds:
   * OPTIONS "Down arrow -> next program": the original's hidden swapProgUpDn ini key;
   * OPTIONS "Ask before loading banks/libraries" ([port] confirmLoad): no prompt when off;
   * a left click on the program number opens the program list (the original: right only);
@@ -32,7 +32,7 @@ MK_LBUTTON, MK_RBUTTON = 1, 2
 def knob_xy(i):
     return 118 + 96 * (i % 5) + 20, (194 if i < 5 else 304) + 20
 
-# Form positions (DFM; numLcd is sized at run time, see test_gui_logic.py)
+# Form positions (DFM; numLcd is sized at run time)
 NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
@@ -64,9 +64,9 @@ def check(cond, what):
 
 
 class Editor:
-    def __init__(self, L, extensions):
+    def __init__(self, L):
         self.L = L
-        self.v = L.sq8l_gl_new_ext(1) if extensions else L.sq8l_gl_new(1)
+        self.v = L.sq8l_gl_new(1)
         L.sq8l_gl_set_host(self.v, 8, 0, b"/sandbox")
         L.sq8l_gl_show(self.v)
         self.idle()
@@ -192,7 +192,7 @@ def main():
     L = ctypes.CDLL(LIB_PATH)
     vp = ctypes.c_void_p
     for name, args, res in [
-        ("sq8l_gl_new", [ctypes.c_int], vp), ("sq8l_gl_new_ext", [ctypes.c_int], vp),
+        ("sq8l_gl_new", [ctypes.c_int], vp),
         ("sq8l_gl_set_host", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_char_p], None),
         ("sq8l_gl_show", [vp], None), ("sq8l_gl_idle", [vp, ctypes.c_int32], None),
         ("sq8l_gl_mouse", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32], None),
@@ -213,16 +213,10 @@ def main():
         getattr(L, name).argtypes = args
         getattr(L, name).restype = res
 
-    print("Without the additions (the original's behaviour):")
-    ed = Editor(L, extensions=False)
-    ed.click(NUM_LCD)
-    check(not ed.popups(ed.events()), "left click on the program number: no menu")
+    ed = Editor(L)
     ed.choose([])
     ed.click(NUM_LCD, right=True)
     check(len(ed.popups(ed.events())) == 1, "right click on the program number: program list")
-
-    print("With the additions:")
-    ed = Editor(L, extensions=True)
     # The OPTIONS menu is not tested: its layout and state are left to inspection. The items
     # are located by caption only so the setting checks below can click them.
     opts = ed.menu(OPTIONS)
@@ -312,9 +306,6 @@ def main():
           f"VOICES under VSTEAL: knob {p.get('knob')}, column {p.get('x')}, row {p.get('y')}")
     check(p.get("min") == 1 and p.get("max") == 64 and p.get("paramIndex") == 375 and p.get("width") == 2,
           f"VOICES is 1..64 and writes program byte 0x197 (parameter {p.get('paramIndex')})")
-    plain = Editor(L, extensions=False)
-    check(all(q["name"] != "VOICES" for q in plain.pages()[EMU_PAGE]["subs"][EMU_SUB]["params"]),
-          "without the additions the EMU page is the original's")
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     ed.idle()
     shown = ed.lcd_row(1)[33:42]
@@ -347,7 +338,7 @@ def main():
 
     # 8. the cursor disappears while a knob is turned (issue #25)
     print("Hide cursor when editing:")
-    ed = Editor(L, extensions=True)
+    ed = Editor(L)
     OPT_MOUSE = opt_index(ed.menu(OPTIONS), "Mouse")
     mouse = ed.menu(OPTIONS)[OPT_MOUSE]
     check([text(i) for i in mouse.get("sub", [])][MOUSE_HIDE_CURSOR] == "Hide cursor when editing",
@@ -408,7 +399,7 @@ def main():
     # the same screen point for as long as the user likes. Without the lock only the first
     # of these moves would do anything -- the rest arrive at a point the cursor is already
     # at -- which is what running into the edge of the monitor looks like.
-    ed = Editor(L, extensions=True)
+    ed = Editor(L)
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     L.sq8l_gl_ctr(ed.v, 1, VOICES, 1)
     ed.idle()
@@ -447,7 +438,7 @@ def main():
 
     # 9. a right click on a knob opens its value menu (the original: a double click)
     print("Right click on a knob:")
-    ed = Editor(L, extensions=True)
+    ed = Editor(L)
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     ed.idle()
     voices = 9  # the VOICES knob of the EMU page, 1..64
@@ -481,13 +472,6 @@ def main():
     trees = ed.popups(ed.events())
     check(bool(trees) and text(trees[-1][0]) == "Modulation usage...",
           "a faded knob still gets the page popup")
-    # and without the additions a knob gets the original's page popup
-    plain = Editor(L, extensions=False)
-    plain.choose([])
-    plain.context_menu(knob_xy(0))
-    trees = plain.popups(plain.events())
-    check(bool(trees) and text(trees[-1][0]) == "Modulation usage...",
-          "without the additions a knob gets the page popup, like the original")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

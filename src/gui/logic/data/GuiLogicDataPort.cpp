@@ -61,8 +61,8 @@ const PageSetup& emuPage() {
 
 }  // namespace
 
-const PageSetup& pageSetup(int page, bool portExtensions) {
-    if (portExtensions && page == kPortEmuPage) return emuPage();
+const PageSetup& pageSetup(int page) {
+    if (page == kPortEmuPage) return emuPage();
     return kPages[page];
 }
 

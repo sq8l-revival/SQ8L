@@ -3,8 +3,8 @@
 Port of the original editor's *behaviour* (unit plugEdit = TplugEditForm, unit lcdControl =
 ClcdCtr, the page set up FUN_0047e340, the value formatters of unit editBuffer, the jumping
 mouse, the dialogs) on top of the ported controls of layers 1-2 (`docs/modules/gui_controls.md`).
-Layer numbers refer to `docs/GUI_ARCHITECTURE.md`. Verified differentially against the original
-running in the emulator (`tests/test_gui_logic.py`).
+Layer numbers refer to `docs/GUI_ARCHITECTURE.md`. Ported against the original running in the
+emulator; that comparison is now retired (see Verification).
 
 | File | What |
 |---|---|
@@ -19,7 +19,7 @@ running in the emulator (`tests/test_gui_logic.py`).
 | `src/gui/logic/EditorHost.h` | what the engine supplies: edit buffer, library, settings, panic, voices, MIDI ports |
 | `src/gui/logic/ViewState.h` | where the logic's output lands in EditorView (table) |
 | `re/scripts/extract_gui_logic_data.py` | generates `data/GuiLogicData.cpp` from the original (see below) |
-| `tests/capi_gui_logic.cpp`, `tests/test_gui_logic.py` | C API and differential test |
+| `tests/capi_gui_logic.cpp`, `tests/test_gui_extensions.py` | C API and the port's own tests |
 
 ## Using it
 
@@ -141,7 +141,14 @@ platform grabs the keyboard accordingly.
 
 ## Verification
 
-`SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_logic.py [scenario ...]`
+**The comparison with the original is retired** (2026-10-13). The editor was ported against
+the original and verified as described below, but it is now free to improve on it (a
+regrouped OPTIONS menu, faded unused knobs, a value menu on a knob's right click, HD
+graphics), and a test that holds it to the original's every pixel and menu only gets in the
+way. The sound and the data formats are still compared with the original. The editor's own
+checks are `tests/test_gui_extensions.py` (the port's additions), `sq8l_hd_check`,
+`sq8l_drawn_check` and the Linux editor session in CI. The retired tests are in the history
+up to fc79e1e; what follows records how the port was verified while it was made.
 
 The original editor runs in the emulator (oracle/gui_driver.Editor); the port is an EditorView +
 EditorController with the same engine state (library, edit buffer, settings copied from the
@@ -154,14 +161,8 @@ field's value / text / highlight), form fields, mouse jump, the edit buffer imag
 optionally the library, and every event: message boxes, file dialogs, modal dialog contents,
 info windows, SetCursorPos, MIDI output.
 
-The popup menu **trees are not compared** with the original. The port regroups OPTIONS and adds
-items the original has no counterpart for, and GUI parity is not a goal of the port, so
-asserting the tree would only generate churn. The menus are still driven by the scripted popup
-paths, so every command they dispatch is exercised and its effect on the state and the edit
-buffer is compared as before.
-
-The OPTIONS layout is likewise not asserted in `tests/test_gui_extensions.py`; it locates the
-items it clicks by caption. The grouping is left to inspection.
+The OPTIONS layout is not asserted in `tests/test_gui_extensions.py`; it locates the items it
+clicks by caption. The grouping is left to inspection.
 
 To run the modal dialogs of the original the test patches PeekMessage / DispatchMessage (the
 VCL modal loop gets the posted messages, then the messages of the scripted user actions) and
@@ -220,13 +221,11 @@ of the emulation. The original's "Mouse position is restored after..." submenu a
 "Right click on display -> scroll page" item are one `Mouse` submenu, with the children reworded
 because the originals only read correctly under the old parent's phrasing. `MTS-ESP` carries the
 checkmark of its own `Enable` child, so the state shows without opening the submenu. Everything
-except Voice stealing mode, Emulation preferences and Mouse is a port addition and appears only
-with `portExtensions()`; without it the menu degrades to those three.
+except Voice stealing mode, Emulation preferences and Mouse is a port addition.
 
 **Indices are recorded as the items go in.** `buildMenus` keeps a `size_t` per cached
-`MenuNode*` and resolves the pointers once the vector is final, because the conditional port
-items shift everything after them and hard-coded positions silently rewired the wrong setting
-whenever the layout changed.
+`MenuNode*` and resolves the pointers once the vector is final, because hard-coded positions
+silently rewired the wrong setting whenever the layout changed.
 
 ## Changes outside src/gui/logic
 

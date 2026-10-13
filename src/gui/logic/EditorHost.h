@@ -50,10 +50,7 @@ public:
     // FUN_00484254: Application.ProcessMessages until `ms` have elapsed (between SysEx sends).
     virtual void processMessagesFor(int ms) { (void)ms; }
 
-    // ---- Additions of the port, not in the original. With portExtensions() false the editor
-    // behaves exactly like the original (the differential GUI tests rely on it): no extra
-    // OPTIONS items, no left click on the program number.
-    virtual bool portExtensions() { return true; }
+    // ---- Additions of the port, not in the original.
     // Change a [port] setting (Settings::port: 0 confirmLoad); the host notifies the editor
     // (wParam 0, lParam 0x20 + index) when the value changed.
     virtual void setPortSetting(int index, int value) { (void)index; (void)value; }

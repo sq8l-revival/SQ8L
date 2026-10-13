@@ -18,7 +18,7 @@ GUI oracle. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
 | `src/gui/controls/AniDisplay.*` | TAniDisplay (unit AniDisplay) |
 | `src/gui/controls/StaticControls.*` | TPanel, TLabel, TEdit (program name), picture-less TImage (menu areas) |
 | `src/gui/EditorView.*` | the form: all controls at their runtime positions, z-order, composition, mouse routing |
-| `tests/capi_gui.cpp`, `tests/test_gui_*.py` | C API and differential tests against the emulated original |
+| `oracle/gui_state.py` | reads the original controls' state in the emulator (asset extraction; the comparison tests are retired, see Verification) |
 
 ## Assets
 
@@ -52,7 +52,7 @@ of TWinControl.WMPaint) then `paint()` then the graphic children (labels on pane
 
 ## Controls
 
-Field offsets are those of the original objects (used by `tests/test_gui_state.py`).
+Field offsets are those of the original objects (used by `oracle/gui_state.py`).
 
 ### LcdDisplay (TLCD3, 0x45733c-0x4587d8)
 * geometry: char size from the GIF (+0x1f8/+0x1fc), gaps (+0x200/+0x204), frame (+0x208/
@@ -146,11 +146,15 @@ moves to the knob however far outside the window the travelled point lands.
 
 ## Verification
 
-```
-cmake -S . -B build -G Ninja -DSQ8L_BUILD_PLUGIN=OFF && cmake --build build
-SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_render.py
-SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_controls.py
-```
+**The comparison with the original is retired** (2026-10-13). The editor was ported against
+the original and verified as described below, but it is now free to improve on it (a
+regrouped OPTIONS menu, faded unused knobs, a value menu on a knob's right click, HD
+graphics), and a test that holds it to the original's every pixel and menu only gets in the
+way. The sound and the data formats are still compared with the original. The editor's own
+checks are `tests/test_gui_extensions.py` (the port's additions), `sq8l_hd_check`,
+`sq8l_drawn_check` and the Linux editor session in CI. The retired tests (`tests/test_gui_render.py`, `tests/test_gui_controls.py`,
+`tests/capi_gui.cpp`) are in the history
+up to fc79e1e; what follows records how the port was verified while it was made.
 
 * `test_gui_render.py`: 162 original states (start-up, all 21 page buttons with their
   scrolled sub-pages, knob drags incl. horizontal distance and Shift on both rows, hover frames

@@ -21,8 +21,8 @@ import sys
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(ROOT, "tests"))
-from test_gui_state import GIF_NAMES, OriginalGui  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "oracle"))
+from gui_state import GIF_NAMES, OriginalGui  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "gui", "data")
 

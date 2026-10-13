@@ -136,31 +136,29 @@ void EditorController::buildMenus() {
     auto emu = [this](MenuNode& n) { emuModeClick(n); };
     auto& o = optionsMenu_.items;
     // (port) The OPTIONS items are indexed as they go in, so the cached MenuNode pointers at
-    // the end of this function survive reordering: the conditional port items below shift
-    // everything after them, and hard-coded positions silently rewired the wrong setting.
+    // the end of this function survive reordering: hard-coded positions silently rewired the
+    // wrong setting whenever the layout changed.
     size_t iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iMts = 0, iZoom = 0;
-    if (host_.portExtensions()) {
-        // (port) Polyphony leads: how many voices there are, then what happens when they run
-        // out, then the rest of the emulation. Like the emulation overrides below, but of this
-        // instance only (the voices are a parameter of the program), so the plugin saves it
-        // with its own state and not in SQ8L.ini.
-        MenuNode poly = item("Polyphony", 0, nullptr);
-        auto polyClick = [this](MenuNode& n) { polyphonyClick(n); };
-        poly.items.push_back(item("Set by program   (EMU->VOICES parameter)", 0, polyClick, true, true));
-        poly.items.push_back(line());
-        poly.items.push_back(item("1 voice", 1, polyClick, true, true));
-        poly.items.push_back(item("2 voices", 2, polyClick, true, true));
-        poly.items.push_back(item("4 voices", 4, polyClick, true, true));
-        poly.items.push_back(item("8 voices   (SQ80)", 8, polyClick, true, true));
-        poly.items.push_back(item("12 voices", 12, polyClick, true, true));
-        poly.items.push_back(item("16 voices", 16, polyClick, true, true));
-        poly.items.push_back(item("24 voices", 24, polyClick, true, true));
-        poly.items.push_back(item("32 voices", 32, polyClick, true, true));
-        poly.items.push_back(item("48 voices", 48, polyClick, true, true));
-        poly.items.push_back(item("64 voices", 64, polyClick, true, true));
-        iPoly = o.size();
-        o.push_back(poly);
-    }
+    // (port) Polyphony leads: how many voices there are, then what happens when they run
+    // out, then the rest of the emulation. Like the emulation overrides below, but of this
+    // instance only (the voices are a parameter of the program), so the plugin saves it
+    // with its own state and not in SQ8L.ini.
+    MenuNode poly = item("Polyphony", 0, nullptr);
+    auto polyClick = [this](MenuNode& n) { polyphonyClick(n); };
+    poly.items.push_back(item("Set by program   (EMU->VOICES parameter)", 0, polyClick, true, true));
+    poly.items.push_back(line());
+    poly.items.push_back(item("1 voice", 1, polyClick, true, true));
+    poly.items.push_back(item("2 voices", 2, polyClick, true, true));
+    poly.items.push_back(item("4 voices", 4, polyClick, true, true));
+    poly.items.push_back(item("8 voices   (SQ80)", 8, polyClick, true, true));
+    poly.items.push_back(item("12 voices", 12, polyClick, true, true));
+    poly.items.push_back(item("16 voices", 16, polyClick, true, true));
+    poly.items.push_back(item("24 voices", 24, polyClick, true, true));
+    poly.items.push_back(item("32 voices", 32, polyClick, true, true));
+    poly.items.push_back(item("48 voices", 48, polyClick, true, true));
+    poly.items.push_back(item("64 voices", 64, polyClick, true, true));
+    iPoly = o.size();
+    o.push_back(poly);
     iSteal = o.size();
     MenuNode steal = item("Voice stealing mode", 0, nullptr);
     steal.items.push_back(item("Set by program   (EMU->VSTEAL parameter)", 0, emu, true, true));
@@ -210,33 +208,31 @@ void EditorController::buildMenus() {
                               [this](MenuNode& n) { rmbScrDispClick(n); }));
     iMouse = o.size();
     o.push_back(rest);
-    if (host_.portExtensions()) {
-        // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
-        // and the window size. Polyphony leads the first group, above.
-        iSwap = o.size();
-        o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
-        o.push_back(line());
-        iConfirm = o.size();
-        o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
-        o.push_back(line());
-        // (port) Two independent options rather than one tri-state: the parent carries the
-        // checkmark of "Enable", so the state shows without opening the submenu.
-        MenuNode mts = item("MTS-ESP", 0, nullptr);
-        mts.items.push_back(item("Enable", 0, [this](MenuNode& n) { mtsEnableClick(n); }));
-        mts.items.push_back(line());
-        mts.items.push_back(item("Correct SQ-80 per-key pitch offsets", 0,
-                                 [this](MenuNode& n) { mtsCorrectPitchClick(n); }));
-        iMts = o.size();
-        o.push_back(mts);
-        o.push_back(line());
-        MenuNode zoom = item("Zoom", 0, nullptr);
-        auto zoomClick = [this](MenuNode& n) { this->zoomClick(n); };
-        for (const auto& z : {std::pair<const char*, int>{"100%   (SQ8L)", 100}, {"125%", 125}, {"150%", 150},
-                              {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
-            zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
-        iZoom = o.size();
-        o.push_back(zoom);
-    }
+    // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
+    // and the window size. Polyphony leads the first group, above.
+    iSwap = o.size();
+    o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
+    o.push_back(line());
+    iConfirm = o.size();
+    o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
+    o.push_back(line());
+    // (port) Two independent options rather than one tri-state: the parent carries the
+    // checkmark of "Enable", so the state shows without opening the submenu.
+    MenuNode mts = item("MTS-ESP", 0, nullptr);
+    mts.items.push_back(item("Enable", 0, [this](MenuNode& n) { mtsEnableClick(n); }));
+    mts.items.push_back(line());
+    mts.items.push_back(item("Correct SQ-80 per-key pitch offsets", 0,
+                             [this](MenuNode& n) { mtsCorrectPitchClick(n); }));
+    iMts = o.size();
+    o.push_back(mts);
+    o.push_back(line());
+    MenuNode zoom = item("Zoom", 0, nullptr);
+    auto zoomClick = [this](MenuNode& n) { this->zoomClick(n); };
+    for (const auto& z : {std::pair<const char*, int>{"100%   (SQ8L)", 100}, {"125%", 125}, {"150%", 150},
+                          {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
+        zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
+    iZoom = o.size();
+    o.push_back(zoom);
 
     // parents (for radio items) and the items the form references
     std::function<void(MenuNode&)> link = [&](MenuNode& n) {
@@ -268,15 +264,13 @@ void EditorController::buildMenus() {
     menuRestMouseMenu_ = &optionsMenu_.items[iMouse].items[0];
     menuHideCursor_ = &optionsMenu_.items[iMouse].items[1];
     menuRmbScrDisp_ = &optionsMenu_.items[iMouse].items[3];  // after the separator
-    if (host_.portExtensions()) {
-        menuPolyphony_ = &optionsMenu_.items[iPoly];
-        menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
-        menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
-        menuMts_ = &optionsMenu_.items[iMts];
-        menuMtsEnable_ = &menuMts_->items[0];
-        menuMtsCorrect_ = &menuMts_->items[2];
-        menuZoom_ = &optionsMenu_.items[iZoom];
-    }
+    menuPolyphony_ = &optionsMenu_.items[iPoly];
+    menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
+    menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
+    menuMts_ = &optionsMenu_.items[iMts];
+    menuMtsEnable_ = &menuMts_->items[0];
+    menuMtsCorrect_ = &menuMts_->items[2];
+    menuZoom_ = &optionsMenu_.items[iZoom];
     pageMenu_.autoHotkeys = false;     // menuPagePopup: AutoHotkeys = maManual
     programMenu_.autoHotkeys = false;  // FUN_0043bb14
 }
@@ -288,7 +282,7 @@ void EditorController::show() {  // TplugEditForm_FormShow
     firstShow_ = false;
     // ---- FUN_00483d9c (the parts that are not view set-up, see EditorView)
     ctr_ = std::make_unique<LcdController>(view_.lcd(), &host_.editBuffer(), this);
-    ctr_->buildPages(host_.portExtensions());  // FUN_0047e340 (+ the port's VOICES control)
+    ctr_->buildPages();  // FUN_0047e340 (+ the port's VOICES control)
     ctr_->numKnobs = 10;
     ctr_->setRefreshDiv(1);             // FUN_0045a730(ctr, 1)
     wireControls();
@@ -385,7 +379,7 @@ void EditorController::wireControls() {
     LcdDisplay& num = view_.numLcd();
     num.onMouseDown = [this](Control&, MouseButton b, ShiftState, int, int) {  // numLcdMouseDown
         // Port addition: the left button opens the program list too (the original: right only).
-        if (b == MouseButton::Right || (b == MouseButton::Left && host_.portExtensions())) programDblClick();
+        if (b == MouseButton::Right || b == MouseButton::Left) programDblClick();
     };
     num.onMouseMove = hint;
     num.onDblClick = [this](Control&) { programDblClick(); };
@@ -844,17 +838,15 @@ void EditorController::contextMenu(int x, int y) {
     // click opens. Double clicking still works; the page popup this replaces is on the
     // display and the whole background anyway. A knob the page does not use (faded, issue
     // #24) has no menu to show, so it falls through to the page popup like any other spot.
-    if (host_.portExtensions()) {
-        for (int i = 0; i < kNumKnobs; i++) {
-            const Knob& k = view_.knob(i);
-            if (!k.visible() || !k.bounds().contains(x, y)) continue;
-            LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
-            if (p) {
-                ctr_->cellDoubleClick(p->x, p->y);
-                return;
-            }
-            break;
+    for (int i = 0; i < kNumKnobs; i++) {
+        const Knob& k = view_.knob(i);
+        if (!k.visible() || !k.bounds().contains(x, y)) continue;
+        LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
+        if (p) {
+            ctr_->cellDoubleClick(p->x, p->y);
+            return;
         }
+        break;
     }
     displayPanelContextPopup(x, y);
 }

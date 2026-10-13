@@ -121,10 +121,9 @@ public:
 
     LcdController(LcdDisplay& lcd, EditBuffer* editBuffer, LcdListener* listener);
 
-    // set up (FUN_0047e340): pages from the definition strings + the recorded set up
-    // portExtensions: build the pages with the port's additions (the VOICES control on the
-    // EMU page); false builds exactly the original's pages.
-    void buildPages(bool portExtensions = true);
+    // set up (FUN_0047e340): pages from the definition strings + the recorded set up, with
+    // the port's additions (the VOICES control on the EMU page)
+    void buildPages();
 
     // pages
     int pageCount() const { return int(pages_.size()); }

@@ -1,5 +1,4 @@
-// C API: the editor logic (src/gui/logic) on a C++ EditorView, for tests/test_gui_logic*.py
-// (differential comparison with the original editor running in the emulator).
+// C API: the editor logic (src/gui/logic) on a C++ EditorView, for tests/test_gui_extensions.py.
 //
 // A Box holds the engine side (SoundLibrary, EditBuffer, Settings), the EditorView, a
 // scripted PlatformUi and the EditorController. Input is injected as Win32 mouse messages in
@@ -93,9 +92,6 @@ struct TestHost : EditorHost {
     void setSynthSetting(int i, int v) override {
         if (cfg.setSynth(i, v) && ctl) ctl->post(kMsgNotify, 0, 0x10 + i);
     }
-    // The differential tests compare with the original: port additions off unless asked.
-    bool extensions = false;
-    bool portExtensions() override { return extensions; }
     void setPortSetting(int i, int v) override {
         if (cfg.setPort(i, v) && ctl) ctl->post(kMsgNotify, 0, 0x20 + i);
     }
@@ -260,8 +256,7 @@ struct Box {
     std::unique_ptr<EditorController> ctl;
     bool autoContextMenu = false;
 
-    explicit Box(int first, bool extensions = false) {
-        host.extensions = extensions;
+    explicit Box(int first) {
         ctl = std::make_unique<EditorController>(view, host, ui, first != 0);
         host.ctl = ctl.get();
         ui.pumpDuringModal = [this] { ctl->pump(); };
@@ -300,12 +295,10 @@ std::string lcdJson(const LcdDisplay& l) {
 // ------------------------------------------------------------------ lifecycle
 
 SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
-// With the port's additions (EditorHost::portExtensions), for tests/test_gui_extensions.py.
-SQ8L_API void* sq8l_gl_new_ext(int first) { return new Box(first, true); }
 // (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
 SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
 // (port) Knob::active: false for the knobs the current page has no parameter for, which are
-// drawn faded. Not in the state dump, which is compared field by field with the original.
+// drawn faded.
 SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
     return i >= 0 && i < 10 ? int32_t(B(v)->view.knob(i).active()) : -1;
 }
@@ -527,7 +520,7 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
     return copyOut(s.str(), out, max);
 }
 
-// The page tree as built (for the comparison with the dump of the original's objects).
+// The page tree as built.
 SQ8L_API int32_t sq8l_gl_pages(void* v, char* out, int32_t max) {
     LcdController& ctr = B(v)->ctl->lcd();
     std::ostringstream s;
@@ -560,7 +553,7 @@ SQ8L_API int32_t sq8l_gl_pages(void* v, char* out, int32_t max) {
     return copyOut(s.str(), out, max);
 }
 
-// formatters (exhaustive comparison with the original routines)
+// The parameter value formatters.
 SQ8L_API int32_t sq8l_gl_format(int32_t fmt, int32_t width, int32_t value, const char* prev, char* out, int32_t max) {
     std::string s = prev ? prev : "";
     formatValue(Fmt(fmt), width, value, s);

@@ -342,7 +342,7 @@ const PageSetup kPages[kNumPages] = {
         {"OSC3", 3, 2, 38, 0, 0, 0, kParams_3_0, 8},
         {"DCA3", 3, 2, 49, 0, 1, 0, kParams_3_1, 6},
      }},
-    {"[FILT][FREQ={0,FREQ,3,0,127}] [RES(Q)={1,RES,2,0,31}] 2 [KEYBD * {3,KEYBD,3,-63,+63}]\\&5 [MODS=] 2 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,4,-127,+127}] 2 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,4,-127,+127}]",
+    {"[FILT][CUT={0,FREQ,3,0,127}] [RES={1,RES,2,0,31}] 11 [KEYB * {4,KEYBD,3,-63,+63}]\\&5 [MODS=] 2 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,4,-127,+127}] 2 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,4,-127,+127}]",
      1, {
         {"Filter", 4, 4, 237, 0, 0, 0, kParams_4_0, 7},
      }},

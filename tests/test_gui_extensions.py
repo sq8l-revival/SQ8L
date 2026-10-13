@@ -2,7 +2,7 @@
 
 The editor is no longer compared with the original, so these are the port's own checks of
 what it adds:
-  * OPTIONS "Down arrow -> next program": the original's hidden swapProgUpDn ini key;
+  * OPTIONS "Down arrow loads next program": the original's hidden swapProgUpDn ini key;
   * OPTIONS "Ask before loading banks/libraries" ([port] confirmLoad): no prompt when off;
   * a left click on the program number opens the program list (the original: right only);
   * EMU "VOICES" (program byte 0x197): the playable voices of the program, 1 to 64, with the
@@ -265,7 +265,7 @@ def main():
     # are located by caption only so the setting checks below can click them.
     opts = ed.menu(OPTIONS)
     OPT_POLY = opt_index(opts, "Polyphony")
-    OPT_SWAP = opt_index(opts, "Down arrow -> next program")
+    OPT_SWAP = opt_index(opts, "Down arrow loads next program")
     OPT_CONFIRM = opt_index(opts, "Ask before loading banks/libraries")
 
     # 1. left click on the program number opens the program list

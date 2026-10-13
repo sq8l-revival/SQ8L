@@ -205,14 +205,14 @@ void EditorController::buildMenus() {
     rest.items.push_back(item("Hide cursor when editing", 0,
                               [this](MenuNode& n) { hideCursorClick(n); }));
     rest.items.push_back(line());
-    rest.items.push_back(item("Right click on display -> scroll page", 0,
+    rest.items.push_back(item("Right click on display scroll pages", 0,
                               [this](MenuNode& n) { rmbScrDispClick(n); }));
     iMouse = o.size();
     o.push_back(rest);
     // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
     // and the window size. Polyphony leads the first group, above.
     iSwap = o.size();
-    o.push_back(item("Down arrow -> next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
+    o.push_back(item("Down arrow loads next program", 0, [this](MenuNode& n) { swapProgUpDnClick(n); }));
     o.push_back(line());
     iConfirm = o.size();
     o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));

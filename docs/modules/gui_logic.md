@@ -162,7 +162,7 @@ Voice stealing mode                 >
 Emulation preferences               >
 ------------------------------------
 Mouse                               >   restore after popup menus / knob turning, - , display scroll
-Down arrow -> next program
+Down arrow loads next program
 ------------------------------------
 Ask before loading banks/libraries
 ------------------------------------

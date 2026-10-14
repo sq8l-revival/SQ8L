@@ -56,7 +56,12 @@ constexpr size_t Level = 0x0e;    // s8  DCA level 0..63
 constexpr size_t Enable = 0x0f;   // s8  DCA output on/off 0..1
 constexpr size_t AmpMod1 = 0x10;  // slot (DCA modulation)
 constexpr size_t AmpMod2 = 0x13;  // slot
-// 0x0b..0x0d and 0x16..0x17 are unused (always 0).
+// (port) wave playback direction, 0 = forward (the original), 1 = reverse. One of the bytes
+// the original never writes (always 0), so every program made by the SQ8L, every bank/library
+// file, every pre-0.90 record and every SysEx import reads as forward. Same approach as
+// ofs::Polyphony; see docs/modules/program.md.
+constexpr size_t Dir = 0x0b;
+// 0x0c..0x0d and 0x16..0x17 are unused (always 0).
 }  // namespace Osc
 
 // Envelopes 1..4: 14-byte blocks.

@@ -927,6 +927,8 @@ void Master::controlUpdate(Voice& v) {
         O.fine = s8(S[2]);
         O.pitchMod = pitch + fm;
         O.level = am * 4 + (s8(S[0xe]) << 9);
+        // (port) wave playback direction, outside the original's parameter block
+        modules_.docSetOscReverse(v.slot, i, (S[0x0b] & 1) != 0);
     }
     modules_.docUpdate(v.slot);
 

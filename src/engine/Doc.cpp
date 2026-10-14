@@ -47,6 +47,24 @@ constexpr float kInterpThreshold[3] = {576717.0f, 1631846.0f, 6918636.0f};
 constexpr uint32_t kRomMask = 0x3ffff;
 constexpr uint32_t kPhaseMask = 0x3fffffff;
 
+// (port) The two ends reverse playback needs, from the wavesample's terminator: the first
+// zero byte scanning up from 0, which is where the DOC stops going forwards. See OscDirection.
+// Called only when a reversed oscillator's wavesample changes.
+void reverseBounds(uint32_t address, int32_t sizeLog2, int32_t shift, uint32_t accMask, OscDirection& dir) {
+    const uint32_t sh = static_cast<uint32_t>(shift) & 31;
+    const uint32_t low = (1u << sh) - 1u;  // the sub-steps within one table index
+    for (int32_t i = 0; i < (1 << sizeLog2); i++) {
+        if (data::kWaveRom[(static_cast<uint32_t>(i) + address) & kRomMask] != 0) continue;
+        dir.terminated = true;
+        dir.top = i > 0 ? ((static_cast<uint32_t>(i - 1) << sh) | low) : 0;
+        dir.stop = static_cast<uint32_t>(i) << sh;
+        return;
+    }
+    dir.terminated = false;  // no terminator: the data fills the table (every looped wave)
+    dir.top = accMask;
+    dir.stop = accMask;
+}
+
 float bitsToFloat(uint32_t bits) {
     float f;
     std::memcpy(&f, &bits, sizeof f);
@@ -185,6 +203,7 @@ void Doc::resetVoice(uint32_t v) {
     vc = DocVoice{};
     vc.smoothMode = 2;
     setVoiceClock(v, 1.0);  // (port) a reset slot is never left on a scaled clock
+    for (OscDirection& d : direction[v]) d = OscDirection{};  // (port) nor on a stale direction
     for (int i = 0; i < 3; i++) {
         DocOsc& o = vc.osc[i];
         o.levelCur = levelToAmp(0);
@@ -224,6 +243,13 @@ void Doc::stopVoice(uint32_t v) {
     if (v >= numVoices) return;
     for (DocOsc& o : voice[v].osc) o.halted = -1;
     voice[v].interpOrder = 0;
+}
+
+// (port) The wrap point follows on the next update() that recalculates the wavesample; the
+// master forces one whenever the direction changes, so a flip mid-note takes effect at once.
+void Doc::setOscReverse(uint32_t v, int osc, bool reverse) {
+    if (v >= capacity || osc < 0 || osc >= 3) return;
+    direction[v][osc].reverse = reverse;
 }
 
 DocVoiceParams* Doc::params(uint32_t v) { return v < numVoices ? &param[v] : nullptr; }
@@ -382,8 +408,12 @@ void Doc::update(uint32_t v) {
             continue;
         }
 
+        // (port) a direction flip joins the recalculation triggers: the wrap point below is
+        // derived from the wavesample, so it has to be recomputed when either one changes.
+        OscDirection& dir = direction[v][i];
         const bool recalc = keyChanged || o.valid == 0 || op.wave != o.wave || op.semitone != o.semitone ||
-                            op.fine != o.fine || (i == 1 && (p.sync != 0) != (o.mode == 2));
+                            op.fine != o.fine || (i == 1 && (p.sync != 0) != (o.mode == 2)) ||
+                            dir.reverse != dir.applied;
         int32_t pitch;
         uint8_t page = 0, waveReg = 0;
         if (recalc) {
@@ -454,7 +484,13 @@ void Doc::update(uint32_t v) {
             const uint8_t accBits = static_cast<uint8_t>(o.resolution + 0x11);
             o.accMask = (1u << (accBits & 31)) - 1u;
             o.shift = static_cast<int32_t>(accBits) - o.sizeLog2;
+            // (port) the ends of the wavesample just configured
+            dir.applied = dir.reverse;
+            if (dir.reverse) reverseBounds(o.address, o.sizeLog2, o.shift, o.accMask, dir);
         }
+        // (port) reverse starts a phase reset at the end of the data rather than at 0. A flip
+        // mid-note leaves the accumulator alone: the wave simply turns round where it stands.
+        if (dir.reverse && noPhaseCopy != 0) o.acc = dir.top;
 
         const float amp = levelToAmp(op.level);
         if (p.init != 0) {
@@ -519,7 +555,7 @@ void Doc::interpolateLevels(uint32_t v) {
 
 // ------------------------------------------------------------------ audio
 
-int32_t Doc::stepOscillator(DocVoice& vc, int osc) {
+int32_t Doc::stepOscillator(DocVoice& vc, int osc, const OscDirection& dir) {
     DocOsc& o = vc.osc[osc];
     if (o.halted != 0) return 0;
     const uint32_t b = data::kWaveRom[((o.acc >> (o.shift & 31)) + o.address) & kRomMask];
@@ -532,10 +568,34 @@ int32_t Doc::stepOscillator(DocVoice& vc, int osc) {
         if (osc == 0 && vc.osc[1].mode == 2) vc.osc[1].acc = 0;  // hard sync
         o.halted = o.mode == 1 ? 1 : 0;                          // one-shot ends after a pass
     }
-    uint32_t a = o.acc + o.freq;
-    if (a >= o.accMask) {
-        a &= o.accMask;
-        o.wrapped = 1;
+    uint32_t a;
+    if (dir.reverse) {
+        // (port) mirror of the step below: run down, and at the start of the data either stop
+        // or come round again.
+        if (o.acc >= o.freq) {
+            a = o.acc - o.freq;
+        } else if (o.mode == 1 && dir.terminated) {
+            // A one-shot ends here. Park on the terminator, where a forward one-shot ends:
+            // the next step reads that zero and halts exactly as forwards, and goes on
+            // halting every time the control tick's update() clears the flag. Wrapping back
+            // to `top` instead would leave the accumulator on a live sample, and the voice
+            // would play the wave backwards again on the very next tick.
+            a = dir.stop;
+        } else {
+            // Looped: `top` is a power-of-two mask only for a full table, so the overshoot is
+            // taken modulo the data length rather than masked. Only this step pays for the
+            // division. The flag drives hard sync and, without a terminator, the mode 1 halt.
+            const uint32_t len = dir.top + 1;
+            const uint32_t over = len != 0 ? (o.freq - o.acc) % len : 0;
+            a = over != 0 ? len - over : 0;
+            o.wrapped = 1;
+        }
+    } else {
+        a = o.acc + o.freq;
+        if (a >= o.accMask) {
+            a &= o.accMask;
+            o.wrapped = 1;
+        }
     }
     o.acc = a;
     return static_cast<int32_t>(b) - 128;
@@ -548,9 +608,10 @@ double Doc::render(uint32_t v) {
 
     if (vc.phase <= vc.prevPhase) {
         // The resampler phase wrapped: compute the next DOC output sample.
-        const int32_t s0 = stepOscillator(vc, 0);
-        const int32_t s1 = stepOscillator(vc, 1);
-        const int32_t s2 = stepOscillator(vc, 2);
+        const OscDirection* dir = direction[v];
+        const int32_t s0 = stepOscillator(vc, 0, dir[0]);
+        const int32_t s1 = stepOscillator(vc, 1, dir[1]);
+        const int32_t s2 = stepOscillator(vc, 2, dir[2]);
         DocOsc* o = vc.osc;
         double sum;
         if (vc.amMode == 0) {

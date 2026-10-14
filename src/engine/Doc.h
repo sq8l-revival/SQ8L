@@ -115,6 +115,31 @@ struct DocVoice {
 // Deliberately NOT a DocVoice field: tests/capi_doc.cpp round-trips the voice blocks with a
 // whole-struct memcpy of 0x200 bytes, so anything kept inside DocVoice would be overwritten
 // from the original's image on load and written back into the compared image on save.
+// (port) Reverse wave playback, one flag and one wrap point per oscillator. Like VoiceClock,
+// deliberately NOT a DocOsc/DocOscParams field: both blocks are round-tripped by
+// tests/capi_doc.cpp with a whole-struct memcpy against the original's image.
+//
+// Forward play runs the accumulator up and wraps at accMask; reverse runs it down. Both ends
+// come from the wavesample's terminator, the first zero byte of the table -- which is how the
+// DOC finds the end of the data going forwards, and so the only definition that makes reverse
+// read exactly what forward reads. (The bytes past the terminator are not always zero: some
+// tables hold unrelated ROM data there, so "the last non-zero byte" is not the same thing.)
+//
+//   top   accumulator of the byte before the terminator: where reverse starts, and where a
+//         reversed looped wave wraps back to. A table with no terminator is full, and this is
+//         accMask, so reverse is simply the table read backwards.
+//   stop  accumulator of the terminator itself: where a reversed one-shot parks when it runs
+//         off the start. It must come to rest ON the zero byte, because update() clears
+//         `halted` on every control tick and only reading a zero sample makes the halt stick
+//         -- which is exactly how a forward one-shot stays stopped.
+struct OscDirection {
+    bool reverse = false;     // requested by the master
+    bool applied = false;     // the direction the two bounds below were computed for
+    bool terminated = false;  // the table holds a terminator (every one-shot does)
+    uint32_t top = 0;
+    uint32_t stop = 0;
+};
+
 struct VoiceClock {
     uint32_t phaseInc = 0;        // this voice's resampler increment
     float smoothPole = 0;         // DCA pole at this voice's clock
@@ -151,6 +176,9 @@ public:
     // recalculation), then update().
     void setKeys(uint32_t v, int32_t key, bool waveKeyToo);
     void stopVoice(uint32_t v);             // FUN_0045bd78: halt all oscillators
+    // (port) no counterpart in the original: play oscillator `osc` of voice `v` backwards.
+    // Takes effect on the next update() that (re)configures the wavesample.
+    void setOscReverse(uint32_t v, int osc, bool reverse);
     void update(uint32_t v);                // FUN_0045bda4: apply DocVoiceParams (control rate)
     void interpolateLevels(uint32_t v);     // FUN_0045c378: half-step level smoothing (control rate)
     DocVoiceParams* params(uint32_t v);     // FUN_0045c7e0 (nullptr if v >= numVoices)
@@ -193,6 +221,9 @@ public:
     // (port) per-voice clock, outside the original's object image: see VoiceClock.
     VoiceClock clock[kMaxVoices] = {};
 
+    // (port) per-oscillator playback direction, outside the image: see OscDirection.
+    OscDirection direction[kMaxVoices][3] = {};
+
     // ---- internal helpers (public for the differential tests) ----
     // DCA level (0..0x7f00) -> amplitude, interpolating kDocLevelTable (FUN_0045c568).
     float levelToAmp(int32_t level) const;
@@ -221,7 +252,8 @@ private:
     void computeSmoothing();                // FUN_0045c628
     void computeDcBlocker();                // FUN_0045c6dc
     void setAmpTarget(uint32_t v, DocVoice& vc, int osc, float level);  // FUN_0045c5ec
-    int32_t stepOscillator(DocVoice& vc, int osc);          // one DOC step (inlined in FUN_0045c7f4)
+    // one DOC step (inlined in FUN_0045c7f4); `dir` is the port's playback direction
+    int32_t stepOscillator(DocVoice& vc, int osc, const OscDirection& dir);
 };
 
 // DOC frequency register for a pitch in 1/256 semitone (FUN_0045b8b4, unit docPitch),

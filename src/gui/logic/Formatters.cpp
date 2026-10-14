@@ -100,16 +100,19 @@ void formatValue(Fmt f, int width, int v, std::string& s) {
         s = v < 0 ? std::string("OFF") : intToStrZ(v, 2);
         break;
     case Fmt::LfoWave:  // 0x4612e4
+        // (port) the field is 6 cells wide (the original's 4 only fitted a number), so the
+        // oscillator waves spell out the name that PopText::LfoWave already builds for the
+        // popup. Everything is right-aligned in 6, like kWaveNames itself.
         if (v < 0) {
-            s = " ? ";
+            s = "   ?  ";
         } else if (v < 5) {
-            s = std::string(" ") + data::kLfoWaveNames[v];   // ShortString[4] concatenation
+            s = std::string("   ") + data::kLfoWaveNames[v];  // ShortString[4] concatenation
         } else if (v - 5 <= 0x45) {
-            s = " " + intToStrZ(v - 5, 2);
+            s = data::kWaveNames[data::kLfoWaveMap[v - 5]];
         } else if (v - 5 - 0x46 < 8) {
-            s = data::kShapeNames[v - 5 - 0x46];
+            s = std::string("  ") + data::kShapeNames[v - 5 - 0x46];
         } else {
-            s = " ? ";
+            s = "   ?  ";
         }
         break;
     case Fmt::LfoHuman: {  // 0x4614e4
@@ -179,6 +182,12 @@ void formatValue(Fmt f, int width, int v, std::string& s) {
         // 0 is what every program of the original has: its 8 voices.
         s = intToStr(v == 0 ? kOriginalPlayableVoices : v);
         zeroPad(s, width);
+        break;
+    case Fmt::WaveDir:  // (port) wave playback direction
+        // Two cells of the 16-segment font: a centre bar and a chevron whose apex faces it.
+        // "-<" and ">-" would not read as arrows (the chevron sits at the far edge of its
+        // cell, pointing away), so the arrow always leads with the bar it closes on.
+        s = v != 0 ? "<-" : "->";
         break;
     }
 }

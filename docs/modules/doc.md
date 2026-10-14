@@ -171,7 +171,55 @@ No other shared global state; the two static tables are read-only.
   confirms by flipping it that the original reads it there; factory-program playback never
   takes this path.
 
+## Wave direction (port addition)
+
+The DOC only ever runs an accumulator up. Reverse playback (OSC → DIR, `ofs::Osc::Dir`, see
+[program.md](program.md#dir-port-addition-0x02d--0x045--0x05d)) is the port's own, so its
+state sits beside the emulated object, not in it: `Doc::direction[voice][osc]`
+(`OscDirection`), set through `Doc::setOscReverse` and, from the master,
+`VoiceModules::docSetOscReverse`. `DocOsc`, `DocOscParams`, `DocVoice` and `MasterDocParams`
+are compared byte for byte with the original's image by the differential tests, so a field
+inside any of them would be overwritten on load and written back on save — the same reason
+`VoiceClock` lives outside (see tuning.md).
+
+* A reversed step subtracts the frequency register instead of adding it.
+* Both ends of the data come from the wavesample's **terminator**, the first zero byte of the
+  table scanning up from 0 — which is how the DOC finds the end going forwards, and so the
+  only definition that makes reverse read exactly what forward reads. The bytes past the
+  terminator are *not* always zero: some tables hold unrelated ROM data there (waves 56 and
+  69, for two), so "the last non-zero byte of the table" is a different, wrong answer.
+  `reverseBounds` computes both ends once per wavesample change:
+  * `top`, the byte before the terminator, where reverse starts and where a reversed looped
+    wave wraps back to. A table with no terminator is full and this is the accumulator mask,
+    so reverse is simply the table read backwards.
+  * `stop`, the terminator itself, where a reversed one-shot comes to rest.
+* **A one-shot must park on the terminator, not wrap.** `update()` runs every control tick and
+  clears `halted` unconditionally, so a one-shot only stays stopped because its accumulator
+  sits on the zero byte and keeps reading it. A reversed one-shot that ran off the start and
+  wrapped back to `top` would be sitting on a live sample, and the voice would play the wave
+  backwards again on the very next tick — a one-shot turned into a loop. Parking on `stop`
+  reproduces the forward halt exactly, including its stickiness.
+* A looped wave (and a one-shot in a table with no terminator) wraps instead, raising the same
+  `wrapped` flag so hard sync and the mode 1 halt work as they do forwards. The overshoot is
+  taken modulo the data length rather than masked, because `top` is a power-of-two mask only
+  for a full table. Only the wrapping step pays for the division.
+* The bounds are recomputed whenever the wavesample is reconfigured, and a direction flip is
+  one of the triggers for that recalculation, so a flip mid-note takes effect at once.
+* A phase reset starts a reversed oscillator at `top`. A flip while a note sounds leaves the
+  accumulator alone: the wave turns round where it stands.
+
 ## Verification
+
+`sq8l_render_check --direction` (no files needed) clocks a single oscillator at the DOC rate
+so one `render()` is one step, and checks that for five looped waves every reversed table
+index is the exact mirror of the forward one (`forward + reverse == tableSize - 1`) over 2000
+steps; that all 21 one-shot waves reversed halt within one step of where they halt forwards
+**and stay halted while the control tick keeps calling `update()`** (the accumulator must not
+move again afterwards — this is what catches a reversed one-shot that loops); that five
+looped waves reversed keep running, as they do forwards; and that reversing all three
+oscillators of programs from every bank changes the sound and leaves the output finite.
+`sq8l_render_check --regression` covers the other half: every factory program has the byte at
+0, and all 243 cases stay bit-identical to the original.
 
 `tests/test_doc.py` (full run ≈ 11 min; `SQ8L_DOC_QUICK=1` for a 1-minute smoke run):
 static tables vs emulator memory, helper routines over their whole input ranges, every entry

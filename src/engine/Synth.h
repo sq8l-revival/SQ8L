@@ -46,6 +46,9 @@ public:
         return r.pitchOffset;
     }
     void docStopVoice(int v) override { doc.stopVoice(static_cast<uint32_t>(v)); }
+    void docSetOscReverse(int v, int osc, bool reverse) override {
+        doc.setOscReverse(static_cast<uint32_t>(v), osc, reverse);
+    }
     void docInterpolateLevels(int v) override { doc.interpolateLevels(static_cast<uint32_t>(v)); }
     MasterDocParams& docVoiceParams(int v) override;
     void docUpdate(int v) override { doc.update(static_cast<uint32_t>(v)); }

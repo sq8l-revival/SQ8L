@@ -33,6 +33,7 @@ enum class Fmt : uint8_t {
     Dca4Mode,      // 0x461b5c  "EMU " / "HARD"
     DcBlock,       // 0x461bac  SMART ON OFF
     Polyphony,     // (port) EMU -> VOICES: 0 = the original's 8, else the voices
+    WaveDir,       // (port) oscillator wave direction: "->" forward, "<-" reverse
 };
 
 // Popup menu item texts (ClcdCtr_param +0x40).
@@ -79,9 +80,16 @@ struct PageSetup {
 
 namespace data {
 extern const PageSetup kPages[kNumPages];
-// (port) the EMU page, the only one the port adds a control to (VOICES, see below).
+// (port) pages the port changes: the EMU page gains VOICES; the three per-oscillator pages
+// gain DIR (and shorten WAVE= to WF= to make room); the OSC1-3 page and the four LFO pages
+// follow WF= for consistency, the LFO one also widening its field to spell the wave names.
 constexpr int kPortEmuPage = 17;
-// (port) kPages[page] with the port's additions: page kPortEmuPage has the VOICES control.
+constexpr int kPortOscMixPage = 0;    // OSC1-3
+constexpr int kPortOsc1Page = 1;      // OSC1, OSC2, OSC3 are kPortOsc1Page + 0..2
+constexpr int kPortNumOscPages = 3;
+constexpr int kPortLfo1Page = 6;      // LFO1..LFO4 are kPortLfo1Page + 0..3
+constexpr int kPortNumLfoPages = 4;
+// (port) kPages[page] with those additions applied.
 const PageSetup& pageSetup(int page);
 extern const char* const kWaveNames[75];        // ShortString[6]
 extern const char* const kModSourceNames[147];  // ShortString[7], source -1..145

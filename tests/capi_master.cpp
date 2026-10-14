@@ -82,6 +82,10 @@ struct Forwarder final : VoiceModules {
     // tuning snapshot is set, which the differential tests never do. Nothing to record.
     int32_t docRetune(int, const Tuning&, int32_t, int32_t) override { return 0; }
     void docStopVoice(int v) override { call(M_DOC_STOP, v, -1, {}); }
+    // (port) no counterpart in the original either, and the master writes it on every control
+    // tick: recording it would inject calls the original never makes. The differential
+    // programs leave ofs::Osc::Dir at 0, so every oscillator plays forward here regardless.
+    void docSetOscReverse(int, int, bool) override {}
     void docInterpolateLevels(int v) override { call(M_DOC_TICKODD, v, -1, {}); }
     MasterDocParams& docVoiceParams(int v) override { return doc[v]; }
     void docUpdate(int v) override { call(M_DOC_UPDATE, v, -1, {}); }

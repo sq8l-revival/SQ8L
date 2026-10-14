@@ -13,6 +13,12 @@
 //       sounding voice with 8; 1 and 4 voices stay finite; the instance override renders like
 //       the same value in the program; then a stress test (40 held notes, 64 voices) on
 //       programs of every bank.
+//   sq8l_render_check --direction
+//       Wave direction (OSC -> DIR, a port addition): a reversed oscillator reads its
+//       wavesample backwards (every table index the mirror of the forward one), a reversed
+//       one-shot halts where it halts forwards and stays halted across control ticks, a
+//       reversed looped wave keeps running, and reversing a whole program changes the sound
+//       without breaking it. Needs no files.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -301,8 +307,165 @@ int polyphony(const std::string& dir) {
 
 }  // namespace
 
+// (port) Wave direction (OSC -> DIR, ofs::Osc::Dir): the oscillator reads its wavesample
+// backwards. A looped wave fills its table, so with the same note and frequency the index a
+// reversed oscillator reads at step k is the exact mirror of the forward one:
+//
+//   forward acc = k*freq                 -> index  a           (k*freq = a << shift | b)
+//   reverse acc = (N << shift) - 1 - k*freq -> index  N - 1 - a
+//
+// so the two indices sum to N-1 at every step until the first wrap. That is checked here
+// sample by sample, plus the inertness of the parameter and what a whole program renders.
+int direction() {
+    int bad = 0;
+    constexpr uint32_t kSteps = 2000;
+
+    // The DOC clocked at its own rate: one render() is exactly one oscillator step.
+    auto indices = [](int wave, bool reverse, std::vector<uint32_t>& idx, uint32_t& tableSize) {
+        sq8l::Doc d(1, 1);
+        d.setSampleRate(sq8l::Doc::kDocRate);
+        d.setOscReverse(0, 0, reverse);
+        sq8l::DocVoiceParams* p = d.params(0);
+        for (int i = 0; i < 3; i++) p->osc[i] = sq8l::DocOscParams{};
+        p->osc[0].enabled = -1;
+        p->osc[0].wave = wave;
+        p->osc[0].level = 0x7f00;
+        d.startVoice(0, 60, -1, -1, -1);
+        d.update(0);
+        const sq8l::DocOsc& o = d.voice[0].osc[0];
+        tableSize = static_cast<uint32_t>(o.tableSize);
+        idx.clear();
+        for (uint32_t k = 0; k < kSteps; k++) {
+            idx.push_back(o.acc >> (o.shift & 31));
+            d.render(0);
+            if (o.halted != 0) break;
+        }
+    };
+
+    for (int wave : {0, 2, 20, 33, 44}) {  // looped waves (< 54): the table is the whole loop
+        std::vector<uint32_t> f, r;
+        uint32_t nf = 0, nr = 0;
+        indices(wave, false, f, nf);
+        indices(wave, true, r, nr);
+        const size_t n = std::min(f.size(), r.size());
+        size_t mismatch = 0;
+        for (size_t k = 0; k < n; k++)
+            if (f[k] + r[k] != nf - 1) mismatch++;
+        const bool moved = n > 1 && f[1] != f[0] && r[1] != r[0];
+        if (nf != nr || n < kSteps || mismatch || !moved) {
+            bad++;
+            std::printf("BAD wave %d: table %u/%u, %zu steps, %zu not mirrored, moved %d\n", wave, nf, nr, n,
+                        mismatch, int(moved));
+        }
+    }
+    std::printf("direction: 5 looped waves, %u steps each, every reversed table index the mirror of the "
+                "forward one (%s)\n",
+                kSteps, bad ? "FAILED" : "ok");
+
+    // One-shot waves (>= 54) must stop reversed exactly as they stop forwards, and STAY
+    // stopped: update() runs every control tick and clears `halted` unconditionally, so a
+    // one-shot only stays dead because its accumulator is parked on the terminator and keeps
+    // reading that zero. Reverse used to wrap back to live data instead, and the voice played
+    // the wave backwards again on every tick -- a one-shot turned into a loop.
+    int oneShotBad = 0;
+    auto haltRun = [](int wave, bool reverse, int& haltStep, int& movedAfter) {
+        sq8l::Doc d(1, 1);
+        d.setSampleRate(sq8l::Doc::kDocRate);
+        d.setOscReverse(0, 0, reverse);
+        sq8l::DocVoiceParams* p = d.params(0);
+        for (int i = 0; i < 3; i++) p->osc[i] = sq8l::DocOscParams{};
+        p->osc[0].enabled = -1;
+        p->osc[0].wave = wave;
+        p->osc[0].level = 0x7f00;
+        d.startVoice(0, 60, -1, -1, -1);
+        d.update(0);
+        const sq8l::DocOsc& o = d.voice[0].osc[0];
+        haltStep = -1;
+        movedAfter = 0;
+        uint32_t prev = o.acc;
+        for (int k = 0; k < 120000; k++) {
+            d.render(0);
+            if (o.halted != 0 && haltStep < 0) haltStep = k;
+            if (haltStep >= 0 && o.acc != prev) movedAfter++;
+            prev = o.acc;
+            if ((k % 64) == 63) d.update(0);  // the control tick the master runs
+        }
+    };
+    for (int wave = 54; wave < 75; wave++) {
+        int hf = 0, hr = 0, mf = 0, mr = 0;
+        haltRun(wave, false, hf, mf);
+        haltRun(wave, true, hr, mr);
+        // the same length within a step (the wrapped position costs forward one extra sample)
+        if (hf < 0 || hr < 0 || std::abs(hf - hr) > 1 || mf != 0 || mr != 0) {
+            oneShotBad++;
+            std::printf("BAD one-shot wave %d: halt fwd %d rev %d, moved after halt fwd %d rev %d\n", wave, hf, hr,
+                        mf, mr);
+        }
+    }
+    std::printf("one-shot: waves 54-74 reversed halt where they halt forwards and stay halted across "
+                "control ticks (%s)\n",
+                oneShotBad ? "FAILED" : "ok");
+
+    // A looped wave has no terminator, so reverse keeps going, as it does forwards.
+    int loopBad = 0;
+    for (int wave : {0, 2, 20, 44, 53}) {
+        int h = 0, m = 0;
+        haltRun(wave, true, h, m);
+        if (h >= 0) {
+            loopBad++;
+            std::printf("BAD looped wave %d reversed: halted at step %d\n", wave, h);
+        }
+    }
+    std::printf("looped: 5 waves reversed keep running, as they do forwards (%s)\n", loopBad ? "FAILED" : "ok");
+    oneShotBad += loopBad;
+
+    // A whole program: the byte the original never writes leaves the render untouched, and
+    // turning it on changes the sound without breaking it.
+    int progBad = 0;
+    auto renderProg = [](int prog, int dir, std::vector<float>& L, std::vector<float>& R) {
+        sq8l::Synth synth(44100.0f);
+        synth.setSampleRate(44100.0f);
+        synth.setProgram(prog);
+        for (int i = 0; i < 3; i++)
+            synth.editBuffer().current().setU8(sq8l::ofs::osc(i) + sq8l::ofs::Osc::Dir, uint8_t(dir));
+        std::vector<sq8l::RawMidiEvent> ev(1);
+        ev[0].deltaFrames = 0;
+        ev[0].data[0] = 0x90;
+        ev[0].data[1] = 60;
+        ev[0].data[2] = 100;
+        ev[0].noteOffVelocity = 0;
+        synth.processEvents(ev.data(), 1);
+        std::vector<float> l(512), r(512);
+        for (int b = 0; b < 86; b++) {  // 1 s
+            synth.process(l.data(), r.data(), 512, true);
+            L.insert(L.end(), l.begin(), l.end());
+            R.insert(R.end(), r.begin(), r.end());
+        }
+    };
+    int changed = 0, programs = 0;
+    for (int prog = 0; prog < 512; prog += 23) {
+        std::vector<float> L0, R0, L1, R1;
+        renderProg(prog, 0, L0, R0);
+        renderProg(prog, 1, L1, R1);
+        programs++;
+        if (!finite(L1) || !finite(R1) || L1.size() != L0.size()) {
+            progBad++;
+            std::printf("BAD program %d reversed: non-finite output or wrong length\n", prog);
+        }
+        if (hashLR(L0, R0) != hashLR(L1, R1)) changed++;
+    }
+    if (changed == 0) {
+        progBad++;
+        std::printf("BAD: reversing every oscillator changed no program\n");
+    }
+    std::printf("programs: %d rendered, %d sound different reversed, output finite (%s)\n", programs, changed,
+                progBad ? "FAILED" : "ok");
+    return bad || oneShotBad || progBad ? 1 : 0;
+}
+
 int main(int argc, char** argv) {
     if (argc > 2 && std::string(argv[1]) == "--regression") return regression(argv[2]);
     if (argc > 2 && std::string(argv[1]) == "--polyphony") return polyphony(argv[2]);
+    if (argc > 1 && std::string(argv[1]) == "--direction") return direction();
     return golden(argc > 1 ? argv[1] : "tests/golden_raw");
 }

@@ -101,6 +101,10 @@ public:
     // See docs/modules/tuning.md.
     virtual int32_t docRetune(int voice, const Tuning& t, int32_t key, int32_t wave) = 0;
     virtual void docStopVoice(int voice) = 0;                       // FUN_0045bd78
+    // (port) no counterpart in the original: play an oscillator's wave backwards (program osc
+    // byte ofs::Osc::Dir). Written with the rest of the oscillator parameters, before
+    // docUpdate. See docs/modules/doc.md.
+    virtual void docSetOscReverse(int voice, int osc, bool reverse) = 0;
     virtual void docInterpolateLevels(int voice) = 0;               // FUN_0045c378 (odd control ticks)
     virtual MasterDocParams& docVoiceParams(int voice) = 0;          // FUN_0045c7e0
     virtual void docUpdate(int voice) = 0;                          // FUN_0045bda4 (after the params are written)

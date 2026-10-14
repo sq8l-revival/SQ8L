@@ -69,7 +69,7 @@ still be preserved.
 | 0x029 | 0x007 | 5 | s8 | OSC1 MOD1 amount | -63..+63 | 0 | SQ80 amount / 2 |
 | 0x02a | 0x008 | 6 | s16 | OSC1 MOD2 (pitch) source | -1..145 | -1 |  |
 | 0x02c | 0x00a | 7 | s8 | OSC1 MOD2 amount | -63..+63 | 0 |  |
-| 0x02d | 0x00b | 8 | s8 | (unused) |  | 0 | always 0 |
+| 0x02d | 0x00b | 8 | s8 | OSC1 DIR (port addition) | 0..1 | 0 | wave direction, OSC1 page; 0 (the original, every import) = forward, see below |
 | 0x02e | 0x00c | 9 | s8 | (unused) |  | 0 | always 0 |
 | 0x02f | 0x00d | 10 | s8 | (unused) |  | 0 | always 0 |
 | 0x030 | 0x00e | 11 | s8 | DCA1 LEVEL | 0..63 | 50 | SQ80 (byte & 0x7f) >> 1 |
@@ -88,7 +88,7 @@ still be preserved.
 | 0x041 | 0x01f | 24 | s8 | OSC2 MOD1 amount | -63..+63 | 0 | SQ80 amount / 2 |
 | 0x042 | 0x020 | 25 | s16 | OSC2 MOD2 (pitch) source | -1..145 | -1 |  |
 | 0x044 | 0x022 | 26 | s8 | OSC2 MOD2 amount | -63..+63 | 0 |  |
-| 0x045 | 0x023 | 27 | s8 | (unused) |  | 0 | always 0 |
+| 0x045 | 0x023 | 27 | s8 | OSC2 DIR (port addition) | 0..1 | 0 | wave direction, OSC2 page |
 | 0x046 | 0x024 | 28 | s8 | (unused) |  | 0 | always 0 |
 | 0x047 | 0x025 | 29 | s8 | (unused) |  | 0 | always 0 |
 | 0x048 | 0x026 | 30 | s8 | DCA2 LEVEL | 0..63 | 50 | SQ80 (byte & 0x7f) >> 1 |
@@ -107,7 +107,7 @@ still be preserved.
 | 0x059 | 0x037 | 43 | s8 | OSC3 MOD1 amount | -63..+63 | 0 | SQ80 amount / 2 |
 | 0x05a | 0x038 | 44 | s16 | OSC3 MOD2 (pitch) source | -1..145 | -1 |  |
 | 0x05c | 0x03a | 45 | s8 | OSC3 MOD2 amount | -63..+63 | 0 |  |
-| 0x05d | 0x03b | 46 | s8 | (unused) |  | 0 | always 0 |
+| 0x05d | 0x03b | 46 | s8 | OSC3 DIR (port addition) | 0..1 | 0 | wave direction, OSC3 page |
 | 0x05e | 0x03c | 47 | s8 | (unused) |  | 0 | always 0 |
 | 0x05f | 0x03d | 48 | s8 | (unused) |  | 0 | always 0 |
 | 0x060 | 0x03e | 49 | s8 | DCA3 LEVEL | 0..63 | 50 | SQ80 (byte & 0x7f) >> 1 |
@@ -483,6 +483,24 @@ the current layout, starting from INIT: osc blocks at 16*o (+0x30 for the DCA pa
 0x150 (+16) with mod amounts doubled, 0x170 -> 0x122 block, 0x180 -> DCA4 (pan mod amount
 doubled), 0x1b6 -> SAT, 0x190.. -> modes, 0x1a0.. -> 0x188.., 0x1ae.. -> 0x190 (BEND range,
 mode, AMBUG bit). Verified on 400 random records.
+
+## DIR (port addition, 0x02d / 0x045 / 0x05d)
+
+The wave playback direction of each oscillator (OSC1/OSC2/OSC3 pages, `ofs::Osc::Dir`,
+parameters 8, 27 and 46): 0 forward, 1 reverse. Like VOICES below, these are bytes the
+original never writes (the field table above had them as "always 0"), so every program that
+predates the port — SQ8L programs and the library, bank and backup files holding them, INIT
+and everything built from it, the SysEx import, `convertOldProgram`, old host chunks — reads
+as 0 and plays forward. One byte per oscillator inside that oscillator's own 24-byte block,
+at the same offset in each (the 19-parameter oscillator stride).
+
+Reverse is not a parameter of the original DOC 5503, so it lives beside the emulated object
+rather than in it: `Doc::direction` (`OscDirection`), parallel to the per-voice `VoiceClock`
+of the MTS-ESP retuning and for the same reason — `DocOsc`, `DocOscParams`, `DocVoice` and
+`MasterDocParams` are round-tripped byte for byte against the original's image by the
+differential tests, so nothing may be added inside them. The master writes it with the rest
+of the oscillator parameters through `VoiceModules::docSetOscReverse`. See
+[doc.md](doc.md#wave-direction-port-addition).
 
 ## VOICES (port addition, 0x197)
 

@@ -8,6 +8,9 @@ what it adds:
   * EMU "VOICES" (program byte 0x197): the playable voices of the program, 1 to 64, with the
     original's 8 for every program that does not have the parameter;
   * OPTIONS "Polyphony": the same per instance, 0 = set by the program;
+  * OSC "DIR" (program osc byte 0x0b): the wave playback direction of each oscillator, with
+    WAVE= shortened to WF= to make room for it, the same label on the OSC1-3 and LFO pages,
+    and the LFO field widened to spell the oscillator wave names out (issue #44);
   * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
   * the knobs a display page has no parameter for are marked inactive (drawn faded);
   * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
@@ -382,6 +385,73 @@ def main():
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     ed.idle()
     check(ed.knob(9) == 24.0, f"the knob follows the program's own value ({ed.knob(9)})")
+
+    # 6. OSC -> DIR: the wave playback direction of each oscillator (issue #44). The pages
+    # are patched strings (GuiLogicDataPort.cpp): if a pattern ever stopped matching, the
+    # generated page would come through unchanged and these checks are what catches it.
+    print("Wave direction:")
+    OSC_SUB, WF, DIR = 0, 4, 5
+    for page, param in ((1, 8), (2, 27), (3, 46)):
+        params = ed.pages()[page]["subs"][OSC_SUB]["params"]
+        found = [p for p in params if p["name"] == "DIR"]
+        p = found[0] if found else {}
+        check(len(found) == 1 and p.get("knob") == 4 and p.get("x") == 40 and p.get("y") == 0,
+              f"OSC{page} DIR beside the wave: knob {p.get('knob')}, column {p.get('x')}, row {p.get('y')}")
+        check(p.get("min") == 0 and p.get("max") == 1 and p.get("paramIndex") == param and p.get("width") == 2,
+              f"OSC{page} DIR is 0..1 and writes parameter {p.get('paramIndex')} (want {param})")
+        # WAVE moved one knob left and kept its 6 cells; the MODS slots below must still
+        # reach their own parameters, which no longer follow from the ordinal.
+        w = [q for q in params if q["name"] == "WAVE"][0]
+        mods = {q["name"]: q.get("paramIndex") for q in params if q["name"].startswith("MOD")}
+        base = (page - 1) * 19
+        check(w.get("knob") == 3 and w.get("x") == 30 and w.get("width") == 6,
+              f"OSC{page} WF: knob {w.get('knob')}, column {w.get('x')}, width {w.get('width')}")
+        check(mods == {"MOD1.SEL": base + 4, "MOD1.AMT": base + 5,
+                       "MOD2.SEL": base + 6, "MOD2.AMT": base + 7},
+              f"OSC{page} pitch mods still reach parameters {base + 4}..{base + 7}: {mods}")
+
+    L.sq8l_gl_ctr(ed.v, 0, 1, OSC_SUB)
+    ed.idle()
+    row = ed.lcd_row(0)
+    check(row[30:33] == "WF=" and row[40:42] == "->" and ed.program_byte(0x02D) == 0,
+          f"a program of the original plays forward: {row[30:42]!r}")
+    L.sq8l_gl_ctr(ed.v, 1, DIR, 1)
+    ed.idle()
+    row = ed.lcd_row(0)
+    check(row[40:42] == "<-" and ed.program_byte(0x02D) == 1,
+          f"reversed: display {row[40:42]!r}, program byte {ed.program_byte(0x02D)}")
+    check(row[5:9] == "OCT=" and row[12:17] == "SEMI=" and row[21:26] == "FINE=" and row[33:39].strip() != "",
+          f"OCT/SEMI/FINE keep the columns they had, the wave name its 6 cells: {row[:44]!r}")
+    L.sq8l_gl_ctr(ed.v, 1, DIR, 0)
+    ed.idle()
+    check(ed.lcd_row(0)[40:42] == "->" and ed.program_byte(0x02D) == 0, "and back to forward")
+    # the colon of the 16-segment font is blank, so the label has to use "="
+    check(":" not in ed.lcd_row(0) and ":" not in ed.lcd_row(1), "no colon on the display (it draws blank)")
+
+    # the LFO wave field is 6 cells now, so an oscillator wave spells its name out
+    LFO1_PAGE, LFO_SUB, LFO_WAVE = 6, 0, 4
+    params = ed.pages()[LFO1_PAGE]["subs"][LFO_SUB]["params"]
+    w = [q for q in params if q["name"] == "WAVE"][0]
+    check(w.get("width") == 6 and w.get("knob") == 4,
+          f"LFO1 WF is 6 cells on knob 4 (width {w.get('width')}, knob {w.get('knob')})")
+    L.sq8l_gl_ctr(ed.v, 0, LFO1_PAGE, LFO_SUB)
+    ed.idle()
+    L.sq8l_gl_ctr(ed.v, 1, LFO_WAVE, 5)  # the first oscillator wave after the 5 LFO shapes
+    ed.idle()
+    shown = ed.lcd_row(0)[38:44]
+    check(shown.strip() == "SAW", f"LFO wave 5 spells the oscillator wave out ({shown!r}, was ' 00')")
+
+    # the OSC1-3 page only follows the rename: its three wave values must not move
+    L.sq8l_gl_ctr(ed.v, 0, 0, 1)
+    ed.idle()
+    row = ed.lcd_row(0)
+    # WF= at 8-10 puts its "=" above the one of OCT= (7-10) on the row below, and the three
+    # wave values stay at 13, 21 and 29 where the original had them.
+    oct_row = ed.lcd_row(1)  # the OCT row of this same sub-page
+    check(row[8:11] == "WF=" and oct_row[7:11] == "OCT=" and row[10] == oct_row[10],
+          f"OSC1-3 WF= lines up with OCT= below: {row[:12]!r} over {oct_row[:12]!r}")
+    check(row[13:19].strip() != "" and row[21:27].strip() != "" and row[29:35].strip() != "",
+          f"OSC1-3 keeps the wave columns under the knobs: {row[:44]!r}")
 
     # 7. the knobs a page does not use are inactive (issue #24: drawn faded)
     print("Inactive knobs:")

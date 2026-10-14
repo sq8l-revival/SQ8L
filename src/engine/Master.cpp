@@ -383,7 +383,17 @@ void Master::midiControl(uint8_t channel, uint8_t data1, int16_t value, int16_t 
     } else if (ctrl == 0x82) {  // poly pressure
         polyPressure_[data1 & 0x7f] = value;
     }
+    // (port, issue #40) Bank select for the next program change. Stored below as well, so
+    // CC0 keeps working as a modulation source.
+    if (ctrl == 0) bankSelect_ = value;
     storeController(ctrl, value);
+}
+
+// (port, issue #40) The program is loaded at this sample, mid-block: the edit buffer's ring
+// moves the sounding voices to a slot that is not about to be overwritten.
+void Master::midiProgramChange(uint8_t channel, uint8_t program) {
+    if (channel > 15 || program > 127) return;
+    if (onProgramChange) onProgramChange(program, bankSelect_);
 }
 
 void Master::storeController(int32_t ctrl, int16_t value) {

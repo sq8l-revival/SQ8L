@@ -140,15 +140,14 @@ void EditorController::buildMenus() {
     // (port) The OPTIONS items are indexed as they go in, so the cached MenuNode pointers at
     // the end of this function survive reordering: hard-coded positions silently rewired the
     // wrong setting whenever the layout changed.
-    size_t iGain = 0, iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iMts = 0,
-           iZoom = 0;
+    size_t iGain = 0, iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iProgChg = 0,
+           iMts = 0, iZoom = 0;
     // (port, issue #52) Output gain leads the menu: most soundbanks play far too loud, so a
     // cut is the first thing to reach for. Of this instance, like the polyphony below, but
     // the value last chosen is also where a newly created instance starts.
     MenuNode gain = item("Output gain", 0, nullptr);
     auto gainClick = [this](MenuNode& n) { outputCutClick(n); };
-    gain.items.push_back(item("0 dB   (no cut)", 0, gainClick, true, true));
-    gain.items.push_back(line());
+    gain.items.push_back(item("0 dB", 0, gainClick, true, true));
     gain.items.push_back(item("-6 dB", 6, gainClick, true, true));
     gain.items.push_back(item("-12 dB", 12, gainClick, true, true));
     gain.items.push_back(item("-18 dB", 18, gainClick, true, true));
@@ -243,6 +242,11 @@ void EditorController::buildMenus() {
     o.push_back(line());
     iConfirm = o.size();
     o.push_back(item("Ask before loading banks/libraries", 0, [this](MenuNode& n) { confirmLoadClick(n); }));
+    // (port, issue #40) The original ignores program changes outright. Grouped with the load
+    // prompt above: both decide what may replace the edit buffer behind the user's back.
+    iProgChg = o.size();
+    o.push_back(item("Support MIDI Program Change", 0,
+                     [this](MenuNode& n) { programChangeClick(n); }));
     o.push_back(line());
     // (port) Two independent options rather than one tri-state: the parent carries the
     // checkmark of "Enable", so the state shows without opening the submenu.
@@ -298,6 +302,7 @@ void EditorController::buildMenus() {
     menuPolyphony_ = &optionsMenu_.items[iPoly];
     menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
     menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
+    menuProgramChange_ = &optionsMenu_.items[iProgChg];
     menuMts_ = &optionsMenu_.items[iMts];
     menuMtsEnable_ = &menuMts_->items[0];
     menuMtsCorrect_ = &menuMts_->items[2];
@@ -622,6 +627,7 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     swapProgUpDn_ = s.swapProgramUpDown();
     if (menuSwapProgUpDn_) menuSwapProgUpDn_->setChecked(swapProgUpDn_);
     if (menuConfirmLoad_) menuConfirmLoad_->setChecked(s.confirmLoading());
+    if (menuProgramChange_) menuProgramChange_->setChecked(host_.programChangeEnabled());
     naturalScroll_ = s.naturalScrolling();
     if (menuNaturalScroll_) menuNaturalScroll_->setChecked(naturalScroll_);
     if (menuMtsEnable_) {
@@ -1320,6 +1326,12 @@ void EditorController::mtsEnableClick(MenuNode& item) {
     item.setChecked(!item.checked);
     if (menuMts_) menuMts_->setChecked(item.checked);
     host_.setMtsEnabled(item.checked);
+}
+
+// Port addition (issue #40): respond to MIDI program changes, which the original never did.
+void EditorController::programChangeClick(MenuNode& item) {
+    item.setChecked(!item.checked);
+    host_.setProgramChangeEnabled(item.checked);
 }
 
 // Port addition: correct the SQ-80's own per-key pitch offsets to the master's frequencies

@@ -70,6 +70,11 @@ public:
     virtual void setMtsEnabled(bool on) { (void)on; }
     virtual bool mtsCorrectPitch() { return false; }
     virtual void setMtsCorrectPitch(bool on) { (void)on; }
+    // OPTIONS -> Support MIDI Program Change (issue #40). Of this instance and saved with the
+    // plugin's state, like the switches above. On for a new instance, off for a project saved
+    // by the original or by an earlier port.
+    virtual bool programChangeEnabled() { return false; }
+    virtual void setProgramChangeEnabled(bool on) { (void)on; }
     // OPTIONS -> Output gain (issue #52): the cut of this instance in dB, one of
     // Settings::kOutputCutsDb. Of this instance and saved with the plugin's state, like the
     // two above; setting it also records the value as where a newly created instance starts

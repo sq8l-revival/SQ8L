@@ -40,6 +40,15 @@ void MidiParser::processEvents(const RawMidiEvent* ev, int32_t n) {
             r.value = e.data[2];
             r.ctrl = r.data1;
             break;
+        case 0xC0:
+            // (port, issue #40) Dropped like every other unknown status unless enabled.
+            if (!programChange_) {
+                known = false;
+                break;
+            }
+            r.type = 0x10;
+            r.data1 = e.data[1] & 0x7f;
+            break;
         case 0xD0:
             r.type = 8;
             r.value = e.data[1];
@@ -126,6 +135,9 @@ void MidiParser::dispatchOne() {
         break;
     case 8:
         listener_->midiControl(r.channel, r.data1, r.value, static_cast<int16_t>(r.ctrl));
+        break;
+    case 0x10:  // (port, issue #40)
+        listener_->midiProgramChange(r.channel, r.data1);
         break;
     case 0x40:
         listener_->midiReset(r.value);

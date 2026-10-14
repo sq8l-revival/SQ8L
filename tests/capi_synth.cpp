@@ -36,6 +36,15 @@ SQ8L_API void sq8l_synth_get_mts(void* s, int32_t* enabled, int32_t* correctPitc
     *correctPitch = sy.mtsCorrectPitch() ? 1 : 0;
 }
 
+// (port, issue #40) OPTIONS -> Respond to MIDI program changes, per instance and in the chunk.
+SQ8L_API void sq8l_synth_set_program_change(void* s, int32_t on) {
+    static_cast<sq8l::Synth*>(s)->setProgramChangeEnabled(on != 0);
+}
+
+SQ8L_API int32_t sq8l_synth_program_change(void* s) {
+    return static_cast<sq8l::Synth*>(s)->programChangeEnabled() ? 1 : 0;
+}
+
 SQ8L_API int32_t sq8l_synth_active_voices(void* s) {
     return static_cast<sq8l::Synth*>(s)->master().activeVoiceCount();
 }

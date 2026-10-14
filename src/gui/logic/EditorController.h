@@ -216,6 +216,7 @@ private:
     void rmbScrDispClick(MenuNode& item);
     void swapProgUpDnClick(MenuNode& item);  // port addition
     void confirmLoadClick(MenuNode& item);   // port addition
+    void programChangeClick(MenuNode& item); // port addition (issue #40)
     void naturalScrollClick(MenuNode& item); // port addition (issue #35)
     void polyphonyClick(MenuNode& item);     // port addition
     void outputCutClick(MenuNode& item);     // port addition (issue #52)
@@ -272,6 +273,7 @@ private:
     MenuNode* menuRmbScrDisp_ = nullptr;
     MenuNode* menuSwapProgUpDn_ = nullptr;  // port addition
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
+    MenuNode* menuProgramChange_ = nullptr; // port addition (issue #40)
     MenuNode* menuNaturalScroll_ = nullptr; // port addition (issue #35)
     MenuNode* menuOutputGain_ = nullptr;    // port addition (sub-menu, radio items tagged with the dB cut)
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)

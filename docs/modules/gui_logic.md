@@ -179,6 +179,7 @@ Mouse                               >   restore after popup menus / knob turning
 Down arrow loads next program
 ------------------------------------
 Ask before loading banks/libraries
+Support MIDI Program Change             per instance, on for a new one (issue #40)
 ------------------------------------
 MTS-ESP                             >   Enable, - , Correct SQ-80 per-key pitch offsets
 ------------------------------------
@@ -191,8 +192,11 @@ the emulation group: how many voices there are, then what happens when they run 
 rest of the emulation. The original's "Mouse position is restored after..." submenu and its separate
 "Right click on display -> scroll page" item are one `Mouse` submenu, with the children reworded
 because the originals only read correctly under the old parent's phrasing. `MTS-ESP` carries the
-checkmark of its own `Enable` child, so the state shows without opening the submenu. Everything
-except Voice stealing mode, Emulation preferences and Mouse is a port addition.
+checkmark of its own `Enable` child, so the state shows without opening the submenu.
+`Support MIDI Program Change` sits with the load prompt rather than in a group of its own,
+both deciding what may replace the edit buffer without being asked; which controller picks the
+bank is in `library.md`, not in the menu. Everything except Voice stealing mode, Emulation
+preferences and Mouse is a port addition.
 
 **Indices are recorded as the items go in.** `buildMenus` keeps a `size_t` per cached
 `MenuNode*` and resolves the pointers once the vector is final, because hard-coded positions

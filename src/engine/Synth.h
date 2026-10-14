@@ -135,6 +135,13 @@ public:
     void setMtsEnabled(bool on) { mtsEnabled_ = on; }
     bool mtsCorrectPitch() const { return mtsCorrectPitch_; }
     void setMtsCorrectPitch(bool on) { mtsCorrectPitch_ = on; }
+    // (port, issue #40) OPTIONS -> Support MIDI Program Change. MIDI PC 0..127 selects that
+    // program; CC0 names the bank for the next PC, and until one arrives the PC loads from
+    // the bank the edit buffer is on. Of this instance, saved with the plugin's state like
+    // the three below. A new instance starts on; a chunk written by the original or by an
+    // earlier port carries no bit and so starts off, leaving old projects as they were.
+    bool programChangeEnabled() const { return master_->programChangeEnabled(); }
+    void setProgramChangeEnabled(bool on) { master_->setProgramChangeEnabled(on); }
     // (port, issue #52) OPTIONS -> Output gain: the cut of this instance in dB, one of
     // Settings::kOutputCutsDb. Of this instance like the two above, and saved with the
     // plugin's state; a newly created instance starts at the cut last chosen anywhere

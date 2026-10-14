@@ -32,9 +32,11 @@ public:
         uint32_t wParam;
         int32_t lParam;
     };
+    // Copies rather than swaps: a swap would hand the reserved buffer to the editor and
+    // leave the audio thread with an empty one to grow again. clear() keeps the capacity.
     std::vector<EditorMessage> takeEditorMessages() {
-        std::vector<EditorMessage> out;
-        out.swap(editorMessages_);
+        std::vector<EditorMessage> out = editorMessages_;
+        editorMessages_.clear();
         return out;
     }
     void notifyEditor(int32_t a, int32_t b, int32_t c) override {
@@ -67,7 +69,14 @@ protected:
 
 private:
     // Declared before synth_: the engine notifies (notifyEditor) while it is constructed.
-    std::vector<EditorMessage> editorMessages_;
+    // Reserved to the cap notifyEditor enforces, in the initialiser rather than the body
+    // because a program change arriving in run() reaches notifyEditor on the audio thread,
+    // where push_back must not allocate.
+    std::vector<EditorMessage> editorMessages_ = [] {
+        std::vector<EditorMessage> v;
+        v.reserve(64);
+        return v;
+    }();
     mutable std::recursive_mutex mutex_;
     sq8l::SharedLibrary::Handle shared_;
     // (port) MTS-ESP: declared before synth_, which is handed a pointer to its snapshot.

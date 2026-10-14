@@ -187,10 +187,18 @@ bytes verbatim, `DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY`), so the override is recalle
 project in all of them.
 
 The two remaining spare bytes carry the instance's other per-project settings the same way, and
-need no magic because 0 is their default: `0x1d` the MTS-ESP switches (bit 0 enable, bit 1
-correct-pitch, see `tuning.md`) and `0x1e` the output cut in dB (OPTIONS → Output gain, issue
-#52, see `settings.md`). Both are written only when set, so an untouched chunk stays the
-original's bytes, and a chunk without them puts the instance back to off / no cut.
+need no magic because 0 is their default: `0x1d` a bit per switch (bit 0 MTS-ESP enable, bit 1
+correct-pitch, see `tuning.md`; bit 2 respond to MIDI program changes, issue #40) and `0x1e`
+the output cut in dB (OPTIONS → Output gain, issue #52, see `settings.md`). Each is written
+only when set, so an untouched chunk stays the original's bytes, and a chunk without them puts
+the instance back to off / no cut.
+
+Bit 2 is the one whose clear state is **not** the instance's default: a new instance responds
+to program changes, and the bit is written whenever it is on. So the only chunks that read as
+off are those written by the original, by a port older than issue #40, or by an instance the
+user switched off — which is the point, since an old project may have program changes in the
+MIDI going to SQ8L that it has always been free to ignore. A chunk from the original therefore
+still round-trips byte for byte, which is what `test_plugin_vst2.py` checks.
 
 `CSynth_v019` (setChunk) calls `FUN_00460b40(editbuf, data, size)`: size 0x23b: type 2 and
 exact magic required, ring advance, program copied, captureExt, prog := int16 at 0x18,
@@ -202,7 +210,14 @@ bank number is not saved.
 
 ### VST program interface (CSynth, for the plugin integrator)
 
-* numPrograms = 512 (`AudioEffectX(…, 0x200, 0)`), program change MIDI messages are ignored.
+* numPrograms = 512 (`AudioEffectX(…, 0x200, 0)`). The original ignores program change MIDI
+  messages entirely. (port, issue #40) OPTIONS → Support MIDI Program Change: PC 0..127
+  selects that program number, CC0 names the bank for the following program changes and until
+  one arrives the program is loaded from the bank the edit buffer is on. A CC0 naming a bank
+  the library does not have (4..127) makes the program change be ignored rather than clamped,
+  so a multitimbral rig addressing bank 7 cannot land on bank D. The SQ-80 itself had no bank
+  select — 120 programs reached as one flat range, MIDI program numbers 1-40 internal, 41-80
+  cartridge A, 81-120 cartridge B — so there is no hardware precedent to follow here.
 * `setProgram(i)` (CSynth_v011): AudioEffect::setProgram, then unless the +0xb4 flag is set
   (cleared instead) `master FUN_004631f0(i)` -> `selectIndex(i)`.
 * `getProgramName` (CSynth_v013): edit buffer name; `setProgramName` (CSynth_v012):

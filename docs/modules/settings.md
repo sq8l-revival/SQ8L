@@ -64,9 +64,9 @@ master fields.
 
 A section the original does not read or write, so an ini shared with it round-trips: the
 original leaves these keys alone. Everything that belongs to a *project* rather than to the
-user is deliberately not here — the polyphony override and the MTS-ESP switches travel in the
-plugin's own state (`Synth::getChunk`) so that two instances can differ and a project recalls
-them.
+user is deliberately not here — the polyphony override, the MTS-ESP switches and the program
+change switch (issue #40) travel in the plugin's own state (`Synth::getChunk`) so that two
+instances can differ and a project recalls them.
 
 | ini key | default | meaning |
 |---|---|---|

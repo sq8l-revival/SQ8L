@@ -50,7 +50,8 @@ code and verified against the original plugin running inside an x86 emulator.
   the **VOICES** parameter on the EMU page (see below), and these OPTIONS items: *Output gain*
   (see below), *Polyphony* (see below), *Down arrow -> next program* (the original's hidden
   `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by default, like the
-  original), *MTS-ESP* (see below) and *Zoom* (see below). OPTIONS is also regrouped: *Output
+  original), *Support MIDI Program Change* (see below), *MTS-ESP* (see below) and *Zoom*
+  (see below). OPTIONS is also regrouped: *Output
   gain* leads, then *Polyphony*, and the original's mouse-restore submenu and its separate
   *Right click on display -> scroll page* item are now one *Mouse* submenu.
 - **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
@@ -69,6 +70,19 @@ code and verified against the original plugin running inside an x86 emulator.
   and glide keep the original's stepping either way. Both switches belong to the instance:
   they are saved with it in your project, not globally, so two instances can differ and a
   project recalls what it was set to.
+- **Program changes:** the original ignores them; OPTIONS → *Support MIDI Program Change*
+  makes a program change select a sound. A program change picks that program number, and CC0
+  (bank select) picks the bank A-D for the program changes that follow — until a CC0 arrives,
+  a program change loads from whichever bank the editor is showing, and a CC0 naming a bank
+  that does not exist makes the program change be ignored rather than snap to bank D. Both are
+  received on any MIDI channel, like notes. The switch belongs to the instance and is saved
+  with it in your project: a new instance responds, while a project saved by the original or
+  by an earlier version of this port keeps ignoring program changes, so nothing you already
+  have changes sound. Note that a program change replaces the edit buffer, so unsaved edits
+  to the current sound are lost — the same as picking another program in the editor, which can
+  at least ask first. The SQ-80 had no bank select at all: its 120 sounds were one flat range
+  of program numbers (1-40 internal, 41-80 and 81-120 the two cartridge banks), which does not
+  reach 512.
 - **Output gain:** most soundbanks were written far louder than a modern project wants, so
   OPTIONS → *Output gain* cuts the instance's output by 6, 12, 18 or 24 dB (no cut by
   default). Each step is a halving, which only shifts the exponent of every sample: the sound

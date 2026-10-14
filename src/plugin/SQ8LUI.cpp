@@ -115,6 +115,10 @@ public:
     void setMtsEnabled(bool on) override { p_.synth().setMtsEnabled(on); }
     bool mtsCorrectPitch() override { return p_.synth().mtsCorrectPitch(); }
     void setMtsCorrectPitch(bool on) override { p_.synth().setMtsCorrectPitch(on); }
+    // OPTIONS -> Support MIDI Program Change (issue #40). Per instance and in the chunk,
+    // like the MTS-ESP switches above.
+    bool programChangeEnabled() override { return p_.synth().programChangeEnabled(); }
+    void setProgramChangeEnabled(bool on) override { p_.synth().setProgramChangeEnabled(on); }
     // The scale name of the connected master, refreshed per audio block.
     std::string mtsScaleName() override { return p_.mtsScaleName(); }
 

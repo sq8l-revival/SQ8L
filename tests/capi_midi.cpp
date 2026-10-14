@@ -13,6 +13,8 @@ struct Recorder : sq8l::MidiListener {
     void midiNoteOn(uint8_t ch, uint8_t key, uint8_t vel) override { log.insert(log.end(), {tick, 1, ch, key, vel, 0}); }
     void midiControl(uint8_t ch, uint8_t d1, int16_t v, int16_t c) override { log.insert(log.end(), {tick, 8, ch, d1, v, c}); }
     void midiReset(int16_t v) override { log.insert(log.end(), {tick, 0x40, v, 0, 0, 0}); }
+    // (port, issue #40)
+    void midiProgramChange(uint8_t ch, uint8_t p) override { log.insert(log.end(), {tick, 0x10, ch, p, 0, 0}); }
 };
 struct Box {
     Recorder rec;
@@ -21,6 +23,11 @@ struct Box {
 }  // namespace
 
 SQ8L_API void* sq8l_midi_new() { return new Box; }
+
+// (port, issue #40) Off is the original: 0xC0 never becomes a record.
+SQ8L_API void sq8l_midi_set_program_change(void* b, int32_t on) {
+    static_cast<Box*>(b)->parser.setProgramChangeEnabled(on != 0);
+}
 SQ8L_API void sq8l_midi_free(void* b) { delete static_cast<Box*>(b); }
 
 SQ8L_API void sq8l_midi_process_events(void* b, const sq8l::RawMidiEvent* ev, int32_t n) {

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include "FilterSQ.h"
 #include "MidiParser.h"
@@ -103,6 +104,16 @@ public:
     void midiNoteOn(uint8_t channel, uint8_t key, uint8_t velocity) override;  // LAB_00463388
     void midiControl(uint8_t channel, uint8_t data1, int16_t value, int16_t ctrl) override;  // FUN_00463714
     void midiReset(int16_t value) override;           // LAB_00463380 -> FUN_00462174
+    void midiProgramChange(uint8_t channel, uint8_t program) override;  // (port, issue #40)
+
+    // (port, issue #40) Respond to program change messages. Off is the original: the parser
+    // drops 0xC0 and nothing below is reached. Of the instance, so the owner sets it.
+    void setProgramChangeEnabled(bool on) { parser_.setProgramChangeEnabled(on); }
+    bool programChangeEnabled() const { return parser_.programChangeEnabled(); }
+    // Called from the parser dispatch with the program 0..127 and the last CC0 value, -1 if
+    // none arrived. The owner holds the edit buffer and the library, so it resolves the bank
+    // and does the load; the ring in the edit buffer keeps sounding voices valid across it.
+    std::function<void(int program, int bankSelect)> onProgramChange;
 
     const Voice& voice(int i) const { return voices_[i]; }
     const FilterSQ& filter(int voice, int i) const { return filters_[voice][i]; }
@@ -212,6 +223,9 @@ private:
     int16_t pitchBend_ = 0;                           // +0x12040 raw -8192..8191
     const Tuning* tuning_ = nullptr;                  // (port) MTS-ESP snapshot, not owned
     uint8_t inProcess_ = 0;                           // +0x12050
+    // (port, issue #40) Last CC0 received, -1 until one is. ctrl_ cannot stand in for it:
+    // its 0 is both "bank A" and "nothing arrived yet", and those must differ.
+    int32_t bankSelect_ = -1;
 };
 
 }  // namespace sq8l

@@ -56,9 +56,7 @@ def cell_xy(col, row):
 NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
-# The "Mouse" submenu's children, which do keep their order (the parent is found by caption).
-# 0 restore after menus, 1 hide cursor, 2 line, 3 natural scrolling, 4 line, 5 display scroll.
-MOUSE_HIDE_CURSOR, MOUSE_NATURAL = 1, 3
+HIDE_CURSOR, NATURAL_SCROLL = "Hide cursor when editing", "Natural scrolling"
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -76,6 +74,16 @@ def opt_index(opts, caption):
         if text(it) == caption:
             return i
     raise AssertionError(f"OPTIONS has no {caption!r}: {[text(i) for i in opts]}")
+
+
+def sub_index(item, caption):
+    """The position of a submenu child by caption, for the same reason as opt_index: the
+    menus are expected to keep changing, so nothing here is driven by a fixed position."""
+    kids = item.get("sub", [])
+    for i, it in enumerate(kids):
+        if text(it) == caption:
+            return i
+    raise AssertionError(f"{text(item)!r} has no {caption!r}: {[text(i) for i in kids]}")
 
 
 def check(cond, what):
@@ -363,22 +371,18 @@ def main():
               f"override {n or 'set by program'}: {L.sq8l_gl_poly_override(ed.v)}, menu checked")
 
     # 4b. OPTIONS -> Output gain: the cut of this instance (issue #52), which also goes to
-    # SQ8L.ini (port[2]) as the cut a newly created instance starts at. Item 1 is a separator.
-    sub = ed.menu(OPTIONS)[OPT_GAIN]["sub"]
-    caps = [text(i) for i in sub if not i.get("separator")]
-    check(caps == ["0 dB   (no cut)", "-6 dB", "-12 dB", "-18 dB", "-24 dB"],
-          f"the cuts on offer: {caps}")
-    for k, n in ((2, 6), (3, 12), (4, 18), (5, 24), (0, 0)):
-        ed.choose([OPT_GAIN, k])
+    # SQ8L.ini (port[2]) as the cut a newly created instance starts at. The cut is what is
+    # checked, not the submenu's captions or their order.
+    for cap, n in (("-6 dB", 6), ("-12 dB", 12), ("-18 dB", 18), ("-24 dB", 24), ("0 dB", 0)):
+        gain = ed.menu(OPTIONS)[OPT_GAIN]
+        ed.choose([OPT_GAIN, sub_index(gain, cap)])
         ed.click(OPTIONS)
         ed.events()
-        sub = ed.menu(OPTIONS)[OPT_GAIN]["sub"]
-        checked = [i["checked"] for i in sub if not i.get("separator")]
-        want = [(j if j == 0 else j + 1) == k for j in range(5)]
+        ticked = [text(i) for i in ed.menu(OPTIONS)[OPT_GAIN].get("sub", []) if i["checked"]]
         check(L.sq8l_gl_output_cut(ed.v) == n and L.sq8l_gl_port_setting(ed.v, 2) == n
-              and checked == want,
+              and ticked == [cap],
               f"cut {n} dB: instance {L.sq8l_gl_output_cut(ed.v)}, ini "
-              f"{L.sq8l_gl_port_setting(ed.v, 2)}, menu checked")
+              f"{L.sq8l_gl_port_setting(ed.v, 2)}, ticked {ticked}")
 
     # 5. EMU -> VOICES: the playable voices of the program itself
     EMU_PAGE, EMU_SUB, VOICES = 17, 1, 5
@@ -491,9 +495,8 @@ def main():
     ed = Editor(L)
     OPT_MOUSE = opt_index(ed.menu(OPTIONS), "Mouse")
     mouse = ed.menu(OPTIONS)[OPT_MOUSE]
-    check([text(i) for i in mouse.get("sub", [])][MOUSE_HIDE_CURSOR] == "Hide cursor when editing",
-          f"OPTIONS '{text(mouse)}' holds the option where the knob restore used to be")
-    check(mouse["sub"][MOUSE_HIDE_CURSOR]["checked"], "'Hide cursor when editing' is on by default")
+    MOUSE_HIDE_CURSOR = sub_index(mouse, HIDE_CURSOR)
+    check(mouse["sub"][MOUSE_HIDE_CURSOR]["checked"], f"'{HIDE_CURSOR}' is on by default")
     L.sq8l_gl_ctr(ed.v, 0, 0, 0)
     ed.idle()
     # a slot that really is a knob: a two-state parameter shows a soft button instead and is
@@ -744,8 +747,7 @@ def main():
     opts = ed.menu(OPTIONS)
     OPT_MOUSE = opt_index(opts, "Mouse")
     mouse = opts[OPT_MOUSE]
-    check([text(i) for i in mouse.get("sub", [])][MOUSE_NATURAL] == "Natural scrolling",
-          f"OPTIONS '{text(mouse)}' holds 'Natural scrolling'")
+    MOUSE_NATURAL = sub_index(mouse, NATURAL_SCROLL)
     check(not mouse["sub"][MOUSE_NATURAL]["checked"], "off by default, so the wheel keeps working as it did")
     ed.choose([OPT_MOUSE, MOUSE_NATURAL])
     ed.click(OPTIONS)

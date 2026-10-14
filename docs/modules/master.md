@@ -164,7 +164,18 @@ products; 0 when both factors are 0. MAT2 sees the new MAT1, MAT1 the old MAT2/3
   (program[0x174]) it fades in (FUN_00462f18), copies filter/amp state and continues the
   envelopes unless ENV restart (program[0x175]).
 * **midiControl** FUN_00463714: CC123 kills every active voice immediately; pitch bend is
-  stored raw and as /64; poly pressure per key; then the controller table.
+  stored raw and as /64; poly pressure per key; then the controller table. (port, issue #40)
+  CC0 is also latched as the bank for the next program change, in `bankSelect_` rather than
+  read back out of `ctrl_`, whose 0 is both "bank A" and "nothing has arrived yet". It still
+  goes into the controller table, so CC0 keeps working as a modulation source.
+* **midiProgramChange** (port, issue #40): no original. The parser only makes a record for
+  0xC0 when `setProgramChangeEnabled(true)` has been called — off, 0xC0 is dropped at parse
+  time exactly as the original drops it, so the record stream stays identical and the
+  differential test compares unchanged. On, the record dispatches at its own sample like any
+  other, and the master hands the program and the latched CC0 to `onProgramChange`; the owner
+  (`Synth`) resolves the bank and loads through the edit buffer, whose ring and
+  kill/release of the slot being reused are what make a mid-block switch safe. The channel is
+  ignored, like note on. See `library.md` for the switch's place in the chunk.
 * **setSampleRate** FUN_00462214, **setControlRate** FUN_00462380, **setVoices**
   FUN_00463358/FUN_004632e4, **reset** FUN_00462174/FUN_00462570: see source.
 * **muffle**: high shelf (treble cut), A = 10^(-1/8), w = 19521.857/sr (2π·3107 Hz),

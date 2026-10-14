@@ -15,10 +15,15 @@ constexpr float kControlRate = 83.592575f;  // 0x42a72f66, rate of LFOs/envelope
 constexpr size_t kChunkPolyMarker = 0x1b;
 constexpr size_t kChunkPolyVoices = 0x1c;
 constexpr uint8_t kChunkPolyMagic = 'V';
-// (port) OPTIONS -> MTS-ESP, in a third spare header byte. No marker is needed: the original
-// writes 0 there, and 0 means both switches off, which is their default.
-constexpr size_t kChunkMts = 0x1d;
+// (port) Switches of the instance, one bit each, in a third spare header byte. No marker is
+// needed: the original writes 0 there, and a clear bit is the switch off.
+constexpr size_t kChunkFlags = 0x1d;
 constexpr uint8_t kChunkMtsEnabled = 1, kChunkMtsCorrectPitch = 2;
+// (port, issue #40) OPTIONS -> Support MIDI Program Change. Unlike the two above, a clear bit
+// is not this instance's default: a new instance responds. The bit is written whenever it is
+// on, so only a chunk from the original or from an earlier port reads as off, which is the
+// point - an old project keeps ignoring the program changes in its MIDI.
+constexpr uint8_t kChunkProgramChange = 4;
 // (port, issue #52) OPTIONS -> Output gain, in the last spare header byte, as the cut in dB.
 // No marker is needed either: the original writes 0 there, and 0 dB means no cut.
 constexpr size_t kChunkOutputCut = 0x1e;
@@ -78,6 +83,18 @@ Synth::Synth(float sampleRate, SoundLibrary* library, const Settings* settings, 
         syncProgram();
         master_->editBufferEvent(static_cast<int32_t>(e), slot ? slot->bytes : nullptr);
     };
+    // (port, issue #40) A program change loads through the edit buffer, exactly as the
+    // editor's own program selection does, so the ring and the kill/release of the slot
+    // being reused apply unchanged. Called from the parser dispatch, mid-block.
+    master_->onProgramChange = [this](int program, int bankSelect) {
+        int bank = -1;  // until a CC0 arrives: the bank the edit buffer is on
+        if (bankSelect >= 0) {
+            if (bankSelect >= SoundLibrary::kNumBanks) return;  // a bank there is no library for
+            bank = bankSelect;
+        }
+        edit_->selectProgram(program, bank);
+    };
+    master_->setProgramChangeEnabled(true);
     syncProgram();
     // End of the master constructor: select program A000 (FUN_00460db8(editbuf, 0, -1)).
     edit_->selectProgram(0, -1);
@@ -132,11 +149,12 @@ std::vector<uint8_t> Synth::getChunk() {
         chunk[kChunkPolyMarker] = kChunkPolyMagic;
         chunk[kChunkPolyVoices] = static_cast<uint8_t>(ovr);
     }
-    // (port) The MTS-ESP switches, for the same reason. Both off writes nothing, so a chunk
-    // without them stays byte-identical to the original's.
-    const uint8_t mts = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
-                                             (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0));
-    if (mts != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkMts] = mts;
+    // (port) The switch bits, for the same reason. All off writes nothing, so a chunk whose
+    // instance only ever ignored program changes stays byte-identical to the original's.
+    const uint8_t flags = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
+                                               (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0) |
+                                               (programChangeEnabled() ? kChunkProgramChange : 0));
+    if (flags != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkFlags] = flags;
     // (port) The output cut, for the same reason. No cut writes nothing, so a chunk without
     // one stays byte-identical to the original's.
     if (outputCut_ > 0 && chunk.size() == EditBuffer::kChunkSize)
@@ -158,11 +176,12 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
             if (v >= kMinPlayableVoices && v <= kMaxPlayableVoices) ovr = v;
         }
         master_->setPolyphonyOverride(ovr);
-        // (port) likewise the MTS-ESP switches: a chunk without them puts this instance back
-        // to both off.
-        const uint8_t mts = size == EditBuffer::kChunkSize ? data[kChunkMts] : 0;
-        mtsEnabled_ = (mts & kChunkMtsEnabled) != 0;
-        mtsCorrectPitch_ = (mts & kChunkMtsCorrectPitch) != 0;
+        // (port) likewise the switch bits: a chunk without them puts this instance back to
+        // all off, which for the program changes is the old project's own behaviour.
+        const uint8_t flags = size == EditBuffer::kChunkSize ? data[kChunkFlags] : 0;
+        mtsEnabled_ = (flags & kChunkMtsEnabled) != 0;
+        mtsCorrectPitch_ = (flags & kChunkMtsCorrectPitch) != 0;
+        setProgramChangeEnabled((flags & kChunkProgramChange) != 0);
         // (port) likewise the output cut: a chunk without one, or with a step this build does
         // not know, puts this instance back to no cut.
         const int cut = size == EditBuffer::kChunkSize ? data[kChunkOutputCut] : 0;

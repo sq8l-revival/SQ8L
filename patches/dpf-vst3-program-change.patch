@@ -1,0 +1,474 @@
+VST3: receive MIDI program changes (sq8l-revival/SQ8L#40).
+
+VST3 has no raw MIDI program change event, and DPF's own TODO list says as much
+("== MIDI / - MIDI program changes"). The host converts the message into a change
+on the parameter flagged kIsProgramChange, and only routes it at all if the plugin
+describes a program list through IUnitInfo - which DPF stubs out
+("{v3_unit_info|NOT}"). Its program parameter also had nowhere to go: in process()
+any internal parameter that is not a MIDI CC hits `continue`.
+
+So a VST3 plugin built with DPF could not see a program change at all, while every
+other format receives it as the two bytes it is.
+
+- dpf_unit_info implements IUnitInfo with one root unit owning one program list of
+  the plugin's program count. All constant, so one static instance serves every
+  instance, like dpf_midi_mapping. get_unit_by_bus maps every channel of the event
+  bus to that unit, which is what lets an omni plugin be reached on any channel;
+  left unimplemented, hosts route only channel 1, or nothing. Entries are numbered
+  rather than named: the change reaches the plugin as MIDI, so what it selects is
+  the plugin's business and a name here would promise a mapping the plugin need
+  not honour.
+- The program parameter now names that unit (unit_id 0) instead of keeping
+  whatever the caller passed in, and is queryable on the component as well as the
+  controller, since hosts differ on which they ask.
+- process() turns a change on it into a MIDI program change event, so the plugin
+  sees the same two bytes it gets from VST2, CLAP, AU and LV2 and needs no
+  format-specific path. Only values a program change could have produced (0..127)
+  are converted; above that the parameter behaves exactly as it did.
+
+Event order on one sample is the subtle part, placeSorted appending equal offsets in
+insertion order. Two things follow.
+
+Program changes need a pass of their own rather than a branch in the CC loop,
+because the order a host lists its parameter queues in is its own business - by
+parameter id, in practice. The program parameter's id is below
+kVst3InternalParameterMidiCC_start, so one pass delivers the program change ahead
+of the bank select sent with it on the same timestamp, and since bank select is
+defined as a prefix to the program change, the program would load from the previous
+bank.
+
+Note events are now collected last instead of first. Sequencers emit a tick's
+controllers, program change and bend ahead of its notes, because a note at that
+tick is meant to sound with the patch and the controller values the tick sets up;
+MIDI being a byte stream, it has no same-tick rule of its own to appeal to, and the
+other four formats simply inherit the host's serial order. Collected first, as DPF
+had it, a program change landed after the note it was meant to precede and the note
+sounded with the previous program - and a CC landed after a note that should have
+read it. The cost is that a block of over kMaxMidiEvents events now drops notes
+rather than controllers; at 512 per block that needs a pathological stream, and the
+alternative is worse in every ordinary one.
+
+diff --git a/distrho/src/DistrhoPluginVST3.cpp b/distrho/src/DistrhoPluginVST3.cpp
+index 7295c892..321f084e 100644
+--- a/distrho/src/DistrhoPluginVST3.cpp
++++ b/distrho/src/DistrhoPluginVST3.cpp
+@@ -53,6 +53,7 @@
+ #include "travesty/edit_controller.h"
+ #include "travesty/factory.h"
+ #include "travesty/host.h"
++#include "travesty/unit.h"
+ 
+ #include <map>
+ #include <string>
+@@ -125,7 +126,7 @@ const char* tuid2str(const v3_tuid iid)
+         { V3_ID(0x6C389611,0xD391455D,0xB870B833,0x94A0EFDD), "{v3_unit_data|NOT}" },
+         { V3_ID(0x4B5147F8,0x4654486B,0x8DAB30BA,0x163A3C56), "{v3_unit_handler|NOT}" },
+         { V3_ID(0xF89F8CDF,0x699E4BA5,0x96AAC9A4,0x81452B01), "{v3_unit_handler2|NOT}" },
+-        { V3_ID(0x3D4BD6B5,0x913A4FD2,0xA886E768,0xA5EB92C1), "{v3_unit_info|NOT}" },
++        { V3_ID(0x3D4BD6B5,0x913A4FD2,0xA886E768,0xA5EB92C1), "{v3_unit_info}" },
+         // misc
+         { V3_ID(0x309ECE78,0xEB7D4FAE,0x8B2225D9,0x09FD08B6), "{v3_audio_presentation_latency|NOT}" },
+         { V3_ID(0xB4E8287F,0x1BB346AA,0x83A46667,0x68937BAB), "{v3_automation_state|NOT}" },
+@@ -254,6 +255,14 @@ v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, void* instan
+ 
+ // --------------------------------------------------------------------------------------------------------------------
+ 
++#if DISTRHO_PLUGIN_WANT_PROGRAMS
++// (SQ8L) The program list dpf_unit_info describes, so that hosts route MIDI program changes.
++// The count is the plugin's own program count: the same for every instance of a plugin, which
++// is why one value can serve a static singleton. Set by the PluginVst3 constructor.
++static constexpr int32_t kDpfProgramListId = 1;
++static uint32_t gDpfProgramListCount = 0;
++#endif
++
+ /**
+  * VST3 DSP class.
+  *
+@@ -310,6 +319,7 @@ class PluginVst3
+             CC_Normal,
+             CC_ChannelPressure,
+             CC_Pitchbend,
++            ProgramChange, // (SQ8L) from the program-change parameter, see appendProgramChange
+             UI_MIDI // event from UI
+         };
+         struct InputEventStorage {
+@@ -398,6 +408,14 @@ class PluginVst3
+                     midiEvent.data[1] = eventStorage.midi[1];
+                     midiEvent.data[2] = eventStorage.midi[2];
+                     break;
++                // (SQ8L) VST3 has no raw program change event; the host turns the MIDI
++                // message into a change on the program-change parameter instead.
++                case ProgramChange:
++                    midiEvent.size = 2;
++                    midiEvent.data[0] = 0xC0 | (eventStorage.midi[0] & 0xf);
++                    midiEvent.data[1] = eventStorage.midi[1];
++                    midiEvent.data[2] = 0;
++                    break;
+                 case UI_MIDI:
+                     midiEvent.size = 3;
+                     midiEvent.data[0] = eventStorage.midi[0];
+@@ -492,6 +510,23 @@ class PluginVst3
+             return placeSorted(sampleOffset);
+         }
+ 
++        // (SQ8L) A MIDI program change, rebuilt from the program-change parameter. The
++        // channel is gone by the time VST3 hands it over, so it is reported as 0.
++        bool appendProgramChange(const int32_t sampleOffset, const uint8_t program) noexcept
++        {
++            InputEventStorage& eventStorage(eventListStorage[numUsed]);
++
++            eventStorage.type = ProgramChange;
++            eventStorage.midi[0] = 0;
++            eventStorage.midi[1] = program;
++            eventStorage.midi[2] = 0;
++
++            eventList[numUsed].sampleOffset = sampleOffset;
++            eventList[numUsed].storage = &eventStorage;
++
++            return placeSorted(sampleOffset);
++        }
++
+        #if DISTRHO_PLUGIN_HAS_UI
+         // NOTE always runs first
+         bool appendFromUI(const uint8_t midiData[3])
+@@ -619,6 +654,10 @@ public:
+         DISTRHO_SAFE_ASSERT(isComponent);
+        #endif
+ 
++       #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        gDpfProgramListCount = fProgramCountMinusOne + 1;  // (SQ8L) see dpf_unit_info
++       #endif
++
+        #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+         std::memset(fEnabledInputs, 0, sizeof(fEnabledInputs));
+         fillInBusInfoDetails<true>();
+@@ -1535,24 +1574,6 @@ public:
+         }
+        #endif
+ 
+-        if (canAppendMoreEvents)
+-        {
+-            if (v3_event_list** const eventptr = data->input_events)
+-            {
+-                v3_event event;
+-                for (uint32_t i = 0, count = v3_cpp_obj(eventptr)->get_event_count(eventptr); i < count; ++i)
+-                {
+-                    if (v3_cpp_obj(eventptr)->get_event(eventptr, i, &event) != V3_OK)
+-                        break;
+-
+-                    if (inputEventList.appendEvent(event))
+-                    {
+-                        canAppendMoreEvents = false;
+-                        break;
+-                    }
+-                }
+-            }
+-        }
+       #endif
+ 
+         if (v3_param_changes** const inparamsptr = data->input_params)
+@@ -1607,7 +1628,88 @@ public:
+             }
+         }
+ 
++      #if DISTRHO_PLUGIN_WANT_MIDI_INPUT && DISTRHO_PLUGIN_WANT_PROGRAMS
++        /* (SQ8L) The order events are collected in is the order they take on one sample,
++         * placeSorted appending equal offsets in insertion order: controllers, then program
++         * changes, then notes (below). That is what a sequencer emits for a tick.
++         *
++         * Program changes need their own pass rather than a branch in the loop above,
++         * because the order a host lists its parameter queues in is its own business. By
++         * parameter id - what hosts do in practice - the program change comes first, the
++         * program parameter's id being below kVst3InternalParameterMidiCC_start. That would
++         * put it ahead of the bank select sent with it on the same timestamp, and bank
++         * select is defined as a prefix to the program change, so the program would load
++         * from the previous bank.
++         */
++        if (v3_param_changes** const inparamsptr = data->input_params)
++        {
++            int32_t offset;
++            double normalized;
++
++            for (int32_t i = 0, count = v3_cpp_obj(inparamsptr)->get_param_count(inparamsptr);
++                 canAppendMoreEvents && i < count; ++i)
++            {
++                v3_param_value_queue** const queue = v3_cpp_obj(inparamsptr)->get_param_data(inparamsptr, i);
++                if (queue == nullptr)
++                    break;
++
++                if (v3_cpp_obj(queue)->get_param_id(queue) != kVst3InternalParameterProgram)
++                    continue;
++
++                for (int32_t j = 0, pcount = v3_cpp_obj(queue)->get_point_count(queue); j < pcount; ++j)
++                {
++                    if (v3_cpp_obj(queue)->get_point(queue, j, &offset, &normalized) != V3_OK)
++                        break;
++
++                    // Only a value a MIDI program change could have produced is treated as
++                    // one. Anything above can only come from automation of this hidden
++                    // parameter, which is left alone exactly as it was before.
++                    const int32_t program = d_roundToIntPositive(normalized * fProgramCountMinusOne);
++                    if (program < 0 || program > 127)
++                        continue;
++
++                    if (inputEventList.appendProgramChange(offset, static_cast<uint8_t>(program)))
++                    {
++                        canAppendMoreEvents = false;
++                        break;
++                    }
++                }
++            }
++        }
++      #endif
++
+        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
++        /* (SQ8L) Note events are collected last, so that everything arriving on the same
++         * sample as a note is in before it: placeSorted appends equal offsets in insertion
++         * order. Sequencers emit a tick's controllers, program change and bend ahead of its
++         * notes for exactly this reason - a note at that tick is meant to sound with the
++         * patch and the controller values the tick sets up. Collected first, as DPF had it,
++         * a program change landed after the note it was meant to precede, and the note
++         * sounded with the previous program.
++         *
++         * The cost is that a block of more than kMaxMidiEvents events now drops notes
++         * rather than controllers. At 512 per block that needs a pathological stream, and
++         * the alternative is worse in every ordinary one.
++         */
++        if (canAppendMoreEvents)
++        {
++            if (v3_event_list** const eventptr = data->input_events)
++            {
++                v3_event event;
++                for (uint32_t i = 0, count = v3_cpp_obj(eventptr)->get_event_count(eventptr); i < count; ++i)
++                {
++                    if (v3_cpp_obj(eventptr)->get_event(eventptr, i, &event) != V3_OK)
++                        break;
++
++                    if (inputEventList.appendEvent(event))
++                    {
++                        canAppendMoreEvents = false;
++                        break;
++                    }
++                }
++            }
++        }
++
+         const uint32_t midiEventCount = inputEventList.convert(fMidiEvents);
+         fPlugin.run(inputs, outputs, data->nframes, fMidiEvents, midiEventCount);
+        #else
+@@ -1708,6 +1810,10 @@ public:
+         case kVst3InternalParameterProgram:
+             info->flags = V3_PARAM_CAN_AUTOMATE | V3_PARAM_IS_LIST | V3_PARAM_PROGRAM_CHANGE | V3_PARAM_IS_HIDDEN;
+             info->step_count = fProgramCountMinusOne;
++            // (SQ8L) The root unit declared by dpf_unit_info. A host routes MIDI program
++            // changes to the program-change parameter of a unit that owns a program list,
++            // so this must name one and not be left to whatever the caller passed in.
++            info->unit_id = 0;
+             strncpy_utf16(info->title, "Current Program", 128);
+             strncpy_utf16(info->short_title, "Program", 128);
+             return V3_OK;
+@@ -3434,6 +3540,157 @@ struct dpf_midi_mapping : v3_midi_mapping_cpp {
+ };
+ #endif // DISTRHO_PLUGIN_WANT_MIDI_INPUT
+ 
++// --------------------------------------------------------------------------------------------------------------------
++// dpf_unit_info (SQ8L)
++
++#if DISTRHO_PLUGIN_WANT_PROGRAMS
++/* A host only routes MIDI program changes to a plugin that describes a program list, which
++ * means IUnitInfo: it converts the message into a change on the program-change parameter of
++ * the unit owning that list. One root unit owning one list is all a monotimbral plugin needs,
++ * and it is entirely constant, so a static instance serves every plugin instance.
++ */
++struct dpf_unit_info : v3_unit_information_cpp {
++    dpf_unit_info()
++    {
++        // v3_funknown, static
++        query_interface = query_interface_unit_info;
++        ref = dpf_static_ref;
++        unref = dpf_static_unref;
++
++        // v3_unit_information
++        unit.get_unit_count = get_unit_count;
++        unit.get_unit_info = get_unit_info;
++        unit.get_program_list_count = get_program_list_count;
++        unit.get_program_list_info = get_program_list_info;
++        unit.get_program_name = get_program_name;
++        unit.get_program_info = get_program_info;
++        unit.has_program_pitch_names = has_program_pitch_names;
++        unit.get_program_pitch_name = get_program_pitch_name;
++        unit.get_selected_unit = get_selected_unit;
++        unit.select_unit = select_unit;
++        unit.get_unit_by_bus = get_unit_by_bus;
++        unit.set_unit_program_data = set_unit_program_data;
++    }
++
++    // ----------------------------------------------------------------------------------------------------------------
++    // v3_funknown
++
++    static v3_result V3_API query_interface_unit_info(void* const self, const v3_tuid iid, void** const iface)
++    {
++        if (v3_tuid_match(iid, v3_funknown_iid) ||
++            v3_tuid_match(iid, v3_unit_information_iid))
++        {
++            d_debug("query_interface_unit_info => %p %s %p | OK", self, tuid2str(iid), iface);
++            *iface = self;
++            return V3_OK;
++        }
++
++        d_debug("query_interface_unit_info => %p %s %p | WARNING UNSUPPORTED", self, tuid2str(iid), iface);
++
++        *iface = nullptr;
++        return V3_NO_INTERFACE;
++    }
++
++    // ----------------------------------------------------------------------------------------------------------------
++    // v3_unit_information
++
++    static int32_t V3_API get_unit_count(void*)
++    {
++        return 1;
++    }
++
++    static v3_result V3_API get_unit_info(void*, const int32_t unit_idx, v3_unit_info* const info)
++    {
++        DISTRHO_SAFE_ASSERT_RETURN(info != nullptr, V3_INVALID_ARG);
++        DISTRHO_SAFE_ASSERT_INT_RETURN(unit_idx == 0, unit_idx, V3_INVALID_ARG);
++
++        std::memset(info, 0, sizeof(*info));
++        info->id = 0;
++        info->parent_unit_id = -1;
++        info->program_list_id = kDpfProgramListId;
++        strncpy_utf16(info->name, "Root", 128);
++        return V3_OK;
++    }
++
++    static int32_t V3_API get_program_list_count(void*)
++    {
++        return 1;
++    }
++
++    static v3_result V3_API get_program_list_info(void*, const int32_t list_idx, v3_program_list_info* const info)
++    {
++        DISTRHO_SAFE_ASSERT_RETURN(info != nullptr, V3_INVALID_ARG);
++        DISTRHO_SAFE_ASSERT_INT_RETURN(list_idx == 0, list_idx, V3_INVALID_ARG);
++
++        std::memset(info, 0, sizeof(*info));
++        info->id = kDpfProgramListId;
++        info->programCount = static_cast<int32_t>(gDpfProgramListCount);
++        strncpy_utf16(info->name, "Programs", 128);
++        return V3_OK;
++    }
++
++    /* Numbered, not named. A program change is delivered to the plugin as MIDI, so what it
++     * selects is the plugin's business; naming the entries here would promise the host a
++     * mapping that the plugin does not have to honour.
++     */
++    static v3_result V3_API get_program_name(void*, const int32_t list_id, const int32_t program_idx, v3_str_128 name)
++    {
++        DISTRHO_SAFE_ASSERT_INT_RETURN(list_id == kDpfProgramListId, list_id, V3_INVALID_ARG);
++        DISTRHO_SAFE_ASSERT_INT_RETURN(program_idx >= 0, program_idx, V3_INVALID_ARG);
++        DISTRHO_SAFE_ASSERT_UINT_RETURN(static_cast<uint32_t>(program_idx) < gDpfProgramListCount, program_idx, V3_INVALID_ARG);
++
++        char buf[24];
++        std::snprintf(buf, sizeof(buf), "Program %03d", program_idx);
++        strncpy_utf16(name, buf, 128);
++        return V3_OK;
++    }
++
++    static v3_result V3_API get_program_info(void*, int32_t, int32_t, const char*, v3_str_128)
++    {
++        return V3_NOT_IMPLEMENTED;
++    }
++
++    static v3_result V3_API has_program_pitch_names(void*, int32_t, int32_t)
++    {
++        return V3_FALSE;
++    }
++
++    static v3_result V3_API get_program_pitch_name(void*, int32_t, int32_t, int16_t, v3_str_128)
++    {
++        return V3_NOT_IMPLEMENTED;
++    }
++
++    static int32_t V3_API get_selected_unit(void*)
++    {
++        return 0;
++    }
++
++    static v3_result V3_API select_unit(void*, const int32_t unit_id)
++    {
++        return unit_id == 0 ? V3_OK : V3_INVALID_ARG;
++    }
++
++    /* Every channel of the event bus maps to the one unit, which is what makes an omni
++     * plugin receive program changes on any channel. Left unimplemented, a host is free to
++     * route only channel 1 - or nothing at all.
++     */
++    static v3_result V3_API get_unit_by_bus(void*, int32_t, int32_t, int32_t, int32_t, int32_t* const unit_id)
++    {
++        DISTRHO_SAFE_ASSERT_RETURN(unit_id != nullptr, V3_INVALID_ARG);
++
++        *unit_id = 0;
++        return V3_OK;
++    }
++
++    static v3_result V3_API set_unit_program_data(void*, int32_t, int32_t, struct v3_bstream**)
++    {
++        return V3_NOT_IMPLEMENTED;
++    }
++
++    DISTRHO_PREVENT_HEAP_ALLOCATION
++};
++#endif // DISTRHO_PLUGIN_WANT_PROGRAMS
++
+ // --------------------------------------------------------------------------------------------------------------------
+ // dpf_edit_controller
+ 
+@@ -3562,6 +3819,23 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+            #endif
+         }
+ 
++        // (SQ8L) see dpf_unit_info: without this a host has no program list to route MIDI
++        // program changes to, and VST3 carries them in no other way.
++        if (v3_tuid_match(iid, v3_unit_information_iid))
++        {
++           #if DISTRHO_PLUGIN_WANT_PROGRAMS
++            d_debug("query_interface_edit_controller => %p %s %p | OK convert static", self, tuid2str(iid), iface);
++            static dpf_unit_info unit_info;
++            static dpf_unit_info* unit_info_ptr = &unit_info;
++            *iface = &unit_info_ptr;
++            return V3_OK;
++           #else
++            d_debug("query_interface_edit_controller => %p %s %p | reject unused", self, tuid2str(iid), iface);
++            *iface = nullptr;
++            return V3_NO_INTERFACE;
++           #endif
++        }
++
+         if (v3_tuid_match(iid, v3_connection_point_iid))
+         {
+            #if DPF_VST3_USES_SEPARATE_CONTROLLER
+@@ -4243,6 +4517,22 @@ struct dpf_component : v3_component_cpp {
+            #endif
+         }
+ 
++        // (SQ8L) queried on the component by some hosts, see dpf_unit_info
++        if (v3_tuid_match(iid, v3_unit_information_iid))
++        {
++           #if DISTRHO_PLUGIN_WANT_PROGRAMS
++            d_debug("query_interface_component => %p %s %p | OK convert static", self, tuid2str(iid), iface);
++            static dpf_unit_info unit_info;
++            static dpf_unit_info* unit_info_ptr = &unit_info;
++            *iface = &unit_info_ptr;
++            return V3_OK;
++           #else
++            d_debug("query_interface_component => %p %s %p | reject unused", self, tuid2str(iid), iface);
++            *iface = nullptr;
++            return V3_NO_INTERFACE;
++           #endif
++        }
++
+         if (v3_tuid_match(iid, v3_audio_processor_iid))
+         {
+             d_debug("query_interface_component => %p %s %p | OK convert %p",

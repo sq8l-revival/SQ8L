@@ -11,6 +11,8 @@ what it adds:
   * OSC "DIR" (program osc byte 0x0b): the wave playback direction of each oscillator, with
     WAVE= shortened to WF= to make room for it, the same label on the OSC1-3 and LFO pages,
     and the LFO field widened to spell the oscillator wave names out (issue #44);
+  * OPTIONS "Output gain": a cut of this instance's output, also kept in SQ8L.ini as the
+    cut a newly created instance starts at (issue #52);
   * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
   * the knobs a display page has no parameter for are marked inactive (drawn faded);
   * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
@@ -263,6 +265,7 @@ def main():
         ("sq8l_gl_settings", [vp, ctypes.POINTER(ctypes.c_int32)], None),
         ("sq8l_gl_port_setting", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_poly_override", [vp], ctypes.c_int32),
+        ("sq8l_gl_output_cut", [vp], ctypes.c_int32),
         ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_toggle_shown", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_wheel", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_double, ctypes.c_int32], None),
@@ -281,6 +284,7 @@ def main():
     # The OPTIONS menu is not tested: its layout and state are left to inspection. The items
     # are located by caption only so the setting checks below can click them.
     opts = ed.menu(OPTIONS)
+    OPT_GAIN = opt_index(opts, "Output gain")
     OPT_POLY = opt_index(opts, "Polyphony")
     OPT_SWAP = opt_index(opts, "Down arrow loads next program")
     OPT_CONFIRM = opt_index(opts, "Ask before loading banks/libraries")
@@ -357,6 +361,24 @@ def main():
         want = [(j if j == 0 else j + 1) == k for j in range(11)]
         check(L.sq8l_gl_poly_override(ed.v) == n and checked == want,
               f"override {n or 'set by program'}: {L.sq8l_gl_poly_override(ed.v)}, menu checked")
+
+    # 4b. OPTIONS -> Output gain: the cut of this instance (issue #52), which also goes to
+    # SQ8L.ini (port[2]) as the cut a newly created instance starts at. Item 1 is a separator.
+    sub = ed.menu(OPTIONS)[OPT_GAIN]["sub"]
+    caps = [text(i) for i in sub if not i.get("separator")]
+    check(caps == ["0 dB   (no cut)", "-6 dB", "-12 dB", "-18 dB", "-24 dB"],
+          f"the cuts on offer: {caps}")
+    for k, n in ((2, 6), (3, 12), (4, 18), (5, 24), (0, 0)):
+        ed.choose([OPT_GAIN, k])
+        ed.click(OPTIONS)
+        ed.events()
+        sub = ed.menu(OPTIONS)[OPT_GAIN]["sub"]
+        checked = [i["checked"] for i in sub if not i.get("separator")]
+        want = [(j if j == 0 else j + 1) == k for j in range(5)]
+        check(L.sq8l_gl_output_cut(ed.v) == n and L.sq8l_gl_port_setting(ed.v, 2) == n
+              and checked == want,
+              f"cut {n} dB: instance {L.sq8l_gl_output_cut(ed.v)}, ini "
+              f"{L.sq8l_gl_port_setting(ed.v, 2)}, menu checked")
 
     # 5. EMU -> VOICES: the playable voices of the program itself
     EMU_PAGE, EMU_SUB, VOICES = 17, 1, 5

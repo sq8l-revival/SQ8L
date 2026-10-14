@@ -173,7 +173,7 @@ FUN_00461fb8(0,0) + FUN_00461fd8(2,1,0)), 1 -> FUN_00461fb8(0,0), 2/3 -> FUN_004
 | 0x04 | ShortString "\x09SQ8L.EDIT" (10 bytes), then zeros |
 | 0x18 | int16 current program number (+0xb74) |
 | 0x1a | modified flag (0/1) |
-| 0x1b..0x1e | 0 (the port uses 0x1b/0x1c, below) |
+| 0x1b..0x1e | 0 (the port uses all four, below) |
 | 0x1f | the 540-byte program (after applyExt) |
 
 **Port addition.** `Synth::getChunk` writes the instance's playable voices (OPTIONS →
@@ -185,6 +185,12 @@ two bytes; `Synth::setChunk` reads them back and puts an instance whose chunk ha
 "set by the program". The chunk is what every plugin format saves (the VST2 chunk is these
 bytes verbatim, `DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY`), so the override is recalled with a
 project in all of them.
+
+The two remaining spare bytes carry the instance's other per-project settings the same way, and
+need no magic because 0 is their default: `0x1d` the MTS-ESP switches (bit 0 enable, bit 1
+correct-pitch, see `tuning.md`) and `0x1e` the output cut in dB (OPTIONS → Output gain, issue
+#52, see `settings.md`). Both are written only when set, so an untouched chunk stays the
+original's bytes, and a chunk without them puts the instance back to off / no cut.
 
 `CSynth_v019` (setChunk) calls `FUN_00460b40(editbuf, data, size)`: size 0x23b: type 2 and
 exact magic required, ring advance, program copied, captureExt, prog := int16 at 0x18,

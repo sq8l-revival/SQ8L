@@ -76,6 +76,11 @@ public:
     int32_t polyphonyOverride() const { return polyOverride_; }
     // (port) The voices notes are allocated from now: numPlay_ without the port layout.
     int32_t effectivePlayableVoices() const;
+    // (port) Per-instance cut of the output (OPTIONS -> Output gain), 1 = none. Folded into
+    // the output volume, so the sample loop is the original's, and applied at once: the
+    // steps are whole powers of two, which scale the exponent and nothing else.
+    void setOutputGain(float gain);
+    float outputGain() const { return outputGain_; }
     uint32_t stealCount() const { return stealCount_; }  // (port) see stealCount_
     void panic();                                     // FUN_00462174 (GUI panic button, MIDI reset)
     // FUN_004620e4: the 5 [synth] settings by config index (FUN_00452c5c(cfg, i), i.e. the
@@ -171,6 +176,8 @@ private:
     int32_t polyOverride_ = 0;                        // 0 = set by the program
     int16_t noteStacks_[8] = {};                      // +0x0f54 [0..3] last keys, [4..7] held keys (mono)
     float volume_ = 0;                                // +0x0f64
+    float outputGain_ = 1.0f;                         // (port) OPTIONS -> Output gain
+    float volumeOut_ = 0;                             // (port) volume_ * outputGain_
     int32_t muffleVoice_ = 0;                         // +0x0f68 slot of the newest voice (muffle owner)
     uint32_t muffleAge_ = 0;                          // +0x0f6c its age
     int32_t sampleRate_ = 0;                          // +0x0f70

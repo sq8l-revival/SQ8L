@@ -19,6 +19,9 @@ constexpr uint8_t kChunkPolyMagic = 'V';
 // writes 0 there, and 0 means both switches off, which is their default.
 constexpr size_t kChunkMts = 0x1d;
 constexpr uint8_t kChunkMtsEnabled = 1, kChunkMtsCorrectPitch = 2;
+// (port, issue #52) OPTIONS -> Output gain, in the last spare header byte, as the cut in dB.
+// No marker is needed either: the original writes 0 there, and 0 dB means no cut.
+constexpr size_t kChunkOutputCut = 0x1e;
 }  // namespace
 
 // The master's view of the Cdoc parameter block and of the LFO inputs alias the module
@@ -69,6 +72,8 @@ Synth::Synth(float sampleRate, SoundLibrary* library, const Settings* settings, 
         // 8 are what a program made by the SQ8L, a bank file or a SysEx import asks for.
         master_->setPortLayout();
     }
+    // (port, issue #52) A new instance opens at the cut last chosen (see Synth.h).
+    setOutputCut(settings_.outputCutDb());
     edit_->listener = [this](EditBuffer::Event e, const Program* slot) {
         syncProgram();
         master_->editBufferEvent(static_cast<int32_t>(e), slot ? slot->bytes : nullptr);
@@ -132,6 +137,10 @@ std::vector<uint8_t> Synth::getChunk() {
     const uint8_t mts = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
                                              (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0));
     if (mts != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkMts] = mts;
+    // (port) The output cut, for the same reason. No cut writes nothing, so a chunk without
+    // one stays byte-identical to the original's.
+    if (outputCut_ > 0 && chunk.size() == EditBuffer::kChunkSize)
+        chunk[kChunkOutputCut] = static_cast<uint8_t>(outputCut_);
     return chunk;
 }
 
@@ -154,9 +163,19 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
         const uint8_t mts = size == EditBuffer::kChunkSize ? data[kChunkMts] : 0;
         mtsEnabled_ = (mts & kChunkMtsEnabled) != 0;
         mtsCorrectPitch_ = (mts & kChunkMtsCorrectPitch) != 0;
+        // (port) likewise the output cut: a chunk without one, or with a step this build does
+        // not know, puts this instance back to no cut.
+        const int cut = size == EditBuffer::kChunkSize ? data[kChunkOutputCut] : 0;
+        setOutputCut(Settings::validOutputCut(cut) ? cut : 0);
         return 0;
     }
     return -1;
+}
+
+// (port, issue #52) see Synth.h. An unknown step is read as no cut.
+void Synth::setOutputCut(int db) {
+    outputCut_ = Settings::validOutputCut(db) ? db : 0;
+    master_->setOutputGain(Settings::outputGainFor(outputCut_));
 }
 
 void Synth::setPolyphonyOverride(int voices) { master_->setPolyphonyOverride(voices); }

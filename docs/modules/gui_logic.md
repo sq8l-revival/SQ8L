@@ -169,6 +169,8 @@ grouping is left to inspection.
 ## OPTIONS layout (port)
 
 ```
+Output gain                         >   per instance, 0 / -6 / -12 / -18 / -24 dB (issue #52)
+------------------------------------
 Polyphony                           >   per instance, 0 = set by the program (EMU -> VOICES)
 Voice stealing mode                 >
 Emulation preferences               >
@@ -183,8 +185,10 @@ MTS-ESP                             >   Enable, - , Correct SQ-80 per-key pitch 
 Zoom                                >
 ```
 
-Polyphony leads: how many voices there are, then what happens when they run out, then the rest
-of the emulation. The original's "Mouse position is restored after..." submenu and its separate
+`Output gain` leads, because most soundbanks play far too loud and a cut is the first thing to
+reach for; it is a cut of this instance's output only, by a whole power of two. Polyphony opens
+the emulation group: how many voices there are, then what happens when they run out, then the
+rest of the emulation. The original's "Mouse position is restored after..." submenu and its separate
 "Right click on display -> scroll page" item are one `Mouse` submenu, with the children reworded
 because the originals only read correctly under the old parent's phrasing. `MTS-ESP` carries the
 checkmark of its own `Enable` child, so the state shows without opening the submenu. Everything

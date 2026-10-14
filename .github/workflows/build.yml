@@ -25,6 +25,8 @@ jobs:
           arch -x86_64 ./build/sq8l_render_check --regression tests/regression
       - name: More polyphony (port addition)
         run: ./build/sq8l_render_check --polyphony tests/regression
+      - name: Output gain (port addition)
+        run: ./build/sq8l_render_check --output-gain tests/regression
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
       - name: HD graphics
@@ -82,6 +84,8 @@ jobs:
         run: ./build/sq8l_render_check.exe --regression tests/regression
       - name: More polyphony on real Windows
         run: ./build/sq8l_render_check.exe --polyphony tests/regression
+      - name: Output gain on real Windows
+        run: ./build/sq8l_render_check.exe --output-gain tests/regression
 
   linux:
     strategy:
@@ -108,6 +112,8 @@ jobs:
         run: ./build/sq8l_render_check --regression tests/regression
       - name: More polyphony (port addition)
         run: ./build/sq8l_render_check --polyphony tests/regression
+      - name: Output gain (port addition)
+        run: ./build/sq8l_render_check --output-gain tests/regression
       - name: Drawn menus and dialogs
         run: ./build/sq8l_drawn_check
       - name: HD graphics

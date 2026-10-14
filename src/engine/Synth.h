@@ -135,6 +135,12 @@ public:
     void setMtsEnabled(bool on) { mtsEnabled_ = on; }
     bool mtsCorrectPitch() const { return mtsCorrectPitch_; }
     void setMtsCorrectPitch(bool on) { mtsCorrectPitch_ = on; }
+    // (port, issue #52) OPTIONS -> Output gain: the cut of this instance in dB, one of
+    // Settings::kOutputCutsDb. Of this instance like the two above, and saved with the
+    // plugin's state; a newly created instance starts at the cut last chosen anywhere
+    // (Settings::outputCutDb), which is the only part of it that is a user preference.
+    int outputCut() const { return outputCut_; }
+    void setOutputCut(int db);
     EditBuffer& editBuffer() { return *edit_; }
     SoundLibrary& library() { return *library_; }
     SynthModules& modules() { return *modules_; }
@@ -151,6 +157,7 @@ private:
     bool chunkLoaded_ = false;  // CSynth +0xb4: ignore the next setProgram after setChunk
     bool mtsEnabled_ = false;        // (port) OPTIONS -> MTS-ESP -> Enable
     bool mtsCorrectPitch_ = false;   // (port) ... -> Correct SQ-80 per-key pitch offsets
+    int outputCut_ = 0;              // (port) OPTIONS -> Output gain, the cut in dB
 };
 
 }  // namespace sq8l

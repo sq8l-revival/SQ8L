@@ -70,6 +70,12 @@ public:
     virtual void setMtsEnabled(bool on) { (void)on; }
     virtual bool mtsCorrectPitch() { return false; }
     virtual void setMtsCorrectPitch(bool on) { (void)on; }
+    // OPTIONS -> Output gain (issue #52): the cut of this instance in dB, one of
+    // Settings::kOutputCutsDb. Of this instance and saved with the plugin's state, like the
+    // two above; setting it also records the value as where a newly created instance starts
+    // (the SQ8L.ini key outputCut), the only part of it the user's ini keeps.
+    virtual int outputCut() { return 0; }
+    virtual void setOutputCut(int db) { (void)db; }
     // The connected master's scale name, empty when none is connected. Polled with the voices
     // counter, since a master may change its scale at any time.
     virtual std::string mtsScaleName() { return {}; }

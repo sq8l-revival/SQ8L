@@ -47,12 +47,12 @@ code and verified against the original plugin running inside an x86 emulator.
   (the original has that on a double click, which still works), a knob the display page has
   no parameter for is drawn half faded instead of looking like every other knob, a left click
   on the program number opens the program list (the original needs a right or double click),
-  the **VOICES** parameter on the EMU page (see below), and these OPTIONS items: *Polyphony*
-  (see below), *Down arrow -> next program* (the original's hidden `swapProgUpDn` setting),
-  *Ask before loading banks/libraries* (on by default, like the original), *MTS-ESP* (see
-  below) and *Zoom* (see below). OPTIONS is also regrouped: *Polyphony* leads, and the
-  original's mouse-restore submenu and its separate *Right click on display -> scroll page*
-  item are now one *Mouse* submenu.
+  the **VOICES** parameter on the EMU page (see below), and these OPTIONS items: *Output gain*
+  (see below), *Polyphony* (see below), *Down arrow -> next program* (the original's hidden
+  `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by default, like the
+  original), *MTS-ESP* (see below) and *Zoom* (see below). OPTIONS is also regrouped: *Output
+  gain* leads, then *Polyphony*, and the original's mouse-restore submenu and its separate
+  *Right click on display -> scroll page* item are now one *Mouse* submenu.
 - **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
   the window's corner, where the host allows it). It is drawn at the window's resolution
   rather than enlarged: the panel (labels, signal lines, frames, logo) as vector shapes
@@ -69,6 +69,14 @@ code and verified against the original plugin running inside an x86 emulator.
   and glide keep the original's stepping either way. Both switches belong to the instance:
   they are saved with it in your project, not globally, so two instances can differ and a
   project recalls what it was set to.
+- **Output gain:** most soundbanks were written far louder than a modern project wants, so
+  OPTIONS → *Output gain* cuts the instance's output by 6, 12, 18 or 24 dB (no cut by
+  default). Each step is a halving, which only shifts the exponent of every sample: the sound
+  is the same, quieter, with nothing added and no precision lost. The cut belongs to the
+  instance and is saved with it in your project, so two instances can differ and a project
+  recalls what it was set to; the value you last picked is also remembered globally (in
+  `SQ8L.ini`) as the cut a newly created instance starts at. A project always wins over that:
+  loading one that was saved with no cut puts the instance at 0 dB.
 - **Polyphony:** 8 voices like the SQ-80 by default, 1 to 64 with the **VOICES** parameter on
   the EMU page, right below VSTEAL. It belongs to the sound, so it is stored in the program
   and travels with it: into banks and libraries, and into the project your host saves. Every
@@ -80,7 +88,7 @@ code and verified against the original plugin running inside an x86 emulator.
   are playing keep playing, and soft voice stealing gets as many slots to fade out in as there
   are voices. With 8 voices the sound is bit-exact; with more, a performance changes only
   where the original would have stolen a voice. The output is not rescaled, so many voices
-  sounding together are louder: lower the volume if needed.
+  sounding together are louder: use *Output gain* above if needed.
 - Text (status bar, program name) uses Liberation Sans, a free font metrically compatible
   with Arial, with anti-aliasing.
 - SEND/REQ to a hardware SQ-80/ESQ-1 over MIDI ports are not connected yet (SysEx import and

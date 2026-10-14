@@ -100,6 +100,15 @@ struct TestHost : EditorHost {
     int polyOverride = 0;
     int polyphonyOverride() override { return polyOverride; }
     void setPolyphonyOverride(int voices) override { polyOverride = voices; }
+    // (port, issue #52) OPTIONS -> Output gain: the cut of this instance (a field here, the
+    // plugin's own state there), and the same value in SQ8L.ini, which is where a newly
+    // created instance starts. Both as PluginEditorHost does it.
+    int outputCutDb = 0;
+    int outputCut() override { return outputCutDb; }
+    void setOutputCut(int db) override {
+        outputCutDb = Settings::validOutputCut(db) ? db : 0;
+        cfg.setPort(Settings::kPortOutputCut, outputCutDb);
+    }
     void panic() override { log << "panic\n"; }
     int voicesUsed() override { return usedVoices; }
     int voicesMax() override { return maxVoices; }
@@ -297,6 +306,8 @@ std::string lcdJson(const LcdDisplay& l) {
 SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
 // (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
 SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
+// (port, issue #52) OPTIONS -> Output gain, the cut of this instance in dB (0 = none)
+SQ8L_API int32_t sq8l_gl_output_cut(void* v) { return B(v)->host.outputCutDb; }
 // (port) Knob::active: false for the knobs the current page has no parameter for, which are
 // drawn faded.
 SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {

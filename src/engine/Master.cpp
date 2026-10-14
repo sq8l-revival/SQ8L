@@ -182,6 +182,12 @@ void Master::setPolyphonyOverride(int32_t voices) {
     polyOverride_ = voices > kMaxPlayableVoices ? kMaxPlayableVoices : voices;
 }
 
+// (port) see Master.h. Not clamped: the caller picks from a fixed set of steps.
+void Master::setOutputGain(float gain) {
+    outputGain_ = gain > 0.0f ? gain : 0.0f;
+    volumeOut_ = volume_ * outputGain_;
+}
+
 int32_t Master::effectivePlayableVoices() const {
     if (!portLayout_) return numPlay_;
     int32_t n = polyOverride_ > 0 ? polyOverride_ : programPolyphony(currentProgram_);
@@ -193,6 +199,7 @@ void Master::setNumVoices(int32_t n) {
     lockCount_++;
     numVoices_ = n > kMaxVoices ? kMaxVoices : n;
     volume_ = 0.8f;  // 0x3f4ccccd
+    volumeOut_ = volume_ * outputGain_;
     reset();
     modules_.docSetNumVoices(numVoices_);
     lockCount_--;
@@ -1028,11 +1035,11 @@ void Master::process(float* outL, float* outR, int32_t n, bool replacing) {
                         }
                         if (muffleOn_ > 0) muffle(acc);
                         if (replacing) {
-                            outL[s] = sgl(static_cast<double>(acc[0]) * volume_);
-                            outR[s] = sgl(static_cast<double>(acc[1]) * volume_);
+                            outL[s] = sgl(static_cast<double>(acc[0]) * volumeOut_);
+                            outR[s] = sgl(static_cast<double>(acc[1]) * volumeOut_);
                         } else {
-                            outL[s] = sgl(static_cast<double>(acc[0]) * volume_ + outL[s]);
-                            outR[s] = sgl(static_cast<double>(acc[1]) * volume_ + outR[s]);
+                            outL[s] = sgl(static_cast<double>(acc[0]) * volumeOut_ + outL[s]);
+                            outR[s] = sgl(static_cast<double>(acc[1]) * volumeOut_ + outR[s]);
                         }
                     } else if (replacing) {
                         outL[s] = 0;

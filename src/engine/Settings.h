@@ -40,15 +40,41 @@ struct Settings {
     // NOTE: the MTS-ESP switches are not here either. Like the polyphony override they belong
     // to the instance and travel in the plugin's own state (Synth::getChunk), so that a project
     // recalls them and two instances can differ.
-    static constexpr int kNumPort = 2;
-    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "naturalScroll"};
-    static constexpr int kPortDefaults[kNumPort] = {1, 0};
-    int port[kNumPort] = {1, 0};
+    // NOTE: outputCut below is the exception, and only half of one: the cut itself belongs
+    // to the instance and travels in the chunk like the two above, but the value last chosen
+    // is a preference of the user (issue #52), so a newly created instance starts at it.
+    static constexpr int kNumPort = 3;
+    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "naturalScroll", "outputCut"};
+    static constexpr int kPortDefaults[kNumPort] = {1, 0, 0};
+    static constexpr int kPortOutputCut = 2;  // index of "outputCut" in port[]
+    int port[kNumPort] = {1, 0, 0};
     // Ask before loading a library, a bank or a SysEx bank over existing programs.
     bool confirmLoading() const { return port[0] > 0; }
     // (port, issue #35) Invert the mouse wheel over a knob or a display field, which is what a
     // touchpad wants. Off, so that an ini written before this existed keeps the wheel as it was.
     bool naturalScrolling() const { return port[1] > 0; }
+    // (port, issue #52) OPTIONS -> Output gain: the steps the menu offers, as a cut in dB.
+    // Every gain is a whole power of two, so a cut changes nothing but the exponent of each
+    // sample; 6 dB is read as the usual factor of two (-6.02 dB) rather than exactly -6.
+    static constexpr int kNumOutputCuts = 5;
+    static constexpr int kOutputCutsDb[kNumOutputCuts] = {0, 6, 12, 18, 24};
+    static bool validOutputCut(int db) {
+        for (int c : kOutputCutsDb)
+            if (c == db) return true;
+        return false;
+    }
+    static float outputGainFor(int db) {
+        switch (db) {
+            case 6: return 0.5f;
+            case 12: return 0.25f;
+            case 18: return 0.125f;
+            case 24: return 0.0625f;
+            default: return 1.0f;
+        }
+    }
+    // The cut of the last instance to set one: where a newly created instance starts. The
+    // cut in force is the instance's own and travels in the plugin's state (Synth::getChunk).
+    int outputCutDb() const { return validOutputCut(port[2]) ? port[2] : 0; }
     // [port] zoom: size of the editor window in percent (OPTIONS -> Zoom), 100 = the original's
     // 626x430. A preference of the user, not of a project: every editor opens at it.
     static constexpr int kMinZoom = 100, kMaxZoom = 300;

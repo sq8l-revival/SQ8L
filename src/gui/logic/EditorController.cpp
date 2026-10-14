@@ -140,11 +140,26 @@ void EditorController::buildMenus() {
     // (port) The OPTIONS items are indexed as they go in, so the cached MenuNode pointers at
     // the end of this function survive reordering: hard-coded positions silently rewired the
     // wrong setting whenever the layout changed.
-    size_t iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iMts = 0, iZoom = 0;
-    // (port) Polyphony leads: how many voices there are, then what happens when they run
-    // out, then the rest of the emulation. Like the emulation overrides below, but of this
-    // instance only (the voices are a parameter of the program), so the plugin saves it
-    // with its own state and not in SQ8L.ini.
+    size_t iGain = 0, iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iMts = 0,
+           iZoom = 0;
+    // (port, issue #52) Output gain leads the menu: most soundbanks play far too loud, so a
+    // cut is the first thing to reach for. Of this instance, like the polyphony below, but
+    // the value last chosen is also where a newly created instance starts.
+    MenuNode gain = item("Output gain", 0, nullptr);
+    auto gainClick = [this](MenuNode& n) { outputCutClick(n); };
+    gain.items.push_back(item("0 dB   (no cut)", 0, gainClick, true, true));
+    gain.items.push_back(line());
+    gain.items.push_back(item("-6 dB", 6, gainClick, true, true));
+    gain.items.push_back(item("-12 dB", 12, gainClick, true, true));
+    gain.items.push_back(item("-18 dB", 18, gainClick, true, true));
+    gain.items.push_back(item("-24 dB", 24, gainClick, true, true));
+    iGain = o.size();
+    o.push_back(gain);
+    o.push_back(line());
+    // (port) Polyphony opens the emulation group: how many voices there are, then what
+    // happens when they run out, then the rest of the emulation. Like the emulation
+    // overrides below, but of this instance only (the voices are a parameter of the
+    // program), so the plugin saves it with its own state and not in SQ8L.ini.
     MenuNode poly = item("Polyphony", 0, nullptr);
     auto polyClick = [this](MenuNode& n) { polyphonyClick(n); };
     poly.items.push_back(item("Set by program   (EMU->VOICES parameter)", 0, polyClick, true, true));
@@ -279,6 +294,7 @@ void EditorController::buildMenus() {
     menuHideCursor_ = &mouse.items[iHideCur];
     menuNaturalScroll_ = &mouse.items[iNatural];
     menuRmbScrDisp_ = &mouse.items[iRmbScr];
+    menuOutputGain_ = &optionsMenu_.items[iGain];
     menuPolyphony_ = &optionsMenu_.items[iPoly];
     menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
     menuConfirmLoad_ = &optionsMenu_.items[iConfirm];
@@ -620,6 +636,11 @@ void EditorController::settingsChanged() {  // FUN_00483b08
         const int ovr = host_.polyphonyOverride();
         for (MenuNode& n : menuPolyphony_->items)
             if (n.caption != "-") n.checked = n.tag == ovr;
+    }
+    if (menuOutputGain_) {
+        const int cut = host_.outputCut();
+        for (MenuNode& n : menuOutputGain_->items)
+            if (n.caption != "-") n.checked = n.tag == cut;
     }
     b = s.rightClickScrollsDisplay();
     if (b != rmbScroll_) {
@@ -1278,6 +1299,13 @@ void EditorController::polyphonyClick(MenuNode& item) {
     item.setChecked(true);
     host_.setPolyphonyOverride(item.tag);
     updateVoices();
+}
+
+// Port addition (issue #52): cut this instance's output by the item's dB.
+void EditorController::outputCutClick(MenuNode& item) {
+    if (item.checked) return;
+    item.setChecked(true);
+    host_.setOutputCut(item.tag);
 }
 
 // Port addition: size of the editor window ([port] zoom), applied by the host.

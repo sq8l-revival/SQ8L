@@ -50,6 +50,7 @@ Master (offsets in the original object; `-` = not modeled: module/host pointers)
 | +0x0f54 | `noteStacks_[0..3]` | last 4 keys played (shorts, -1 = none) |
 | +0x0f5c | `noteStacks_[4..7]` | held keys, newest first (mono) |
 | +0x0f64 | `volume_` | 0.8 (set by setNumVoices) |
+| (port) | `outputGain_`, `volumeOut_` | the instance's output cut (OPTIONS → Output gain, issue #52), 1 = none, and `volume_ * outputGain_`, which the sample loop multiplies by. Every step is a whole power of two, so the cut scales the output exactly and costs the loop nothing; at no cut `volumeOut_` is the original's 0.8 to the bit |
 | +0x0f68 / +0x0f6c | `muffleVoice_`, `muffleAge_` | voice that owns the muffle mode (newest) |
 | +0x0f70 | `sampleRate_` | int |
 | +0x0f74 / +0x0f78 | `invSampleRate_`, `sampleRateMs_` | 1/sr, sr*0.001 (unused) |

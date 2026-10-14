@@ -122,6 +122,16 @@ public:
     // does not notify it of edits, like every other edit the editor makes.
     void setPolyphonyOverride(int voices) override { p_.synth().setPolyphonyOverride(voices); }
 
+    // (engine lock held, issue #52) OPTIONS -> Output gain. The cut is this instance's and
+    // travels in its state, like the polyphony override; the value is also kept in SQ8L.ini,
+    // where it is read once, by a newly created instance, as the cut to open at.
+    int outputCut() override { return p_.synth().outputCut(); }
+    void setOutputCut(int db) override {
+        p_.synth().setOutputCut(db);
+        if (p_.settings().setPort(sq8l::Settings::kPortOutputCut, p_.synth().outputCut()))
+            sq8l::SharedLibrary::saveSettings();
+    }
+
     void panic() override { p_.synth().master().panic(); }
     int voicesUsed() override { return p_.synth().master().activeVoiceCount(); }
     int voicesMax() override { return p_.synth().polyphony(); }

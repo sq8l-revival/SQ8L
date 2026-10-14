@@ -19,6 +19,9 @@
 //       one-shot halts where it halts forwards and stays halted across control ticks, a
 //       reversed looped wave keeps running, and reversing a whole program changes the sound
 //       without breaking it. Needs no files.
+//   sq8l_render_check --output-gain tests/regression
+//       OPTIONS -> Output gain (port addition, issue #52): every cut scales the uncut
+//       render by exactly its power of two, and the cut travels in the host chunk.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -43,8 +46,9 @@ std::vector<uint8_t> readAll(const std::string& path) {
 // `voices`: playable voices (8 = the original), set in the program (EMU -> VOICES) or, with
 // `viaOverride`, as this instance's override (OPTIONS -> Polyphony); both must render the
 // same. `steals`: notes that took a sounding voice.
+// `cut`: this instance's output cut in dB (OPTIONS -> Output gain), 0 = none.
 void render(const std::vector<uint8_t>& buf, size_t& p, std::vector<float>& L, std::vector<float>& R,
-            int voices = 8, uint32_t* steals = nullptr, bool viaOverride = false) {
+            int voices = 8, uint32_t* steals = nullptr, bool viaOverride = false, int cut = 0) {
     auto rd = [&](void* dst, size_t k) {
         std::memcpy(dst, buf.data() + p, k);
         p += k;
@@ -59,6 +63,7 @@ void render(const std::vector<uint8_t>& buf, size_t& p, std::vector<float>& L, s
         synth.setPolyphonyOverride(voices);
     else
         synth.editBuffer().current().setU8(sq8l::ofs::Polyphony, unsigned(voices));
+    synth.setOutputCut(cut);
     for (int b = 0; b < nblocks; b++) {
         int32_t frames, nev;
         rd(&frames, 4);
@@ -305,7 +310,107 @@ int polyphony(const std::string& dir) {
     return bad || chunkBad || stressBad || maxActive != 40 ? 1 : 0;
 }
 
-}  // namespace
+// (port, issue #52) OPTIONS -> Output gain: the per-instance cut of the output. Every step is
+// a whole power of two, so a cut must scale the uncut render by exactly that factor; the cut
+// travels in the host chunk like the polyphony override, and a newly created instance starts
+// at the cut SQ8L.ini remembers, which the chunk of a project then overrides.
+int outputGain(const std::string& dir) {
+    std::ifstream exp(dir + "/expected.txt");
+    if (!exp) {
+        std::fprintf(stderr, "no %s/expected.txt\n", dir.c_str());
+        return 2;
+    }
+    int cases = 0, bad = 0;
+    std::string line;
+    while (std::getline(exp, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream is(line);
+        std::string name;
+        is >> name;
+        const std::vector<uint8_t> buf = readAll(dir + "/cases/" + name);
+        size_t p = 0;
+        std::vector<float> L0, R0;
+        render(buf, p, L0, R0);
+        cases++;
+        for (int db : sq8l::Settings::kOutputCutsDb) {
+            if (db == 0) continue;
+            const float g = sq8l::Settings::outputGainFor(db);
+            p = 0;
+            std::vector<float> L, R;
+            render(buf, p, L, R, 8, nullptr, false, db);
+            if (L.size() != L0.size() || R.size() != R0.size()) {
+                bad++;
+                std::printf("BAD %s at -%d dB: wrong length\n", name.c_str(), db);
+                continue;
+            }
+            // Exact below the top of the subnormal range: scaling by a power of two only
+            // changes the exponent, down to where a sample would lose its last bits.
+            size_t off = 0;
+            for (size_t i = 0; i < L0.size() && !off; i++)
+                for (const auto& pair : {std::pair<float, float>{L0[i], L[i]}, {R0[i], R[i]}}) {
+                    const float want = pair.first * g;
+                    if (std::fabs(want) >= 1e-30f ? pair.second != want : std::fabs(pair.second) > 1e-30f)
+                        off = i + 1;
+                }
+            if (off) {
+                bad++;
+                std::printf("DIFF %s at -%d dB: sample %zu is not the uncut render times %g\n",
+                            name.c_str(), db, off - 1, double(g));
+            }
+        }
+    }
+    std::printf("output gain: %d cases, every cut (-6/-12/-18/-24 dB) scales the uncut render "
+                "exactly (%s)\n", cases, bad ? "FAILED" : "ok");
+
+    // The chunk carries the cut, and carries nothing when there is none: such a chunk must
+    // stay exactly the original's bytes.
+    int chunkBad = 0;
+    {
+        sq8l::Synth a(44100.0f);
+        const std::vector<uint8_t> plain = a.getChunk();
+        a.setOutputCut(18);
+        const std::vector<uint8_t> with = a.getChunk();
+        size_t diff = 0;
+        for (size_t i = 0; i < plain.size() && i < with.size(); i++)
+            if (plain[i] != with[i]) diff++;
+        sq8l::Synth b(44100.0f);
+        b.setChunk(with.data(), with.size());
+        const int restored = b.outputCut();
+        b.setChunk(plain.data(), plain.size());  // a project saved without a cut
+        const int cleared = b.outputCut();
+        // A step this build does not know (a chunk from a later version) reads as no cut.
+        std::vector<uint8_t> odd = with;
+        odd[0x1e] = 9;
+        b.setChunk(odd.data(), odd.size());
+        const int unknown = b.outputCut();
+        if (plain[0x1e] || diff != 1 || restored != 18 || cleared != 0 || unknown != 0) {
+            chunkBad++;
+            std::printf("BAD chunk: spare byte %02x, %zu bytes differ, restored %d, cleared %d, "
+                        "unknown step %d\n", plain[0x1e], diff, restored, cleared, unknown);
+        }
+        // Where a newly created instance starts: the cut SQ8L.ini remembers, and no cut when
+        // the key holds a step that is not on offer. A chunk always wins over it.
+        sq8l::Settings cfg;
+        cfg.port[sq8l::Settings::kPortOutputCut] = 12;
+        const int fromIni = sq8l::Synth(44100.0f, nullptr, &cfg).outputCut();
+        cfg.port[sq8l::Settings::kPortOutputCut] = 7;
+        const int fromBadIni = sq8l::Synth(44100.0f, nullptr, &cfg).outputCut();
+        cfg.port[sq8l::Settings::kPortOutputCut] = 12;
+        sq8l::Synth c(44100.0f, nullptr, &cfg);
+        c.setChunk(plain.data(), plain.size());
+        const int chunkWins = c.outputCut();
+        if (fromIni != 12 || fromBadIni != 0 || chunkWins != 0) {
+            chunkBad++;
+            std::printf("BAD start: from the ini %d, from a bad ini %d, chunk over the ini %d\n",
+                        fromIni, fromBadIni, chunkWins);
+        }
+        std::printf("chunk: no cut = the original's bytes; a cut adds %zu byte and comes back as "
+                    "-%d dB; a chunk without one, or with an unknown step, is no cut; a new "
+                    "instance starts at the ini's cut and a chunk overrides it (%s)\n",
+                    diff, restored, chunkBad ? "FAILED" : "ok");
+    }
+    return bad || chunkBad ? 1 : 0;
+}
 
 // (port) Wave direction (OSC -> DIR, ofs::Osc::Dir): the oscillator reads its wavesample
 // backwards. A looped wave fills its table, so with the same note and frequency the index a
@@ -463,9 +568,12 @@ int direction() {
     return bad || oneShotBad || progBad ? 1 : 0;
 }
 
+}  // namespace
+
 int main(int argc, char** argv) {
     if (argc > 2 && std::string(argv[1]) == "--regression") return regression(argv[2]);
     if (argc > 2 && std::string(argv[1]) == "--polyphony") return polyphony(argv[2]);
     if (argc > 1 && std::string(argv[1]) == "--direction") return direction();
+    if (argc > 2 && std::string(argv[1]) == "--output-gain") return outputGain(argv[2]);
     return golden(argc > 1 ? argv[1] : "tests/golden_raw");
 }

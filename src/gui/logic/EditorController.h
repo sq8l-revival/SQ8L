@@ -218,6 +218,7 @@ private:
     void confirmLoadClick(MenuNode& item);   // port addition
     void naturalScrollClick(MenuNode& item); // port addition (issue #35)
     void polyphonyClick(MenuNode& item);     // port addition
+    void outputCutClick(MenuNode& item);     // port addition (issue #52)
     void zoomClick(MenuNode& item);          // port addition
     void mtsEnableClick(MenuNode& item);     // port addition
     void mtsCorrectPitchClick(MenuNode& item);  // port addition
@@ -272,6 +273,7 @@ private:
     MenuNode* menuSwapProgUpDn_ = nullptr;  // port addition
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
     MenuNode* menuNaturalScroll_ = nullptr; // port addition (issue #35)
+    MenuNode* menuOutputGain_ = nullptr;    // port addition (sub-menu, radio items tagged with the dB cut)
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
     MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)
     MenuNode* menuMts_ = nullptr;           // port addition (sub-menu; carries Enable's checkmark)

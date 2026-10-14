@@ -72,4 +72,16 @@ them.
 |---|---|---|
 | confirmLoad | 1 | ask before loading a library, a bank or a SysEx bank over existing programs |
 | naturalScroll | 0 | invert the mouse wheel over a knob or a display field, for a touchpad (issue #35) |
+| outputCut | 0 | the cut last chosen in OPTIONS -> Output gain, in dB (issue #52) |
 | zoom | 100 | editor size in percent, 100 (the original's 626x430) to 300 |
+
+`outputCut` is the half-exception to the paragraph above. The cut in force belongs to the
+instance and travels in the chunk like the polyphony override, so a project recalls it and two
+instances can differ; the key here is only a note of the value last chosen anywhere, read once,
+by a newly created instance, as the cut to open at. A chunk always wins over it — loading a
+project with no cut puts the instance at 0 dB whatever the key says.
+
+The steps are `Settings::kOutputCutsDb` (0, 6, 12, 18, 24 dB) and their gains
+`Settings::outputGainFor` are whole powers of two (1, 1/2, 1/4, 1/8, 1/16), so a cut changes
+nothing but the exponent of every sample; 6 dB is read as the usual factor of two (-6.02 dB).
+A value that is not one of the steps, in the ini or in a chunk, reads as no cut.

@@ -6,8 +6,8 @@
 // controls over it from their state: the knobs, the LEDs, the buttons, the VFD (16-segment
 // glyphs), the red LED digits (7 segments) and the texts with the font at the window's
 // size. What the original's bitmaps show is read from them (which segments a character
-// lights, the knob's angle per frame, the shading of knobs and buttons), so the controls
-// keep their look.
+// lights, the knob's angle per frame, the shading of knobs, the shapes a button is fitted
+// to), so the controls keep their look.
 #pragma once
 
 #include <cstdint>

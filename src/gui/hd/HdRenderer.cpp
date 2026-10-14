@@ -218,21 +218,34 @@ void drawHoverFrame(Hd& hd, float ox, float oy, int w, int h, float S, Color c) 
     hd.fill(Rect{X1 - t, Y0, X1, Y1}, c);
 }
 
-// Push buttons (ButtGIF, smallButtGIF, upDownGif), modelled from each frame: the dark 1-pixel
-// border, then the body as a colour per row and per column (gradient and bevels, kept sharp)
-// with a grain as strong as the original's mottled texture. A white arrow is redrawn as a
-// triangle.
+// Push buttons (ButtGIF, smallButtGIF, upDownGif): a dark border around a body drawn as shapes
+// whose colours are fitted to each frame. A white arrow is redrawn as a triangle.
 struct ButtonModel {
     bool ok = false;
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;  // border, inclusive (sprite pixels)
     Color border = 0;
     int bw = 0, bh = 0;  // body: (x0 + 1, y0 + 1), bw x bh
-    std::vector<std::array<float, 3>> row, col;
-    std::array<float, 3> texture{};  // standard deviation of the original's texture per channel
+    // Per channel. At the sides the one-pixel bevels, the darker of the two at a corner; inside
+    // them the sum of these, at (x, y) in body pixels:
+    //   k[0] + k[1] * y                   gradient down
+    //   k[2] * u(x) + k[3] * u(x)^2       curve across, u = (x - (bw-1)/2) / ((bw-1)/2)
+    //   k[4] * exp(-(x/glowX + y/glowY))  glow from the lit corner
+    //   k[5] row 1, k[6] column 1, k[7] column bw - 2    the lit line inside the bevel
+    std::array<float, 3> left{}, right{}, top{}, bottom{};
+    std::array<std::array<float, 3>, 8> k{};
+    float glowX = 1, glowY = 1;
+    std::array<float, 3> grainAmp{};  // what the shapes leave over
     std::vector<std::array<float, 3>> shade;  // frame: the darkening around the button (1 elsewhere)
     bool arrow = false, arrowUp = false;
     float ax0 = 0, ay0 = 0, ax1 = 0, ay1 = 0;
+
+    float u(float x) const {
+        const float c = (bw - 1) * 0.5f;
+        return c > 0 ? (x - c) / c : 0.f;
+    }
 };
+
+constexpr float kButtonGrain = 0.5f;
 
 int luma(Color c) { return (ch(c, 16) * 3 + ch(c, 8) * 6 + ch(c, 0)) / 10; }
 bool isWhite(Color c) { return ch(c, 16) > 225 && ch(c, 8) > 225 && ch(c, 0) > 225; }
@@ -249,38 +262,90 @@ ButtonModel modelButton(const ImageView& f) {
     m.border = f.at((x0 + x1) / 2, y0);
     m.bw = x1 - x0 - 1, m.bh = y1 - y0 - 1;
     auto px = [&](int bx, int by) { return f.at(x0 + 1 + bx, y0 + 1 + by); };
-    auto median = [](std::vector<float>& v) {
-        if (v.empty()) return 0.f;
-        std::nth_element(v.begin(), v.begin() + long(v.size() / 2), v.end());
-        return v[v.size() / 2];
-    };
     const int shifts[3] = {16, 8, 0};
-    m.row.assign(size_t(m.bh), {});
-    m.col.assign(size_t(m.bw), {});
-    std::vector<float> v;
-    for (int c = 0; c < 3; c++) {
-        for (int by = 0; by < m.bh; by++) {
-            v.clear();
-            for (int bx = 2; bx < m.bw - 2; bx++)
-                if (!isWhite(px(bx, by))) v.push_back(float(ch(px(bx, by), shifts[c])));
-            m.row[size_t(by)][size_t(c)] = median(v);
-        }
-        for (int bx = 0; bx < m.bw; bx++) {
-            v.clear();
-            for (int by = 2; by < m.bh - 2; by++)
-                if (!isWhite(px(bx, by))) v.push_back(float(ch(px(bx, by), shifts[c])) - m.row[size_t(by)][size_t(c)]);
-            m.col[size_t(bx)][size_t(c)] = median(v);
-        }
-        double sum2 = 0;
-        int n = 0;
-        for (int by = 2; by < m.bh - 2; by++)
-            for (int bx = 2; bx < m.bw - 2; bx++) {
-                const Color p = px(bx, by);
-                if (isWhite(p)) continue;
-                const float d = ch(p, shifts[c]) - m.row[size_t(by)][size_t(c)] - m.col[size_t(bx)][size_t(c)];
-                sum2 += double(d) * d, n++;
+    const int xi0 = 1, xi1 = m.bw - 2, yi0 = 1, yi1 = m.bh - 2;  // the body inside its bevels
+    for (int c = 0; c < 3; c++) {  // the bevels themselves, flat
+        auto mean = [&](int bx0, int bx1, int by0, int by1) {
+            double s = 0;
+            int n = 0;
+            for (int by = by0; by <= by1; by++)
+                for (int bx = bx0; bx <= bx1; bx++) {
+                    if (isWhite(px(bx, by))) continue;  // the arrow: a triangle over the body
+                    s += ch(px(bx, by), shifts[c]), n++;
+                }
+            return n ? float(s / n) : 0.f;
+        };
+        m.top[size_t(c)] = mean(xi0, xi1, 0, 0);
+        m.bottom[size_t(c)] = mean(xi0, xi1, m.bh - 1, m.bh - 1);
+        m.left[size_t(c)] = mean(0, 0, yi0, yi1);
+        m.right[size_t(c)] = mean(m.bw - 1, m.bw - 1, yi0, yi1);
+    }
+    // The shapes inside them (least squares): extents fixed, strengths from the frame.
+    m.glowX = std::max(1.f, float(m.bw) / 5.f), m.glowY = std::max(1.f, float(m.bh) / 4.f);
+    auto basis = [&m](int bx, int by, float* b) {
+        const float u = m.u(float(bx));
+        b[0] = 1.f;
+        b[1] = float(by);
+        b[2] = u;
+        b[3] = u * u;
+        b[4] = std::exp(-(float(bx) / m.glowX + float(by) / m.glowY));
+        b[5] = by == 1 ? 1.f : 0.f;
+        b[6] = bx == 1 ? 1.f : 0.f;
+        b[7] = bx == m.bw - 2 ? 1.f : 0.f;
+    };
+    constexpr int kN = 8;
+    double a[kN][kN] = {}, rhs[kN][3] = {};
+    for (int by = yi0; by <= yi1; by++)
+        for (int bx = xi0; bx <= xi1; bx++) {
+            if (isWhite(px(bx, by))) continue;
+            float b[kN];
+            basis(bx, by, b);
+            for (int i = 0; i < kN; i++) {
+                for (int j = 0; j < kN; j++) a[i][j] += double(b[i]) * b[j];
+                for (int c = 0; c < 3; c++) rhs[i][c] += double(b[i]) * ch(px(bx, by), shifts[c]);
             }
-        m.texture[size_t(c)] = n ? float(std::sqrt(sum2 / n)) : 0.f;
+        }
+    bool solved = true;
+    for (int i = 0; i < kN; i++) {  // Gaussian elimination with partial pivoting
+        int p = i;
+        for (int r = i + 1; r < kN; r++)
+            if (std::fabs(a[r][i]) > std::fabs(a[p][i])) p = r;
+        if (std::fabs(a[p][i]) < 1e-9) {  // (degenerate: too small for the shapes to separate)
+            for (auto& t : m.k) t = {};
+            for (int c = 0; c < 3; c++) m.k[0][size_t(c)] = float(ch(px(m.bw / 2, m.bh / 2), shifts[c]));
+            solved = false;
+            break;
+        }
+        if (p != i) {
+            for (int j = 0; j < kN; j++) std::swap(a[i][j], a[p][j]);
+            for (int c = 0; c < 3; c++) std::swap(rhs[i][c], rhs[p][c]);
+        }
+        for (int r = 0; r < kN; r++) {
+            if (r == i) continue;
+            const double q = a[r][i] / a[i][i];
+            for (int j = i; j < kN; j++) a[r][j] -= q * a[i][j];
+            for (int c = 0; c < 3; c++) rhs[r][c] -= q * rhs[i][c];
+        }
+    }
+    if (solved)
+        for (int i = 0; i < kN; i++)
+            for (int c = 0; c < 3; c++) m.k[size_t(i)][size_t(c)] = float(rhs[i][c] / a[i][i]);
+    // A robust spread, so a place the shapes miss is not scattered over the face as noise.
+    std::vector<float> dev;
+    for (int c = 0; c < 3; c++) {
+        dev.clear();
+        for (int by = yi0; by <= yi1; by++)
+            for (int bx = xi0; bx <= xi1; bx++) {
+                if (isWhite(px(bx, by))) continue;
+                float b[kN];
+                basis(bx, by, b);
+                double shape = 0;
+                for (int i = 0; i < kN; i++) shape += double(b[i]) * m.k[size_t(i)][size_t(c)];
+                dev.push_back(float(std::fabs(ch(px(bx, by), shifts[c]) - shape)));
+            }
+        if (dev.empty()) continue;
+        std::nth_element(dev.begin(), dev.begin() + long(dev.size() / 2), dev.end());
+        m.grainAmp[size_t(c)] = 1.4826f * dev[dev.size() / 2];
     }
     // the arrow: white pixels, wider at the bottom = pointing up
     int wx0 = f.width, wy0 = f.height, wx1 = -1, wy1 = -1, n = 0;
@@ -325,6 +390,19 @@ float sharpAt(float p, float S, int n, int& i0, int& i1) {
     return clampf((p - i - 0.5f) * S + 0.5f, 0.f, 1.f);
 }
 
+// Sampled sharply in both directions: a pixel stays flat, the step to the next takes one of the
+// window's.
+std::array<float, 3> sampleSharp(const std::vector<std::array<float, 3>>& img, int w, int h, float x, float y,
+                                 float S) {
+    int x0, x1, y0, y1;
+    const float tx = sharpAt(x - 0.5f, S, w, x0, x1), ty = sharpAt(y - 0.5f, S, h, y0, y1);
+    auto at = [&](int xx, int yy) { return img[size_t(yy) * size_t(w) + size_t(xx)]; };
+    const auto &a = at(x0, y0), &b = at(x1, y0), &c = at(x0, y1), &d = at(x1, y1);
+    std::array<float, 3> v{};
+    for (size_t i = 0; i < 3; i++) v[i] = (a[i] * (1 - tx) + b[i] * tx) * (1 - ty) + (c[i] * (1 - tx) + d[i] * tx) * ty;
+    return v;
+}
+
 void drawButton(Hd& hd, const ImageView& f, float ox, float oy, float S, Color hoverFrame) {
     const ButtonModel& m = buttonModel(f);
     if (m.ok) {
@@ -335,30 +413,46 @@ void drawButton(Hd& hd, const ImageView& f, float ox, float oy, float S, Color h
         for (int Y = area.top; Y < area.bottom; Y++) {
             Color* out = hd.b.row(Y);
             for (int X = area.left; X < area.right; X++)
-                out[X] = times(out[X], sample(m.shade, f.width, f.height, (X + 0.5f - ox) / S, (Y + 0.5f - oy) / S));
+                out[X] = times(out[X],
+                               sampleSharp(m.shade, f.width, f.height, (X + 0.5f - ox) / S, (Y + 0.5f - oy) / S, S));
         }
-        hd.roundRect(ox + m.x0 * S, oy + m.y0 * S, ox + (m.x1 + 1) * S, oy + (m.y1 + 1) * S, 1.1f * S,
-                     [&m](float, float) { return m.border; });
-        const float bx = ox + (m.x0 + 1) * S, by = oy + (m.y0 + 1) * S;
-        const Rect body = Rect{int(std::lround(bx)), int(std::lround(by)), int(std::lround(bx + m.bw * S)),
-                               int(std::lround(by + m.bh * S))}
-                              .intersect(hd.clip);
+        // On whole window pixels, leaving only the round corners anti-aliased.
+        const float X0 = float(std::lround(ox + m.x0 * S)), Y0 = float(std::lround(oy + m.y0 * S));
+        const float X1 = float(std::lround(ox + (m.x1 + 1) * S)), Y1 = float(std::lround(oy + (m.y1 + 1) * S));
+        hd.roundRect(X0, Y0, X1, Y1, 1.1f * S, [&m](float, float) { return m.border; });
+        auto edgeX = [&](int k) { return int(std::lround(ox + float(m.x0 + 1 + k) * S)); };
+        auto edgeY = [&](int k) { return int(std::lround(oy + float(m.y0 + 1 + k) * S)); };
+        const int xL = edgeX(1), xR = edgeX(m.bw - 1);                 // the body between its bevels
+        const int yT = edgeY(1), yH = edgeY(2), yB = edgeY(m.bh - 1);  // top row, highlight, bottom
+        const int xH1 = edgeX(2), xH2 = edgeX(m.bw - 2);               // the lit lines down the sides
+        const Rect body = Rect{edgeX(0), edgeY(0), edgeX(m.bw), edgeY(m.bh)}.intersect(hd.clip);
         for (int Y = body.top; Y < body.bottom; Y++) {
-            const float py = (Y + 0.5f - by) / S - 0.5f;
-            int r0, r1;
-            const float fy = sharpAt(py, S, m.bh, r0, r1);
+            const float fy = (Y + 0.5f - oy) / S - float(m.y0 + 1) - 0.5f;  // body coordinates
+            const bool rowEdge = Y < yT || Y >= yB;
+            const bool highlight = Y >= yT && Y < yH;
             Color* out = hd.b.row(Y);
             for (int X = body.left; X < body.right; X++) {
-                const float pxl = (X + 0.5f - bx) / S - 0.5f;
-                int c0, c1;
-                const float fx = sharpAt(pxl, S, m.bw, c0, c1);
-                const float grainHere = grain((X + 0.5f) / S, (Y + 0.5f) / S);  // (form coordinates)
+                const float fx = (X + 0.5f - ox) / S - float(m.x0 + 1) - 0.5f;
+                const bool colEdge = X < xL || X >= xR;
+                const bool litLeft = X >= xL && X < xH1, litRight = X >= xH2 && X < xR;
+                const float u = m.u(fx);
                 int rgbv[3];
                 for (size_t c = 0; c < 3; c++) {
-                    const float rowv = m.row[size_t(r0)][c] + (m.row[size_t(r1)][c] - m.row[size_t(r0)][c]) * fy;
-                    const float colv = m.col[size_t(c0)][c] + (m.col[size_t(c1)][c] - m.col[size_t(c0)][c]) * fx;
-                    const float tex = m.texture[c] / 1.65f * grainHere;
-                    rgbv[c] = clampi(int(std::lround(rowv + colv + tex)), 0, 255);
+                    float v;
+                    if (colEdge || rowEdge) {
+                        const float side = (X < xL ? m.left : m.right)[c];
+                        const float end = (Y < yT ? m.top : m.bottom)[c];
+                        v = colEdge && rowEdge ? std::min(side, end) : colEdge ? side : end;
+                    } else {
+                        v = m.k[0][c] + m.k[1][c] * fy + m.k[2][c] * u + m.k[3][c] * u * u +
+                            m.k[4][c] * std::exp(-(fx / m.glowX + fy / m.glowY));
+                        if (highlight) v += m.k[5][c];
+                        if (litLeft) v += m.k[6][c];
+                        if (litRight) v += m.k[7][c];
+                        v += kButtonGrain * m.grainAmp[c] / 1.65f *
+                             grain((X + 0.5f) / S, (Y + 0.5f) / S);  // (form coordinates)
+                    }
+                    rgbv[c] = clampi(int(std::lround(v)), 0, 255);
                 }
                 out[X] = rgb(rgbv[0], rgbv[1], rgbv[2]);
             }

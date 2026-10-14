@@ -152,7 +152,7 @@ void EditorController::buildMenus() {
     poly.items.push_back(item("1 voice", 1, polyClick, true, true));
     poly.items.push_back(item("2 voices", 2, polyClick, true, true));
     poly.items.push_back(item("4 voices", 4, polyClick, true, true));
-    poly.items.push_back(item("8 voices   (SQ80)", 8, polyClick, true, true));
+    poly.items.push_back(item("8 voices", 8, polyClick, true, true));
     poly.items.push_back(item("12 voices", 12, polyClick, true, true));
     poly.items.push_back(item("16 voices", 16, polyClick, true, true));
     poly.items.push_back(item("24 voices", 24, polyClick, true, true));
@@ -241,7 +241,7 @@ void EditorController::buildMenus() {
     o.push_back(line());
     MenuNode zoom = item("Zoom", 0, nullptr);
     auto zoomClick = [this](MenuNode& n) { this->zoomClick(n); };
-    for (const auto& z : {std::pair<const char*, int>{"100%   (SQ8L)", 100}, {"125%", 125}, {"150%", 150},
+    for (const auto& z : {std::pair<const char*, int>{"100%", 100}, {"125%", 125}, {"150%", 150},
                           {"175%", 175}, {"200%", 200}, {"250%", 250}, {"300%", 300}})
         zoom.items.push_back(item(z.first, z.second, zoomClick, true, true));
     iZoom = o.size();

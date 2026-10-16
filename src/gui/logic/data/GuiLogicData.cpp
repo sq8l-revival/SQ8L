@@ -2,6 +2,16 @@
 // the emulator): the VFD page definitions of FUN_0047e340 with their setup, the character maps
 // of the two TLCD3 displays and the formatter text tables. Maintained by hand since; the
 // script is one-time use and re-running it would throw those edits away.
+//
+// Additions of the port, marked (port) where they sit:
+//  * VOICES on the EMU page, the playable voices of the program (parameter 375).
+//  * DIR on the OSC1-3 pages, the wave playback direction. Their first row was full at 44
+//    columns, so WAVE= shortens to WF= to pay for it; WF keeps knob 4 and DIR takes knob 5,
+//    which issue #43 draws as a soft button. DIR takes an ordinal, so the MODS items below
+//    it name their parameter outright instead of counting from the page base.
+//  * WF= on the OSC1-3 and LFO pages too, so the label reads the same everywhere. The LFO
+//    field spends the freed column on 6 cells, enough for Fmt::LfoWave to spell the wave
+//    names out instead of the two digits 4 columns forced.
 #include "../LcdData.h"
 
 namespace sq8l::gui::data {
@@ -41,10 +51,11 @@ static const ParamSetup kParams_1_0[] = {
     {2, "Semitone shift of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // SEMI
     {3, "Fine tune of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // FINE
     {4, "Waveform of oscillator", -1, Fmt::Wave, PopText::None, true, 25, Change::None},  // WAVE
-    {7, "Pitch modulation source 1", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
-    {9, "Pitch modulation amount 1", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
-    {10, "Pitch modulation source 2", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
-    {12, "Pitch modulation amount 2", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {7, "Pitch modulation source 1", 4, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
+    {9, "Pitch modulation amount 1", 5, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
+    {10, "Pitch modulation source 2", 6, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
+    {12, "Pitch modulation amount 2", 7, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {5, "Playback direction of oscillator", 8, Fmt::WaveDir, PopText::None, true, 0, Change::None},  // (port) DIR
 };
 static const ParamSetup kParams_1_1[] = {
     {1, "Volume of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // LEVEL
@@ -59,10 +70,11 @@ static const ParamSetup kParams_2_0[] = {
     {2, "Semitone shift of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // SEMI
     {3, "Fine tune of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // FINE
     {4, "Waveform of oscillator", -1, Fmt::Wave, PopText::None, true, 25, Change::None},  // WAVE
-    {7, "Pitch modulation source 1", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
-    {9, "Pitch modulation amount 1", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
-    {10, "Pitch modulation source 2", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
-    {12, "Pitch modulation amount 2", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {7, "Pitch modulation source 1", 23, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
+    {9, "Pitch modulation amount 1", 24, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
+    {10, "Pitch modulation source 2", 25, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
+    {12, "Pitch modulation amount 2", 26, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {5, "Playback direction of oscillator", 27, Fmt::WaveDir, PopText::None, true, 0, Change::None},  // (port) DIR
 };
 static const ParamSetup kParams_2_1[] = {
     {1, "Volume of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // LEVEL
@@ -77,10 +89,11 @@ static const ParamSetup kParams_3_0[] = {
     {2, "Semitone shift of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // SEMI
     {3, "Fine tune of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // FINE
     {4, "Waveform of oscillator", -1, Fmt::Wave, PopText::None, true, 25, Change::None},  // WAVE
-    {7, "Pitch modulation source 1", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
-    {9, "Pitch modulation amount 1", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
-    {10, "Pitch modulation source 2", -1, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
-    {12, "Pitch modulation amount 2", -1, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {7, "Pitch modulation source 1", 42, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD1.SEL
+    {9, "Pitch modulation amount 1", 43, Fmt::None, PopText::None, true, 0, Change::None},  // MOD1.AMT
+    {10, "Pitch modulation source 2", 44, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD2.SEL
+    {12, "Pitch modulation amount 2", 45, Fmt::None, PopText::None, true, 0, Change::None},  // MOD2.AMT
+    {5, "Playback direction of oscillator", 46, Fmt::WaveDir, PopText::None, true, 0, Change::None},  // (port) DIR
 };
 static const ParamSetup kParams_3_1[] = {
     {1, "Volume of oscillator", -1, Fmt::None, PopText::None, true, 0, Change::None},  // LEVEL
@@ -313,6 +326,7 @@ static const ParamSetup kParams_17_1[] = {
     {2, "Pitchbend mode (selects which voices are affected by bend)", -1, Fmt::BendMode, PopText::None, true, 0, Change::None},  // BMODE
     {3, "Voice stealing mode (HARD=stop voice, SOFT=fade out)", 366, Fmt::VoiceSteal, PopText::None, false, 0, Change::None},  // VSTEAL
     {4, "Emulation of a bug in the SQ-80 when AM=ON", 358, Fmt::None, PopText::None, true, 0, Change::None},  // AMBUG
+    {5, "Playable voices of this program (8 matches the SQ-80)", 375, Fmt::Polyphony, PopText::None, false, 0, Change::None},  // (port) VOICES
 };
 static const ParamSetup kParams_17_2[] = {
     {2, "DCA1-3 smoothing mode (EMU=like SQ-80, FAST=less accurate but without latency)", 359, Fmt::Dca13Mode, PopText::None, true, 0, Change::None},  // DCA13
@@ -322,25 +336,25 @@ static const ParamSetup kParams_17_2[] = {
 };
 
 const PageSetup kPages[kNumPages] = {
-    {"[OSC1-3] [OUTPUT=] [{1,ENABLE1,3,0,1}] 4 [{2,ENABLE2,3,0,1}] 4 [{3,ENABLE3,3,0,1}] 1 [FINAL={4,ENV4.AMT,2,0,63}]\\&7 [LEVEL=] 2 [{6,LEVEL1,2,0,63}] 5 [{7,LEVEL2,2,0,63}] 5 [{8,LEVEL3,2,0,63}] 2 [SAT={9,SAT,3,-1,15}]\\&[OSC1-3] [WAVE=] [{1,WAVE1,6,0,74}] 1 [{2,WAVE2,6,0,74}] 1 [{3,WAVE3,6,0,74}] [SYNC={4,SYNC,3,0,1}]\\&7 [OCT=] 3 [{6,OCT1,2,-3,+5}] 5 [{7,OCT2,2,-3,+5}] 5 [{8,OCT3,2,-3,+5}] 2 [AM={9,XMOD,3,0,1}]\\&[OSC1-3] [SEMI=] 2 [{1,SEMI1,3,-12,12}] 4 [{2,SEMI2,3,-12,12}] 4 [{3,SEMI3,3,-12,12}] 1 [SYNC={4,SYNC,3,0,1}]\\&7 [FINE=] 2 [{6,FINE1,3,-31,+31}] 4 [{7,FINE2,3,-31,+31}] 4 [{8,FINE3,3,-31,+31}] 1 [AM={9,XMOD,3,0,1}]",
+    {"[OSC1-3] [OUTPUT=] [{1,ENABLE1,3,0,1}] 4 [{2,ENABLE2,3,0,1}] 4 [{3,ENABLE3,3,0,1}] 1 [FINAL={4,ENV4.AMT,2,0,63}]\\&7 [LEVEL=] 2 [{6,LEVEL1,2,0,63}] 5 [{7,LEVEL2,2,0,63}] 5 [{8,LEVEL3,2,0,63}] 2 [SAT={9,SAT,3,-1,15}]\\&[OSC1-3] 1 [WF=] 1 [{1,WAVE1,6,0,74}] 1 [{2,WAVE2,6,0,74}] 1 [{3,WAVE3,6,0,74}] [SYNC={4,SYNC,3,0,1}]\\&7 [OCT=] 3 [{6,OCT1,2,-3,+5}] 5 [{7,OCT2,2,-3,+5}] 5 [{8,OCT3,2,-3,+5}] 2 [AM={9,XMOD,3,0,1}]\\&[OSC1-3] [SEMI=] 2 [{1,SEMI1,3,-12,12}] 4 [{2,SEMI2,3,-12,12}] 4 [{3,SEMI3,3,-12,12}] 1 [SYNC={4,SYNC,3,0,1}]\\&7 [FINE=] 2 [{6,FINE1,3,-31,+31}] 4 [{7,FINE2,3,-31,+31}] 4 [{8,FINE3,3,-31,+31}] 1 [AM={9,XMOD,3,0,1}]",
      3, {
         {"OSC1-3 Mix", 0, 0, -1, 0, 0, 0, kParams_0_0, 8},
         {"Waves", 0, 0, -1, 0, 1, 0, kParams_0_1, 8},
         {"Tune", 0, 0, -1, 0, 1, 0, kParams_0_2, 8},
      }},
-    {"[OSC1][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] 3 [WAVE={4,WAVE,6,0,74}] []\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA1][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
+    {"[OSC1][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] [WF={3,WAVE,6,0,74}] [{4,DIR,2,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA1][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
      2, {
-        {"OSC1", 1, 2, 0, 0, 0, 0, kParams_1_0, 8},
+        {"OSC1", 1, 2, 0, 0, 0, 0, kParams_1_0, 9},
         {"DCA1", 1, 2, 11, 0, 1, 0, kParams_1_1, 6},
      }},
-    {"[OSC2][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] 3 [WAVE={4,WAVE,6,0,74}] []\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA2][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
+    {"[OSC2][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] [WF={3,WAVE,6,0,74}] [{4,DIR,2,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA2][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
      2, {
-        {"OSC2", 2, 2, 19, 0, 0, 0, kParams_2_0, 8},
+        {"OSC2", 2, 2, 19, 0, 0, 0, kParams_2_0, 9},
         {"DCA2", 2, 2, 30, 0, 1, 0, kParams_2_1, 6},
      }},
-    {"[OSC3][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] 3 [WAVE={4,WAVE,6,0,74}] []\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA3][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
+    {"[OSC3][OCT={0,OCT,2,-3,+5}] [SEMI={1,SEMI,3,-12,12}] [FINE={2,FINE,3,-31,+31}] [WF={3,WAVE,6,0,74}] [{4,DIR,2,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]\\&[DCA3][LEVEL={0,LEVEL,2,0,63}] 3 [OUTPUT={2,ENABLE,3,0,1}]\\&5 [MODS=] 3 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,3,-63,+63}] 3 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,3,-63,+63}]",
      2, {
-        {"OSC3", 3, 2, 38, 0, 0, 0, kParams_3_0, 8},
+        {"OSC3", 3, 2, 38, 0, 0, 0, kParams_3_0, 9},
         {"DCA3", 3, 2, 49, 0, 1, 0, kParams_3_1, 6},
      }},
     {"[FILT][CUT={0,FREQ,3,0,127}] [RES={1,RES,2,0,31}] 11 [KEYB * {4,KEYBD,3,-63,+63}]\\&5 [MODS=] 2 [{6,MOD1.SEL,6,-1,145}] [*] [{7,MOD1.AMT,4,-127,+127}] 2 [{8,MOD2.SEL,6,-1,145}] [*] [{9,MOD2.AMT,4,-127,+127}]",
@@ -351,22 +365,22 @@ const PageSetup kPages[kNumPages] = {
      1, {
         {"Final Volume (DCA4)", 5, 6, 273, 0, 0, 0, kParams_5_0, 7},
      }},
-    {"[LFO1][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] 1 [WAV={4,WAVE,4,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO1][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO1][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO1][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
         {"LFO1", 6, 7, 133, 0, 0, 0, kParams_6_0, 9},
         {"LFO1", 6, 7, 133, 0, 0, 1, kParams_6_1, 8},
      }},
-    {"[LFO2][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] 1 [WAV={4,WAVE,4,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO2][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO2][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO2][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
         {"LFO2", 7, 7, 153, 0, 0, 0, kParams_7_0, 9},
         {"LFO2", 7, 7, 153, 0, 0, 1, kParams_7_1, 8},
      }},
-    {"[LFO3][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] 1 [WAV={4,WAVE,4,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO3][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO3][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO3][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
         {"LFO3", 8, 7, 173, 0, 0, 0, kParams_8_0, 9},
         {"LFO3", 8, 7, 173, 0, 0, 1, kParams_8_1, 8},
      }},
-    {"[LFO4][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] 1 [WAV={4,WAVE,4,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO4][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO4][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO4][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
         {"LFO4", 9, 7, 193, 0, 0, 0, kParams_9_0, 9},
         {"LFO4", 9, 7, 193, 0, 0, 1, kParams_9_1, 8},
@@ -403,10 +417,10 @@ const PageSetup kPages[kNumPages] = {
      1, {
         {"Matrix3", 16, 9, 229, 0, 0, 0, kParams_16_0, 8},
      }},
-    {"[MODE] [SYNC={0,SYNC,3,0,1}] [AM={1,XMOD,3,0,1}] 5 [MONO={3,MONO,3,0,1}] [GLIDE={4,GLIDE,2,0,63}]\\&5 [RESTART-] [VC={6,REST.VC,3,0,1}] [ENV={7,REST.ENV,3,0,1}] [OSC={8,REST.OSC,3,0,1}] [CYC={9,CYC,3,0,1}]\\&[EMU] 1 [BEND={0,BRANGE,2,0,36}] [MODE={1,BMODE,5,0,6}] 9 [VSTEAL={4,VSTEAL,4,-1,0}]\\&5 [AMBUG={5,AMBUG,3,0,1}]\\&[EMU] [SMOOTH-] [DCA1-3={1,DCA13,4,0,1}] 3 [MUFFLE={3,MUF,3,0,1}]\\&12 [DCA4={6,DCA4,4,0,1}] 4 [DC-BLOCK={8,DCB,3,0,2}]",
+    {"[MODE] [SYNC={0,SYNC,3,0,1}] [AM={1,XMOD,3,0,1}] 5 [MONO={3,MONO,3,0,1}] [GLIDE={4,GLIDE,2,0,63}]\\&5 [RESTART-] [VC={6,REST.VC,3,0,1}] [ENV={7,REST.ENV,3,0,1}] [OSC={8,REST.OSC,3,0,1}] [CYC={9,CYC,3,0,1}]\\&[EMU] 1 [BEND={0,BRANGE,2,0,36}] [MODE={1,BMODE,5,0,6}] 9 [VSTEAL={4,VSTEAL,4,-1,0}]\\&5 [AMBUG={5,AMBUG,3,0,1}] 18 [VOICES={9,VOICES,2,1,64}]\\&[EMU] [SMOOTH-] [DCA1-3={1,DCA13,4,0,1}] 3 [MUFFLE={3,MUF,3,0,1}]\\&12 [DCA4={6,DCA4,4,0,1}] 4 [DC-BLOCK={8,DCB,3,0,2}]",
      3, {
         {"Modes", 17, 10, 324, 0, 0, 0, kParams_17_0, 8},
-        {"Emulation", 17, 10, 356, 0, 0, 0, kParams_17_1, 4},
+        {"Emulation", 17, 10, 356, 0, 0, 0, kParams_17_1, 5},
         {"Emulation", 17, 10, 356, 0, 0, 1, kParams_17_2, 4},
      }},
 };

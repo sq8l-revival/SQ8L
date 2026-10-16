@@ -382,7 +382,7 @@ LcdController::LcdController(LcdDisplay& lcd, EditBuffer* editBuffer, LcdListene
 void LcdController::buildPages() {  // FUN_0045a790(0x12) + FUN_0047e340
     pages_.assign(size_t(kNumPages), LcdPage{});
     for (int i = 0; i < kNumPages; i++) {
-        const PageSetup& ps = data::pageSetup(i);
+        const PageSetup& ps = data::kPages[i];
         LcdPage& pg = pages_[size_t(i)];
         pg.subs.resize(1);
         pg.subs[0].c = i;

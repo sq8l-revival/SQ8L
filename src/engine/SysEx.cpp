@@ -1,4 +1,4 @@
-// SQ80 / ESQ-1 SysEx conversion, transcribed from the original (unit_453adc, unit_450db8).
+// SQ-80 / ESQ-1 SysEx conversion, transcribed from the original (unit_453adc, unit_450db8).
 // Byte-level code: every helper reproduces the 8-bit register arithmetic of the asm.
 #include "SysEx.h"
 
@@ -54,7 +54,7 @@ inline int clampU(int v, int hi) {  // FUN_00450da4 / 0450dd0 / 0450de4 / 0450df
     return v < hi ? v : hi;
 }
 
-// FUN_00453ab4: SQ80 pan nybble 0..15 -> -63..+63.
+// FUN_00453ab4: SQ-80 pan nybble 0..15 -> -63..+63.
 uint8_t panFromSq80(uint8_t n) {
     const int v = clampU(n, 15);
     if (v == 0) return static_cast<uint8_t>(-63);
@@ -62,7 +62,7 @@ uint8_t panFromSq80(uint8_t n) {
     return static_cast<uint8_t>((v - 8) * 8);
 }
 
-// FUN_00453ae8: pan -63..+63 -> SQ80 nybble.
+// FUN_00453ae8: pan -63..+63 -> SQ-80 nybble.
 uint8_t panToSq80(int v) {
     v = clampS63(v);
     if (v <= -63) return 0;
@@ -79,7 +79,7 @@ uint8_t getSource(const uint8_t* p) {
     return sourceToSq80(static_cast<int16_t>(p[0] | (p[1] << 8)));
 }
 
-// FUN_00450e3c: one SQ80 character -> text.
+// FUN_00450e3c: one SQ-80 character -> text.
 void appendSq80Char(std::string& out, uint8_t c) {
     switch (c) {
         case 0x21: out += "0."; return;
@@ -174,7 +174,7 @@ uint8_t sourceToSq80(int16_t src) {
     if (s < 0 || s > 0x0a) return 0x0f;
     switch (s) {
         case 0: case 1: case 2: return uint8_t(s);
-        case 3: return 0x0f;  // LFO4 has no SQ80 equivalent
+        case 3: return 0x0f;  // LFO4 has no SQ-80 equivalent
         case 4: case 5: case 6: case 7: return uint8_t(s - 1);
         case 8: return 7;
         case 9: return 8;

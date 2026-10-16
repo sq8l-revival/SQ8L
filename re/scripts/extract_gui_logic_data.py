@@ -1,6 +1,10 @@
 """Extract the data of the editor logic (lcdSetup / lcdControl / formatters) from the original
 and generate src/gui/logic/data/GuiLogicData.cpp.
 
+ONE-TIME USE: it has run, and GuiLogicData.cpp is now maintained by hand. Re-running it WILL
+overwrite the edits made since (hint texts, naming) and set the port back. Kept for the record
+of where the data came from, not as a step anyone repeats.
+
 The 8 KB setup routine FUN_0047e340 (unit_47e330) builds the 18 VFD pages: it passes one
 definition string per page to the page object (ClcdCtr_pageML.setText, which splits it into
 sub-pages of two lines and lets ClcdCtr_pageSL parse each one), then configures every sub-page

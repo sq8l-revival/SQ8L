@@ -1,4 +1,4 @@
-// SQ80-style 4-stage envelope with the SQ8L extras (original unit mod_env_2, class Csq_env,
+// SQ-80 style 4-stage envelope with the SQ8L extras (original unit mod_env_2, class Csq_env,
 // 128 bytes; 4 per voice slot). See docs/modules/env.md.
 //
 // The envelope is integer arithmetic (8.8 fixed point levels) run at control rate

@@ -53,7 +53,7 @@ const std::vector<ParamSetup>& emuParams() {
     static const std::vector<ParamSetup> v = [] {
         const SubPageSetup& src = kPages[kPortEmuPage].subPages[kEmuSubPage];
         std::vector<ParamSetup> out(src.params, src.params + src.numParams);
-        out.push_back({kVoicesIndex, "Playable voices of this program (8 matches the SQ80)",
+        out.push_back({kVoicesIndex, "Playable voices of this program (8 matches the SQ-80)",
                        kVoicesParam, Fmt::Polyphony, PopText::None, false, 0, Change::None});
         return out;
     }();

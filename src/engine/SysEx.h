@@ -1,6 +1,6 @@
-// SQ80 / ESQ-1 SysEx conversion (original unit unit_453adc + helpers in unit_450db8).
+// SQ-80 / ESQ-1 SysEx conversion (original unit unit_453adc + helpers in unit_450db8).
 //
-// An ESQ-1/SQ80 program is 102 bytes; in a SysEx dump each byte is sent as two nybbles
+// An ESQ-1/SQ-80 program is 102 bytes; in a SysEx dump each byte is sent as two nybbles
 // (low first): 204 bytes. Dumps: F0 0F 02 <channel> <type> <data...> F7 with type 1 = single
 // program (210 bytes total), type 2 = 40-program bank (8166 bytes total).
 #pragma once
@@ -30,11 +30,11 @@ bool parseHeader(const uint8_t* data, int* type);
 // FUN_00453fd8: writes F0 0F 02 <channel> <type>; only types 1 and 2 are accepted.
 bool writeHeader(uint8_t* data, uint8_t type, uint8_t channel);
 
-// Mod source mapping SQ80 (0..15) <-> SQ8L (FUN_00453b14 / FUN_00453ba0).
+// Mod source mapping SQ-80 (0..15) <-> SQ8L (FUN_00453b14 / FUN_00453ba0).
 int16_t sourceFromSq80(uint8_t src);
 uint8_t sourceToSq80(int16_t src);
 
-// Name conversion. SQ80 characters with a decimal point ('!' -> "0.", '#' -> "1.", ...) are
+// Name conversion. SQ-80 characters with a decimal point ('!' -> "0.", '#' -> "1.", ...) are
 // expanded; characters outside 0x20..0x5f are dropped (FUN_004510d4 / FUN_00450e3c).
 std::string nameFromSq80(const uint8_t* chars, int n);
 // FUN_0045113c: upper case, "d." -> special char, spaces dropped, zero padded to n bytes.

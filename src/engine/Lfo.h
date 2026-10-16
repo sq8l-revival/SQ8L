@@ -1,4 +1,4 @@
-// SQ80-style LFO with SQ8L extensions (original unit mod_lfo4_22, class Csq_lfo,
+// SQ-80 style LFO with SQ8L extensions (original unit mod_lfo4_22, class Csq_lfo,
 // instance size 0xf0). See docs/modules/lfo.md.
 //
 // The LFO runs at the control rate (one tick() per voice control update). It is
@@ -87,7 +87,7 @@ public:
     // ---------------------------------------------------------------- inputs
     // Written by plugCore before trigger() and before every tick().
     int32_t freqIn = 0;          // +0xb0  FREQ << 8 plus frequency modulation (8.8 fixed point)
-    int32_t humanIn = 0;         // +0xb4  HUMAN: 0 OFF, 1 ON (SQ80), 2 1x, 3 2x, 4 4x, 5 8x, 6 16x
+    int32_t humanIn = 0;         // +0xb4  HUMAN: 0 OFF, 1 ON (SQ-80), 2 1x, 3 2x, 4 4x, 5 8x, 6 16x
     int32_t waveIn = 0;          // +0xb8  WAVE 0..82 (see LfoWave)
     int32_t level1In = 0;        // +0xbc  L1 (start amplitude) 0..63
     int32_t level2In = 0;        // +0xc0  L2 (final amplitude) 0..63

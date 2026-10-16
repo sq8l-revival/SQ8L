@@ -47,8 +47,8 @@ constexpr size_t ExtSize = 0x6c;
 constexpr size_t osc(int i) { return 0x022 + 0x18 * size_t(i); }
 namespace Osc {
 constexpr size_t Oct = 0x00;      // s8  -3..+5
-constexpr size_t Semi = 0x01;     // s8  -12..+12 (SQ80 0..11)
-constexpr size_t Fine = 0x02;     // s8  -31..+31 (SQ80 0..31)
+constexpr size_t Semi = 0x01;     // s8  -12..+12 (SQ-80 0..11)
+constexpr size_t Fine = 0x02;     // s8  -31..+31 (SQ-80 0..31)
 constexpr size_t Wave = 0x03;     // s16 0..74
 constexpr size_t PitchMod1 = 0x05;// slot (FM source 1 / amount -63..63)
 constexpr size_t PitchMod2 = 0x08;// slot
@@ -108,7 +108,7 @@ constexpr size_t filter(int i) { return 0x106 + 0x0e * size_t(i); }
 namespace Filter {
 constexpr size_t Freq = 0x00;   // s8 0..127
 constexpr size_t Res = 0x01;    // s8 0..31
-constexpr size_t Keybd = 0x02;  // s8 -63..+63 (SQ80 0..63)
+constexpr size_t Keybd = 0x02;  // s8 -63..+63 (SQ-80 0..63)
 constexpr size_t Mod1 = 0x04;   // slot (amount -127..127)
 constexpr size_t Mod2 = 0x07;   // slot
 constexpr size_t Mod3 = 0x0b;   // slot (not exposed by the GUI)

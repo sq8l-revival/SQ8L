@@ -338,7 +338,7 @@ void Lfo::updateParams() {
     if (human <= 0) {
         phaseInc = freqToIncrement(freqIn);
     } else if (human == 1) {
-        // SQ80 emulation: no humanization below FREQ 7.
+        // SQ-80 emulation: no humanization below FREQ 7.
         const uint32_t base = static_cast<uint32_t>(freqIn) >> 8;
         const uint32_t humanized = static_cast<uint32_t>(add32(freqIn, humanOffset)) >> 8;
         if (static_cast<int32_t>(base) < 7) {
@@ -453,7 +453,7 @@ int32_t Lfo::step() {
     phase += static_cast<uint32_t>(phaseInc);
     if (oneShot > 0 && phase > 0x40000000u) running = 0;
 
-    // EMU steps: every emuPeriod/1024 ticks (the SQ80's coarse LFO update).
+    // EMU steps: every emuPeriod/1024 ticks (the SQ-80's coarse LFO update).
     bool emuStep;
     if (emuClock <= 0) {
         emuClock = add32(emuClock, emuPeriod);

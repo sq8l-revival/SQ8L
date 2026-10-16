@@ -213,7 +213,7 @@ the original archive in `original/`, install `requirements.txt`, and run
 
 **SQ8L** © 2006–2008 Siegfried Kullmann. Factory sounds in bank C by Ole Jeppesen and
 Siegfried Kullmann; bank D contains the Ensoniq SQ-80 factory sounds. Thanks to Rainer
-Buchty "for SQ80 resources & disassembled OS code", as in the original.
+Buchty "for SQ-80 resources & disassembled OS code", as in the original.
 
 This port reproduces SQ8L's behaviour, artwork and data (including the SQ-80 wave ROM and
 factory sounds that the original plugin contained) to preserve a freeware instrument that

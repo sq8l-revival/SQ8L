@@ -94,7 +94,7 @@ public:
     const std::vector<uint8_t>& getChunk();
     int setChunk(const uint8_t* data, size_t size);  // bytes consumed (0x23b / 0x220) or 0
 
-    // SQ80/ESQ1 single program SysEx (FUN_00460c68 / FUN_00460d10).
+    // SQ-80/ESQ-1 single program SysEx (FUN_00460c68 / FUN_00460d10).
     bool importSysex(const uint8_t* data, size_t size, bool checkHeader);
     std::vector<uint8_t> exportSysex() const;
 

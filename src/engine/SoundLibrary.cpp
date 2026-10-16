@@ -76,7 +76,7 @@ void SoundLibrary::loadFactory() {
     // Bank C: the decompressed SQ8L library blob (type 2, 128 programs).
     for (int i = 0; i < kBankSize; i++)
         std::memcpy(programs_[0x100 + i].bytes, data::kFactoryBankC[i], kProgramSize);
-    // Bank D: FUN_00454aec(raw SQ80 program, slot, 1, 0, 4, -12) for the 40 SQ80 sounds.
+    // Bank D: FUN_00454aec(raw SQ-80 program, slot, 1, 0, 4, -12) for the 40 SQ-80 sounds.
     for (int i = 0; i < kFactoryD; i++)
         std::memcpy(programs_[0x180 + i].bytes, data::kFactoryBankD[i], kProgramSize);
     notify(-1);

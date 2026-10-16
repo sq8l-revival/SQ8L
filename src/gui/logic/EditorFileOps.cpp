@@ -10,9 +10,9 @@ namespace sq8l::gui {
 namespace {
 
 const char kLibFilter[] = "Library/Backup data (*.8XL; *.dat)|*.8XL;*.dat";
-const char kSyxFilter[] = "ESQ/SQ80 SysEx (*.SYX)|*.SYX";
+const char kSyxFilter[] = "ESQ-1/SQ-80 SysEx (*.SYX)|*.SYX";
 
-// SQ80/ESQ1 SysEx messages of the SEND/REQ functions (DAT_004c3074 / 004c307c / 004c3084)
+// SQ-80/ESQ-1 SysEx messages of the SEND/REQ functions (DAT_004c3074 / 004c307c / 004c3084)
 const std::vector<uint8_t> kSysexPre = {0xF0, 0x0F, 0x02, 0x00, 0x0E, 0x26, 0xF7};
 const std::vector<uint8_t> kSysexPost = {0xF0, 0x0F, 0x02, 0x00, 0x0E, 0x2F, 0x62, 0xF7};
 const std::vector<uint8_t> kSysexRequest = {0xF0, 0x0F, 0x02, 0x00, 0x09, 0xF7};
@@ -186,7 +186,7 @@ void EditorController::importBank() {  // menu_impBankClick
     const int idx = host_.editBuffer().libraryIndex(p, b);
     if (host_.library().importSysexBank(data.data(), data.size(), idx, true)) {
         ok = true;
-    } else if (ui_.messageBox("This file could not be identified as ESQ1/SQ80 SysEx. Try to load anyway?",
+    } else if (ui_.messageBox("This file could not be identified as ESQ-1/SQ-80 SysEx. Try to load anyway?",
                               "Warning", kMbYesNo) == kIdYes) {
         if (host_.library().importSysexBank(data.data(), data.size(), host_.editBuffer().libraryIndex(p, b), false))
             ok = true;
@@ -239,7 +239,7 @@ void EditorController::importProgram() {  // menu_impSingleClick
     EditBuffer& eb = host_.editBuffer();
     if (eb.importSysex(data.data(), data.size(), true)) {
         ok = true;
-    } else if (ui_.messageBox("This file could not be identified as ESQ1/SQ80 SysEx. Try to load anyway?",
+    } else if (ui_.messageBox("This file could not be identified as ESQ-1/SQ-80 SysEx. Try to load anyway?",
                               "Warning", kMbYesNo) == kIdYes) {
         // the original retries with the same header check
         if (eb.importSysex(data.data(), data.size(), true))

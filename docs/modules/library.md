@@ -16,14 +16,14 @@ C++: `src/engine/SoundLibrary.{h,cpp}`, `src/engine/EditBuffer.{h,cpp}`,
 | paramEditor 0x45f8e8, unit_4600e0 | `CparamEditor` and its field descriptor |
 | unit_4537a4 | INIT program |
 | unit_453adc | SysEx conversions, pre-0.90 program conversion, SysEx headers |
-| unit_450db8 | nybble/bit helpers, SQ80 character set |
+| unit_450db8 | nybble/bit helpers, SQ-80 character set |
 | simplePack 0x452db4 | `CpackRle25` (factory bank C blob), `CpackDlt36` (wave ROM); not used by any file format |
 | plugConfig 0x45269c | settings (`settings.md`) |
 
 ## Library (CsoundLib)
 
 512 slots = banks A (0..127), B (128..255): user; C (256..383): SQ8L factory; D (384..511):
-SQ80 factory in 384..423, INIT in the rest. Index = bank*128 + program.
+SQ-80 factory in 384..423, INIT in the rest. Index = bank*128 + program.
 
 There is **one global library** per DLL (shared by all plugin instances). It is created when
 the DLL is loaded and destroyed when it is unloaded:
@@ -31,7 +31,7 @@ the DLL is loaded and destroyed when it is unloaded:
 1. `FUN_004550b0(lib, true)`: header INIT + all 512 slots INIT, clean := 0.
 2. `CsoundLib_v005` (restore): factory banks (`FUN_004552a4`: bank C from the CpackRle25
    blob at 0x489c54, which is a type-2 library image of 128 programs; bank D = FUN_00454aec
-   of the 40 raw SQ80 programs at 0x493324 with (1, 0, 4, -12)); notify(-1); then
+   of the 40 raw SQ-80 programs at 0x493324 with (1, 0, 4, -12)); notify(-1); then
    `SQ8L\SQ8L_backup.dat` is loaded as a library file; if that fails (no file, empty,
    unknown type, bad magic) banks C and D are **copied into A and B**; clean := 1.
 3. At unload `CsoundLib_v006` writes the library file image to `SQ8L_backup.dat`; clean := 1.
@@ -77,7 +77,7 @@ save images, loads of valid/old/broken images with various counts into all banks
 writes (incl. protected slots), names, backup file written by the original into
 `oracle/sandbox/`, restore from valid/old/corrupt/missing backup files.
 
-## SysEx (SQ80 / ESQ-1)
+## SysEx (SQ-80 / ESQ-1)
 
 Dump header `F0 0F 02 <channel> <type>`: type 1 single program (210 bytes: 5 + 204 nybbles
 + F7), type 2 = 40 programs (8166 bytes). `parseHeader` (FUN_00453fb0) only checks F0 0F 02

@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
     // the program list: 4 columns of a bank header, a separator and 32 programs
     std::vector<MenuItem> prog;
     for (int b = 0; b < 4; b++) {
-        MenuItem h = item(std::string("Bank ") + char('A' + b) + (b < 2 ? "   (user)" : b == 2 ? "   (factory)" : "   (SQ80 factory)"),
+        MenuItem h = item(std::string("Bank ") + char('A' + b) + (b < 2 ? "   (user)" : b == 2 ? "   (factory)" : "   (SQ-80 factory)"),
                           1000 + b, b == 0, true);
         h.barBreak = b > 0;
         prog.push_back(h);
@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
     r = ui.messageBox("Load bank?", "Warning", kMbOkCancel);
     check(r == kIdCancel, "Escape = Cancel (" + std::to_string(r) + ")");
     H.key(kVkEscape);
-    r = ui.messageBox("This file could not be identified as ESQ1/SQ80 SysEx. Try to load anyway?", "Warning", kMbYesNo);
+    r = ui.messageBox("This file could not be identified as ESQ-1/SQ-80 SysEx. Try to load anyway?", "Warning", kMbYesNo);
     check(r == kIdNo, "Escape = No (" + std::to_string(r) + ")");
     // click the second button: buttons are bottom right, 75x23, 8 apart
     H.script.push_back([&] {});
@@ -226,6 +226,7 @@ int main(int argc, char** argv) {
 
     std::printf("info windows:\n");
     H.script.clear();
+
     std::vector<std::string> mod;
     for (int i = 0; i < 40; i++) mod.push_back("LFO" + std::to_string(i % 4 + 1) + " -> OSC" + std::to_string(i % 3 + 1));
     H.shot("modinfo");

@@ -406,7 +406,7 @@ def main():
     ed.idle()
     shown = ed.lcd_row(1)[33:42]
     check(shown == "VOICES=08" and ed.program_byte(0x197) == 0,
-          f"a program of the original has no VOICES and shows the SQ80's 8 ({shown!r})")
+          f"a program of the original has no VOICES and shows the SQ-80's 8 ({shown!r})")
     # the knob snaps to the 8 the display shows, so turning it goes to 7 or 9, and the
     # program keeps its 0 until the parameter is really edited
     check(ed.knob(9) == 8.0, f"the knob snaps to 8 for such a program ({ed.knob(9)})")

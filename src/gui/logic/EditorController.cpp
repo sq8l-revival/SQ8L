@@ -24,7 +24,7 @@ std::string bankName(int bank) {
     if (bank < 0 || bank > 3) return "?";
     std::string s(1, char('A' + bank));
     if (bank == 2) return s + "   (factory)";
-    if (bank == 3) return s + "   (SQ80 factory)";
+    if (bank == 3) return s + "   (SQ-80 factory)";
     return s + "   (user)";
 }
 
@@ -113,18 +113,18 @@ void EditorController::buildMenus() {
     f.push_back(item("Save program...", 0, nullptr, false));
     f.back().enabled = false;
     f.push_back(line(false));
-    f.push_back(item("Request program (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { requestProgram(); }));
-    f.push_back(item("Receive program (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { receiveProgram(); }));
-    f.push_back(item("Send program (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { sendProgram(); }));
-    f.push_back(item("Import program file (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { importProgram(); }));
-    f.push_back(item("Export program file (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { exportProgram(); }));
+    f.push_back(item("Request program (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { requestProgram(); }));
+    f.push_back(item("Receive program (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { receiveProgram(); }));
+    f.push_back(item("Send program (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { sendProgram(); }));
+    f.push_back(item("Import program file (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { importProgram(); }));
+    f.push_back(item("Export program file (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { exportProgram(); }));
     f.push_back(line());
-    f.push_back(item("Receive bank (SQ80/ESQ1 SysEx)...", 0, nullptr, false));
+    f.push_back(item("Receive bank (SQ-80/ESQ-1 SysEx)...", 0, nullptr, false));
     f.back().enabled = false;
-    f.push_back(item("Send bank (SQ80/ESQ1 SysEx)...", 0, nullptr, false));
+    f.push_back(item("Send bank (SQ-80/ESQ-1 SysEx)...", 0, nullptr, false));
     f.back().enabled = false;
-    f.push_back(item("Import bank file (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { importBank(); }));
-    f.push_back(item("Export bank file (SQ80/ESQ1 SysEx)...", 0, [this](MenuNode&) { exportBank(); }));
+    f.push_back(item("Import bank file (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { importBank(); }));
+    f.push_back(item("Export bank file (SQ-80/ESQ-1 SysEx)...", 0, [this](MenuNode&) { exportBank(); }));
 
     auto& in = infoMenu_.items;
     auto info = [this](MenuNode& n) {  // menuInfo_Click
@@ -188,20 +188,20 @@ void EditorController::buildMenus() {
     MenuNode dca13 = item("DCA1-3 smoothing", 0, nullptr);
     dca13.items.push_back(item("Set by program   (EMU->DCA1-3 parameter)", 16, emu, true, true));
     dca13.items.push_back(line());
-    dca13.items.push_back(item("EMU   (emulate SQ80: smooth, less responsive)", 17, emu, true, true));
+    dca13.items.push_back(item("EMU   (emulate SQ-80: smooth, less responsive)", 17, emu, true, true));
     dca13.items.push_back(item("FAST   (less accurate, more responsive)", 18, emu, true, true));
     emulation.items.push_back(dca13);
     MenuNode dca4 = item("DCA4 smoothing", 0, nullptr);
     dca4.items.push_back(item("Set by program   (EMU->DCA4 parameter)", 32, emu, true, true));
     dca4.items.push_back(line());
-    dca4.items.push_back(item("EMU   (softer attack, more like SQ80)", 33, emu, true, true));   // menu_dca4soft
+    dca4.items.push_back(item("EMU   (softer attack, more like SQ-80)", 33, emu, true, true));   // menu_dca4soft
     dca4.items.push_back(item("HARD   (hard attack, most responsive)", 34, emu, true, true));  // menu_dca4Hard
     emulation.items.push_back(dca4);
     MenuNode muff = item("Muffle mode", 0, nullptr);
     muff.items.push_back(item("Set by program   (EMU->MUFFLE parameter)", 48, emu, true, true));
     muff.items.push_back(line());
     muff.items.push_back(item("OFF   (crisp sound)", 49, emu, true, true));
-    muff.items.push_back(item("ON  (slightly muffled sound, more like SQ80)", 50, emu, true, true));
+    muff.items.push_back(item("ON  (slightly muffled sound, more like SQ-80)", 50, emu, true, true));
     emulation.items.push_back(muff);
     MenuNode dcb = item("DC blocking filter", 0, nullptr);
     dcb.items.push_back(item("Set by program   (EMU->DC-BLOCK parameter)", 64, emu, true, true));

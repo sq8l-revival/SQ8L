@@ -51,7 +51,7 @@ ENV_FIELDS = ([(f"level[{i}]", 0x04 + 4 * i, 4) for i in range(5)]
 PATCH_ENV, PATCH_MONO, PATCH_GLIDE, PATCH_REST_VC, PATCH_REST_ENV, PATCH_REST_OSC, PATCH_CYC = (
     0x6A, 0x172, 0x173, 0x174, 0x175, 0x176, 0x177)
 BANK_C = list(range(256, 384))   # SQ8L sounds
-BANK_D = list(range(384, 424))   # original SQ80 sounds
+BANK_D = list(range(384, 424))   # original SQ-80 sounds
 VEL_EXP = 0x494DCC               # velocity curve for LV >= 64
 
 

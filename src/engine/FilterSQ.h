@@ -1,4 +1,4 @@
-// SQ80-style 4-pole lowpass with resonance (original unit mod_filter4_31, class CfilterSQ).
+// SQ-80 style 4-pole lowpass with resonance (original unit mod_filter4_31, class CfilterSQ).
 #pragma once
 
 #include <cstdint>

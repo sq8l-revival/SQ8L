@@ -1,7 +1,7 @@
 // Sound library (original class CsoundLib, unit soundLibrary 0x454f90..0x455eb0).
 //
 // 512 programs = 4 banks of 128: A, B (user, 0..255), C (SQ8L factory, 256..383) and
-// D (SQ80 factory, 384..511; only 0..39 used). The original keeps one global instance shared
+// D (SQ-80 factory, 384..511; only 0..39 used). The original keeps one global instance shared
 // by all plugin instances; it is created at DLL load (factory banks + backup file restored)
 // and saved back to SQ8L_backup.dat at DLL unload. File I/O is left to the caller: all
 // load/save functions take/return byte buffers with the exact original file contents.
@@ -61,7 +61,7 @@ public:
     // FUN_004554cc: copy `count` whole banks.
     bool copyBanks(int srcBank, int dstBank, int count);
 
-    // SQ80/ESQ1 bank dumps (40 programs). FUN_00455a8c / FUN_00455b70.
+    // SQ-80/ESQ-1 bank dumps (40 programs). FUN_00455a8c / FUN_00455b70.
     bool importSysexBank(const uint8_t* data, size_t size, int startIndex, bool checkHeader);
     std::vector<uint8_t> exportSysexBank(int startIndex);
 

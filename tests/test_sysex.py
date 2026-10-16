@@ -1,4 +1,4 @@
-"""Differential test: SQ80/ESQ1 SysEx conversion (unit_453adc / unit_450db8) vs C++."""
+"""Differential test: SQ-80/ESQ-1 SysEx conversion (unit_453adc / unit_450db8) vs C++."""
 import ctypes
 import random
 import struct
@@ -139,7 +139,7 @@ def main():
           "OK" if not bad else f"{bad} MISMATCHES")
     ok &= bad == 0
 
-    # ---- raw SQ80 bytes -> program (bank D factory data + random)
+    # ---- raw SQ-80 bytes -> program (bank D factory data + random)
     pe = pefile.PE(ROOT + "/original/SQ8L.dll")
     raw = pe.get_data(SQ80_FACTORY - pe.OPTIONAL_HEADER.ImageBase, 40 * 0x66)
     cases = [(raw[i * 0x66:(i + 1) * 0x66], 1, 0, 4, -12) for i in range(40)]
@@ -160,8 +160,8 @@ def main():
         bad += got.raw != want
         if idx < 40:
             bank_d_ok &= want == progs[384 + idx]
-    print(f"SQ80 bytes -> program: {len(cases)} conversions", "OK" if not bad else f"{bad} MISMATCHES")
-    print("bank D = conversion of the 40 SQ80 factory programs:", "OK" if bank_d_ok else "MISMATCH")
+    print(f"SQ-80 bytes -> program: {len(cases)} conversions", "OK" if not bad else f"{bad} MISMATCHES")
+    print("bank D = conversion of the 40 SQ-80 factory programs:", "OK" if bank_d_ok else "MISMATCH")
     ok &= bad == 0 and bank_d_ok
 
     # ---- headers

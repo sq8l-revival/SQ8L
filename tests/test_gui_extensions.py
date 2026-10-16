@@ -22,7 +22,9 @@ what it adds:
     on the button or on its field in the display flips it (issue #43);
   * the mouse wheel over a knob or its display field steps the parameter, one notch at a time
     whatever the device's delta scale, and OPTIONS "Mouse" -> "Natural scrolling" inverts it
-    (issue #35).
+    (issue #35);
+  * the version of the build (cmake/Version.cmake) on the boot message, with its dots drawn as
+    the decimal-point attribute of the cell before them rather than as characters.
 
 Self-contained (no original files needed):
   SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
@@ -234,6 +236,10 @@ class Editor:
         row = json.loads(self.cstr(self.L.sq8l_gl_state))["lcd"][y]
         return "".join(chr(c[0]) for c in row)
 
+    def lcd_attrs(self, y):
+        """The attribute of every cell of row y: 0 plain, 1 underline, 2 dot, 3 both."""
+        return [c[1] for c in json.loads(self.cstr(self.L.sq8l_gl_state))["lcd"][y]]
+
     def pages(self):
         return json.loads(self.cstr(self.L.sq8l_gl_pages))
 
@@ -281,6 +287,9 @@ def main():
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
         ("sq8l_gl_context_menu", [vp, ctypes.c_int32, ctypes.c_int32], None),
         ("sq8l_gl_editbuffer", [vp, ctypes.c_char_p], None),
+        ("sq8l_gl_write_dotted", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_char_p, ctypes.c_int32],
+         ctypes.c_int32),
+        ("sq8l_gl_version", [], ctypes.c_char_p),
     ]:
         getattr(L, name).argtypes = args
         getattr(L, name).restype = res
@@ -757,6 +766,40 @@ def main():
     check(ed.knob(glide["knob"]) == mid - 1, f"a notch up now takes one off ({ed.knob(glide['knob'])})")
     ed.wheel(knob, -1.0)
     check(ed.knob(glide["knob"]) == mid, "and a notch down adds it back")
+
+    # 12. the version of this build, injected by cmake/Version.cmake. On the VFD a '.' is the
+    # decimal-point attribute of the cell before it, not a character: the '.' glyph lights the
+    # underline segment (the same one the highlight uses), while the attribute draws a real dot
+    # and costs no column.
+    w = L.sq8l_gl_write_dotted(ed.v, 0, 0, b"1.0.0.624BF5D", 0)
+    check(w == 10, f"a dotted version takes 10 columns, not the 13 of its characters ({w})")
+    check(ed.lcd_row(0)[:10] == "100624BF5D", f"the dots are not written as cells ({ed.lcd_row(0)[:10]!r})")
+    check(ed.lcd_attrs(0)[:10] == [2, 2, 2, 0, 0, 0, 0, 0, 0, 0],
+          f"each one is the decimal point of the cell before it ({ed.lcd_attrs(0)[:10]})")
+    check("." not in ed.lcd_row(0), "no '.' reaches the display, where it would draw an underline")
+    L.sq8l_gl_write_dotted(ed.v, 0, 0, b"1.0", 1)
+    check(ed.lcd_attrs(0)[:2] == [3, 1],
+          f"a dot on a highlighted cell is attribute 3, both ({ed.lcd_attrs(0)[:2]})")
+    check(L.sq8l_gl_write_dotted(ed.v, 0, 1, b".5", 0) == 1 and ed.lcd_row(1)[0] == "5",
+          "a leading dot has no cell to mark and is dropped")
+    check(L.sq8l_gl_write_dotted(ed.v, 0, 1, b"1..0", 0) == 2 and ed.lcd_attrs(1)[:2] == [2, 0],
+          "a doubled dot marks the same cell once")
+
+    # the boot message of the first instance carries it (EditorController::show)
+    version = L.sq8l_gl_version().decode()
+    check(version.count(".") >= 2, f"the build injected a version: {version!r}")
+    boot = Editor(L)
+    # a message is centred on cells cleared to 0, not to blanks
+    greeting, line = boot.lcd_row(0).strip("\0"), boot.lcd_row(1).strip("\0")
+    check("CROSS WAVE SYNTHESIZER" in greeting, f"the first instance greets ({greeting!r})")
+    check(line == ("VERSION " + version.upper()).replace(".", ""),
+          f"and names the build below it ({line!r})")
+    lead = len(boot.lcd_row(1)) - len(boot.lcd_row(1).lstrip("\0"))
+    check(lead == 22 - len(line) // 2,
+          f"centred on the columns it occupies, not on its characters ({lead} blank before it)")
+    check(boot.lcd_attrs(1).count(2) == version.count("."),
+          f"one decimal-point attribute per dot of {version!r} ({boot.lcd_attrs(1).count(2)})")
+    check("." not in line, "the version's dots are attributes here too")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

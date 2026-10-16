@@ -1,6 +1,7 @@
 #include "EditorController.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <utility>
@@ -8,6 +9,7 @@
 #include "Dialogs.h"
 #include "GuiFpu.h"
 #include "Program.h"
+#include "SQ8LVersion.h"
 #include "SysEx.h"
 
 namespace sq8l::gui {
@@ -328,7 +330,11 @@ void EditorController::show() {  // TplugEditForm_FormShow
     refreshAll();                       // FUN_004842d8
     ctr_->selectPage(0);                // FUN_004849e0(form, 0)
     if (firstInstance_) {
-        showMessage2("*** SQ8L CROSS WAVE SYNTHESIZER ***", "VERSION 0910 BETA", 0x42);
+        // (port) This build's version (SQ8LVersion.h). Dotted path: '.' is a cell attribute here,
+        // not a column. Uppercase: the VFD folds lowercase. Its '(' and ')' draw as chevrons.
+        std::string version = "VERSION " + std::string(kVersion);
+        for (char& c : version) c = char(std::toupper(static_cast<unsigned char>(c)));
+        ctr_->showMessage(-1, -1, "*** SQ8L CROSS WAVE SYNTHESIZER ***", version, 0x42, true);
         setStatus("Welcome to SQ8L");
         firstInstance_ = false;
     } else {

@@ -18,8 +18,10 @@
 #include "EditorView.h"
 #include "Formatters.h"
 #include "LcdControl.h"
+#include "SQ8LVersion.h"
 #include "Settings.h"
 #include "SoundLibrary.h"
+#include "VfdText.h"
 
 #include "capi_export.h"
 
@@ -429,6 +431,13 @@ SQ8L_API void sq8l_gl_ctr(void* v, int op, int a, int b) {
     else if (op == 1)
         ctr.setParam(a, b);
 }
+// (port) The main VFD's dotted text (src/gui/logic/VfdText.h), as the boot message writes the
+// version: a '.' is the decimal point of the cell before it, not a column. Returns the width.
+SQ8L_API int32_t sq8l_gl_write_dotted(void* v, int32_t col, int32_t row, const char* text, int32_t attr) {
+    return writeDotted(B(v)->view.lcd(), col, row, text ? text : "", attr);
+}
+// (port) The version of this build (SQ8LVersion.h, written by cmake/Version.cmake).
+SQ8L_API const char* sq8l_gl_version() { return kVersion; }
 // the host changes the program while the editor is open (effSetProgram -> master FUN_004631f0)
 SQ8L_API void sq8l_gl_host_program(void* v, int index) { B(v)->host.eb.selectIndex(index); }
 // a SysEx message received on the open MIDI input (CmidiIO callback -> FUN_0048427c)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(sq8l VERSION 0.1.0 LANGUAGES C CXX)
+project(sq8l VERSION 1.0.0 LANGUAGES C CXX)
 if(APPLE)
   enable_language(OBJC OBJCXX)
 endif()
@@ -63,14 +63,35 @@ endif()
 add_library(sq8l_engine STATIC ${SQ8L_ENGINE_SOURCES} ${SQ8L_CRMATH_SOURCES})
 target_include_directories(sq8l_engine PUBLIC src/engine)
 target_compile_options(sq8l_engine PRIVATE ${SQ8L_FP_FLAGS} ${SQ8L_WARN_FLAGS})
+
+# ---------------------------------------------------------------- version of this build
+# SQ8LVersion.h (cmake/Version.cmake), derived every build so the commit is the one being built.
+# The script rewrites the file only when it changes, so dependents do not rebuild.
+set(SQ8L_VERSION_HEADER ${CMAKE_BINARY_DIR}/generated/SQ8LVersion.h)
+add_custom_target(sq8l_version_header
+  BYPRODUCTS ${SQ8L_VERSION_HEADER}
+  COMMAND ${CMAKE_COMMAND} -DSQ8L_NUMBER=${PROJECT_VERSION} -DSQ8L_SRC=${CMAKE_SOURCE_DIR}
+          -DSQ8L_IN=${CMAKE_SOURCE_DIR}/src/version/SQ8LVersion.h.in
+          -DSQ8L_OUT=${SQ8L_VERSION_HEADER}
+          -P ${CMAKE_SOURCE_DIR}/cmake/Version.cmake
+  COMMENT "Deriving the version of this build")
+add_library(sq8l_version INTERFACE)
+target_include_directories(sq8l_version INTERFACE ${CMAKE_BINARY_DIR}/generated)
+
 add_subdirectory(src/gui)
 add_subdirectory(src/gui/logic)
 add_subdirectory(src/gui/drawn)
+
+# The About dialog and the boot message name the build. PUBLIC: everything linking the editor
+# logic gets the header too.
+target_link_libraries(sq8l_gui_logic PUBLIC sq8l_version)
+add_dependencies(sq8l_gui_logic sq8l_version_header)
 
 # C API used by the Python differential tests against the emulated original.
 file(GLOB SQ8L_TESTAPI_SOURCES CONFIGURE_DEPENDS tests/capi*.cpp)
 add_library(sq8l_testapi SHARED ${SQ8L_TESTAPI_SOURCES})
 target_link_libraries(sq8l_testapi PRIVATE sq8l_engine sq8l_gui sq8l_gui_logic)
+add_dependencies(sq8l_testapi sq8l_version_header)
 target_compile_options(sq8l_testapi PRIVATE ${SQ8L_FP_FLAGS})
 
 # ---------------------------------------------------------------- plugin (DPF)
@@ -158,7 +179,8 @@ if(SQ8L_BUILD_PLUGIN)
              $<$<PLATFORM_ID:Linux>:${CMAKE_SOURCE_DIR}/src/plugin/linux/ModalFiber.cpp>)
   target_include_directories(SQ8L PUBLIC src/plugin)
   target_link_libraries(SQ8L PUBLIC sq8l_engine)
-  target_link_libraries(SQ8L-dsp PUBLIC sq8l_engine)
+  target_link_libraries(SQ8L-dsp PUBLIC sq8l_engine sq8l_version)
+  add_dependencies(SQ8L-dsp sq8l_version_header)
   # MTS-ESP client (third_party/MTS-ESP, 0BSD): dlopens the master's library at run time.
   target_include_directories(SQ8L-dsp PUBLIC ${CMAKE_SOURCE_DIR}/third_party/MTS-ESP/Client)
   if(NOT WIN32)

@@ -50,6 +50,9 @@ public:
     static uint32_t vfdSegments(int frame);
     static uint32_t ledSegments(int frame);
     static double knobAngle(int frame);
+    // How brightly a VFD segment is drawn when lit: 1 is the display's lit colour, less mixes
+    // it toward the background.
+    static float vfdSegmentLevel(int segment);
 
 private:
     struct Item {

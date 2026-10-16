@@ -1,6 +1,7 @@
 #include "LcdControl.h"
 
 #include "EditBuffer.h"
+#include "VfdText.h"     // (port) the dotted second line of a message
 #include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
 
 namespace sq8l::gui {
@@ -713,13 +714,19 @@ void LcdController::popupClicked(int itemId) {  // LAB_0045b18c
 // -------------------------------------------------------------------- messages / timer
 
 void LcdController::showMessage(int x1, int x2, const std::string& line1, const std::string& line2,
-                                int timeout) {  // FUN_0045aba4
+                                int timeout, bool dotted2) {  // FUN_0045aba4
     if (displayLock_ < 1) lockDisplay();
     lcd_.clearCells();
+    // (port) dotted2: line 2 carries dots that are cell attributes rather than columns (the
+    // version on the boot message, see VfdText.h), so it is centred on the width it occupies.
+    const size_t w2 = dotted2 ? size_t(dottedWidth(line2)) : line2.size();
     if (x1 < 0) x1 = int((uint32_t(lcd_.cols()) >> 1) - (uint32_t(line1.size()) >> 1));
-    if (x2 < 0) x2 = int((uint32_t(lcd_.cols()) >> 1) - (uint32_t(line2.size()) >> 1));
+    if (x2 < 0) x2 = int((uint32_t(lcd_.cols()) >> 1) - (uint32_t(w2) >> 1));
     lcd_.writeText(x1, 0, line1, 0);
-    lcd_.writeText(x2, 1, line2, 0);
+    if (dotted2)
+        writeDotted(lcd_, x2, 1, line2, 0);
+    else
+        lcd_.writeText(x2, 1, line2, 0);
     lcd_.invalidate();
     if (timeout > 0) {
         msgTimeout = timeout;

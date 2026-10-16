@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # the v* tags cmake/Version.cmake reads are out of reach of a shallow checkout
+          fetch-depth: 0
       - run: brew install ninja
       - name: Configure (universal)
         run: cmake -S . -B build -G Ninja -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
@@ -55,6 +57,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # the v* tags cmake/Version.cmake reads are out of reach of a shallow checkout
+          fetch-depth: 0
       - run: sudo apt-get update && sudo apt-get install -y mingw-w64 ninja-build zip
       - name: Configure (MinGW-w64, x64)
         run: cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake -DMINGW_SUFFIX=-posix
@@ -100,6 +104,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # the v* tags cmake/Version.cmake reads are out of reach of a shallow checkout
+          fetch-depth: 0
       - run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libx11-dev libxext-dev libxcursor-dev libxrandr-dev libgl-dev \
@@ -120,6 +126,8 @@ jobs:
         run: ./build/sq8l_hd_check
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.so python3 tests/test_gui_extensions.py
+      - name: The version injected into the build
+        run: python3 tests/test_version.py
       - name: Editor on an X server (Xvfb)
         run: |
           sh tests/linux_ui_session.sh build/bin/SQ8L.so ui-session \
@@ -152,8 +160,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/release-notes.md
+          sparse-checkout: |
+            .github/release-notes.md
+            CMakeLists.txt
           sparse-checkout-cone-mode: false
+      # project() is maintained by hand, so a tag can disagree with what the binaries report.
+      - name: The tag matches the version the build reports
+        run: |
+          number=$(sed -n 's/^project(sq8l VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          tag=${GITHUB_REF_NAME#v}
+          case $tag in
+            "$number" | "$number"-*) echo "$GITHUB_REF_NAME matches project version $number" ;;
+            *) echo "::error::tag $GITHUB_REF_NAME does not match project(sq8l VERSION $number)"; exit 1 ;;
+          esac
       - uses: actions/download-artifact@v8
         with:
           path: artifacts

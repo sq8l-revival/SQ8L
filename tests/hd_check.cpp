@@ -100,6 +100,10 @@ int main(int argc, char** argv) {
                 HdRenderer::vfdSegments(vfdFrame(c, 3)) == (plain | UNDERLINE | DOT);
     }
     check(attrs, "attributes 1-3 add the underline, the decimal point, both (all 68 characters)");
+    // (port) The decimal point carries the dots of the version on the boot message, where the
+    // original's dim one was barely legible. It is drawn like any other lit segment.
+    check(HdRenderer::vfdSegmentLevel(17) == HdRenderer::vfdSegmentLevel(0),
+          "the decimal point is as bright as the rest of the glyph");
 
     std::printf("Red digits (numCharGIF):\n");
     const struct {

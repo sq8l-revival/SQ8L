@@ -1,0 +1,12 @@
+// Written into the build directory by cmake/Version.cmake on every build. Not committed.
+#pragma once
+
+namespace sq8l {
+
+constexpr const char* kVersion = "@SQ8L_VERSION@";
+
+constexpr int kVersionMajor = @SQ8L_VERSION_MAJOR@;
+constexpr int kVersionMinor = @SQ8L_VERSION_MINOR@;
+constexpr int kVersionPatch = @SQ8L_VERSION_PATCH@;
+
+}  // namespace sq8l

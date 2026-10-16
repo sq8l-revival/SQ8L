@@ -111,7 +111,7 @@ SegmentFont makeVfdFont(const Sprite& sprite) {
         seg(C, M + 1.1f, C, B - 1.1f, 5, 7, 5, 8),                // l
         seg(C + 0.9f, M + 1.1f, R - 0.9f, B - 1.1f, 6, 8, 6, 9),  // m
         Seg{1.5f, 14.5f, 7.5f, 14.5f, 2, 14, 6, 14},              // underline
-        Seg{9.5f, 11.5f, 9.5f, 11.5f, 9, 11, 9, 11, 0.7f},        // decimal point (dimmer, no ghost)
+        Seg{9.5f, 11.5f, 9.5f, 11.5f, 9, 11, 9, 11},              // Decimal point
     };
     return analyse(std::move(s), 17, 0.6f, sprite, 1, 145);
 }
@@ -625,6 +625,11 @@ bool spriteIs(const Sprite* s, const char* name) { return s && s->loaded() && s-
 uint32_t HdRenderer::vfdSegments(int frame) {
     const SegmentFont& f = vfdFont(assets::charGif());
     return frame >= 0 && frame < int(f.lit.size()) ? f.lit[size_t(frame)] : 0;
+}
+
+float HdRenderer::vfdSegmentLevel(int segment) {
+    const SegmentFont& f = vfdFont(assets::charGif());
+    return segment >= 0 && segment < int(f.segs.size()) ? f.segs[size_t(segment)].level : 0.f;
 }
 
 uint32_t HdRenderer::ledSegments(int frame) {

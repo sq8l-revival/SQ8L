@@ -8,6 +8,7 @@
 
 #include "DistrhoPlugin.hpp"
 #include "MtsEspTuning.h"
+#include "SQ8LVersion.h"
 #include "SharedLibrary.h"
 #include "Synth.h"
 
@@ -57,7 +58,10 @@ protected:
     const char* getMaker() const override { return "Siegfried Kullmann, Claudio Tassitano, Mario Kruselj, GitHub contributors"; }
     const char* getHomePage() const override { return ""/* "https://www.kvraudio.com/product/sq8l-by-siegfried-kullmann" */; }
     const char* getLicense() const override { return "Free and Open Source"; }
-    uint32_t getVersion() const override { return d_version(0, 9, 1); }
+    // (port) This build's number, not the original's 0.91 (SQ8LVersion.h, cmake/Version.cmake).
+    uint32_t getVersion() const override {
+        return d_version(sq8l::kVersionMajor, sq8l::kVersionMinor, sq8l::kVersionPatch);
+    }
 
     void initProgramName(uint32_t index, String& name) override;
     void loadProgram(uint32_t index) override;

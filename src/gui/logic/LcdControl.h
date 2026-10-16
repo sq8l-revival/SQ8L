@@ -167,7 +167,9 @@ public:
     void popupClicked(int itemId);
 
     // messages over the display (FUN_0045aba4 / FUN_0045ab88) and timer tick (FUN_0045b334)
-    void showMessage(int x1, int x2, const std::string& line1, const std::string& line2, int timeout);
+    // (port) dotted2 writes line 2 as dotted text (VfdText.h), for the version on the boot message.
+    void showMessage(int x1, int x2, const std::string& line1, const std::string& line2, int timeout,
+                     bool dotted2 = false);
     void endMessage();
     void tick();
 

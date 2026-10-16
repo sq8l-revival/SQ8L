@@ -6,6 +6,7 @@
 #include "Formatters.h"
 #include "LcdData.h"
 #include "Program.h"
+#include "SQ8LVersion.h"
 
 namespace sq8l::gui {
 
@@ -221,7 +222,7 @@ std::string aboutText() {
   static const char *const kLines[] =
   {
     "SQ8L",
-    "v0.91 beta",
+    kVersion,  // (port) the version of this build, see SQ8LVersion.h
     "",
     "(c) 2006-2008 Siegfried Kullmann",
     "(c) 2026-20xx Claudio Tassitano, Mario Kruselj & other GitHub contributors",

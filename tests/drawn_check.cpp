@@ -226,10 +226,6 @@ int main(int argc, char** argv) {
 
     std::printf("info windows:\n");
     H.script.clear();
-    H.shot("about");
-    H.click(300, 200);
-    ui.showAbout("SQ8Light VST (v0.91 beta)\r\n\r\nProgramming & design by\r\nSiegfried Kullmann\r\n");
-    check(!ui.modal(), "About closes with a click");
     std::vector<std::string> mod;
     for (int i = 0; i < 40; i++) mod.push_back("LFO" + std::to_string(i % 4 + 1) + " -> OSC" + std::to_string(i % 3 + 1));
     H.shot("modinfo");

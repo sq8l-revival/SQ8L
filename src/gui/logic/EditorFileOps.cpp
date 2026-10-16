@@ -9,7 +9,7 @@ namespace sq8l::gui {
 
 namespace {
 
-const char kLibFilter[] = "Library / Backup data (*.8XL; *.dat)|*.8XL;*.dat";
+const char kLibFilter[] = "Library/Backup data (*.8XL; *.dat)|*.8XL;*.dat";
 const char kSyxFilter[] = "ESQ/SQ80 SysEx (*.SYX)|*.SYX";
 
 // SQ80/ESQ1 SysEx messages of the SEND/REQ functions (DAT_004c3074 / 004c307c / 004c3084)
@@ -234,7 +234,7 @@ void EditorController::importProgram() {  // menu_impSingleClick
     if (!fileDialog(rq, path)) return;
     std::vector<uint8_t> data;
     if (!ui_.readFile(path, data) || data.empty()) return;
-    if (ui_.messageBox("Overwrite edit program ?", "Warning", kMbOkCancel) != kIdOk) return;
+    if (ui_.messageBox("Overwrite edit program?", "Warning", kMbOkCancel) != kIdOk) return;
     bool ok = false;
     EditBuffer& eb = host_.editBuffer();
     if (eb.importSysex(data.data(), data.size(), true)) {

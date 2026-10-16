@@ -218,32 +218,28 @@ std::vector<std::string> modulationUsage(const Program& p) {  // FUN_0047cb80
 // ==================================================================== TAboutForm
 
 std::string aboutText() {
-    static const char* const kLines[] = {"",
-                                         "SQ8Light VST",
-                                         "v0.91 beta",
-                                         "",
-                                         "by",
-                                         "Siegfried Kullmann",
-                                         "(C)opyright 2006-2008",
-                                         "",
-                                         "thanks to",
-                                         "Rainer Buchty",
-                                         "for",
-                                         "SQ80 resources",
-                                         "",
-                                         "factory sounds by",
-                                         "Ole Jeppesen & Siegfried Kullmann",
-                                         "except original SQ80 sounds ",
-                                         "in bank D by ",
-                                         "Ensoniq",
-                                         "",
-                                         "VST PlugIn Technology ",
-                                         "by Steinberg"};
-    std::string s;
-    for (const char* l : kLines) {
-        s += l;
-        s += "\r\n";
-    }
+  static const char *const kLines[] =
+  {
+    "SQ8L",
+    "v0.91 beta",
+    "",
+    "(c) 2006-2008 Siegfried Kullmann",
+    "(c) 2026-20xx Claudio Tassitano, Mario Kruselj & other GitHub contributors",
+    "",
+    "Thanks to Rainer Buchty for SQ-80 resources, measurements and expertise!",
+    "",
+    "Factory sounds:",
+    "Ole Jeppesen & Siegfried Kullmann",
+    "Ensoniq (SQ-80 sounds in Bank D)",
+    "",
+    "VST plugin technology by Steinberg",
+    "Audio Units technology by Apple"
+  };
+  std::string s;
+  for (const char *l : kLines) {
+    s += l;
+    s += "\r\n";
+  }
     return s;
 }
 

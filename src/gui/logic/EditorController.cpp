@@ -328,7 +328,7 @@ void EditorController::show() {  // TplugEditForm_FormShow
     refreshAll();                       // FUN_004842d8
     ctr_->selectPage(0);                // FUN_004849e0(form, 0)
     if (firstInstance_) {
-        showMessage2("*** SQ-8L CROSS WAVE SYNTHESIZER ***", "VERSION 0910 BETA", 0x42);
+        showMessage2("*** SQ8L CROSS WAVE SYNTHESIZER ***", "VERSION 0910 BETA", 0x42);
         setStatus("Welcome to SQ8L");
         firstInstance_ = false;
     } else {

@@ -53,10 +53,10 @@ public:
 
 protected:
     const char* getLabel() const override { return "SQ8L"; }
-    const char* getDescription() const override { return "Ensoniq SQ-80 emulation (port of SQ8L 0.91b)"; }
-    const char* getMaker() const override { return "Siegfried Kullmann"; }
-    const char* getHomePage() const override { return "https://www.kvraudio.com/product/sq8l-by-siegfried-kullmann"; }
-    const char* getLicense() const override { return "Freeware"; }
+    const char* getDescription() const override { return "Ensoniq SQ-80 emulation"; }
+    const char* getMaker() const override { return "Siegfried Kullmann, Claudio Tassitano, Mario Kruselj, GitHub contributors"; }
+    const char* getHomePage() const override { return ""/* "https://www.kvraudio.com/product/sq8l-by-siegfried-kullmann" */; }
+    const char* getLicense() const override { return "Free and Open Source"; }
     uint32_t getVersion() const override { return d_version(0, 9, 1); }
 
     void initProgramName(uint32_t index, String& name) override;

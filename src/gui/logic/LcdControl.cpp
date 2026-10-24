@@ -1,6 +1,9 @@
 #include "LcdControl.h"
 
+#include <algorithm>
+
 #include "EditBuffer.h"
+#include "Program.h"     // (port) kSyncDivisions
 #include "VfdText.h"     // (port) the dotted second line of a message
 #include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
 
@@ -423,6 +426,7 @@ void LcdController::selectPage(int n) {  // FUN_0045a84c
     page_ = p;
     pageIndex_ = n;
     if (displayLock_ < 1) lcd_.clearCells();
+    linkSyncRanges();
     updateKnobRanges();
     refresh(false);
     drawAll();
@@ -488,6 +492,7 @@ void LcdController::drawParam(LcdParam& p) {  // FUN_0045aab4
 
 void LcdController::refresh(bool draw) {  // FUN_0045b448
     if (!page_) return;
+    if (linkSyncRanges()) updateKnobRanges();  // (port) a program change can flip SYNC
     LcdSubPage& sp = page_->sub();
     if (draw) updateLock++;
     for (int k = 0; k < int(sp.knobMap.size()); k++) {
@@ -507,18 +512,76 @@ void LcdController::updateKnobRanges() {  // FUN_0045b6e4
     for (int k = 0; k < n; k++) {
         LcdParam* p = sp.paramForKnob(k);
         if (p)
-            listener_->lcdKnobRange(k, p->min, p->max);
+            listener_->lcdKnobRange(k, p->min, p->max, p->faded);
         else
-            listener_->lcdKnobRange(k, 0, 0);
+            listener_->lcdKnobRange(k, 0, 0, false);
     }
-    for (int k = n; k <= numKnobs - 1; k++) listener_->lcdKnobRange(k, 0, 0);
+    for (int k = n; k <= numKnobs - 1; k++) listener_->lcdKnobRange(k, 0, 0, false);
+}
+
+// (port, issue #42) While an LFO's or envelope's SYNC field is on, its FREQ or T1-T4 are note
+// values: their formatter, range, width and popup follow that field, and the knobs of what a
+// synced one ignores are faded. The field can be on another sub-page of the page (the
+// envelope's is). True if anything changed.
+bool LcdController::linkSyncRanges() {
+    if (!page_) return false;
+    LcdSubPage* syncSub = nullptr;
+    const LcdParam* syncParam = nullptr;
+    for (LcdSubPage& s : page_->subs)
+        for (const LcdParam& p : s.params)
+            if (p.fmt == Fmt::TempoSync) syncSub = &s, syncParam = &p;
+    if (!syncParam) return false;
+    const bool synced = readParamIn(*syncSub, *syncParam) != 0;
+
+    // The free values are the page's own; perColumn 12 or 18: a column each for the bars,
+    // the long and the short notes (twice for T4, without and with R).
+    struct Morph {
+        const char* name;
+        Fmt freeFmt, syncFmt;
+        int freeMax, syncMax, freeWidth, syncWidth, syncPerColumn;
+        bool freeShowNumber;
+    };
+    static const Morph kMorphs[] = {
+        {"FREQ", Fmt::None, Fmt::LfoDivision, 127, kSyncDivisions - 1, 3, 3, 12, true},
+        {"T1", Fmt::None, Fmt::EnvDivision, 63, kSyncDivisions - 1, 2, 3, 12, true},
+        {"T2", Fmt::None, Fmt::EnvDivision, 63, kSyncDivisions - 1, 2, 3, 12, true},
+        {"T3", Fmt::None, Fmt::EnvDivision, 63, kSyncDivisions - 1, 2, 3, 12, true},
+        {"T4", Fmt::EnvT4, Fmt::EnvT4Division, 127, 2 * kSyncDivisions - 1, 3, 4, 18, false},
+    };
+    LcdSubPage& sp = page_->sub();
+    bool changed = false;
+    for (const Morph& m : kMorphs) {
+        LcdParam* f = sp.findParam(m.name);
+        const int max = synced ? m.syncMax : m.freeMax;
+        if (!f || f->max == max) continue;
+        f->setFormatter(synced ? m.syncFmt : m.freeFmt);
+        f->setRange(1, max);
+        f->setWidth(synced ? m.syncWidth : m.freeWidth);  // T1-T4 grow into the gap after them
+        f->perColumn = synced ? m.syncPerColumn : 0;
+        f->showNumber = synced ? false : m.freeShowNumber;
+        changed = true;
+    }
+    auto fade = [&](const char* name, bool faded) {
+        LcdParam* p = sp.findParam(name);
+        if (!p || p->faded == faded) return;
+        p->faded = faded;
+        changed = true;
+    };
+    fade("HUMAN", synced);
+    fade("TK", synced);
+    const LcdParam* t1vMode = syncSub->findParam("T1VM");
+    fade("T1V", synced && t1vMode && readParamIn(*syncSub, *t1vMode) == 0);  // SMT still applies
+    return changed;
 }
 
 // -------------------------------------------------------------------- editing
 
 int LcdController::readParam(const LcdParam& p) const {  // FUN_0045b378
-    if (!page_ || !eb_) return 0;
-    const LcdSubPage& sp = page_->sub();
+    return page_ ? readParamIn(page_->sub(), p) : 0;
+}
+
+int LcdController::readParamIn(const LcdSubPage& sp, const LcdParam& p) const {
+    if (!eb_) return 0;
     if (!sp.editor) return 0;
     const int idx = sp.editBufferIndex(p);
     if (uint32_t(idx) >= uint32_t(kNumParams)) return 0;
@@ -528,6 +591,12 @@ int LcdController::readParam(const LcdParam& p) const {  // FUN_0045b378
     // are, so turning the knob goes to 7 or 9 instead of jumping to the bottom of the range.
     // The program itself keeps the 0 until the parameter is really edited.
     if (p.fmt == Fmt::Polyphony && v == 0) return kOriginalPlayableVoices;
+    // (port) The same for a free LFO rate or envelope time above the last note value once
+    // SYNC is on: shown as the last, and back as it was if SYNC goes off before it is edited.
+    if ((p.fmt == Fmt::LfoDivision || p.fmt == Fmt::EnvDivision) && v > p.max) return p.max;
+    // (port) A synced T4 packs its 36 times and the "R" bit (0x40) into 0..71, see writeParam.
+    if (p.fmt == Fmt::EnvT4Division)
+        return std::min(v & 0x3f, kSyncDivisions - 1) + ((v & 0x40) ? kSyncDivisions : 0);
     return v;
 }
 
@@ -536,6 +605,7 @@ void LcdController::writeParam(const LcdParam& p, int v) {  // FUN_0045b3a4
     const LcdSubPage& sp = page_->sub();
     if (!sp.editor) return;
     const int idx = sp.editBufferIndex(p);
+    if (p.fmt == Fmt::EnvT4Division && v >= kSyncDivisions) v = (v - kSyncDivisions) | 0x40;
     if (uint32_t(idx) < uint32_t(kNumParams)) eb_->setParamValue(idx, v);
 }
 
@@ -560,6 +630,7 @@ void LcdController::knobChanged(int knob, int value) {  // 0x45b63c
     writeParam(*p, v);
     p->setValue(v, sp.c);
     drawParam(*p);  // page vmt+0x74 (auto sub-page selection) is never active: no relayout
+    if (p->fmt == Fmt::TempoSync) refresh(true);  // (port) FREQ changes meaning
     if (p->change == Change::Form && listener_) listener_->lcdParamChanged(sp.c, p->index);
 }
 
@@ -577,6 +648,7 @@ void LcdController::setParam(int param, int value) {  // FUN_0045b574
     p->setValue(v, sp.c);
     drawParam(*p);
     drawParam(*p);
+    if (p->fmt == Fmt::TempoSync) refresh(true);  // (port) FREQ changes meaning
     if (p->change == Change::Form && listener_) listener_->lcdParamChanged(sp.c, p->index);
 }
 

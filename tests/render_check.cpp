@@ -22,6 +22,10 @@
 //   sq8l_render_check --output-gain tests/regression
 //       OPTIONS -> Output gain (port addition, issue #52): every cut scales the uncut
 //       render by exactly its power of two, and the cut travels in the host chunk.
+//   sq8l_render_check --tempo-sync
+//       LFO tempo sync (LFO -> SYNC, port addition, issue #42): rate per division and tempo,
+//       FM stepping through the divisions, and the phase locked to the song position with
+//       RESET=OFF; envelope segments lasting their note value (ENV -> SYNC). Needs no files.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -568,6 +572,205 @@ int direction() {
     return bad || oneShotBad || progBad ? 1 : 0;
 }
 
+// LFO1 of the INIT program with SYNC on, playing keys at 44.1 kHz in blocks of 512.
+struct SyncRun {
+    sq8l::Synth synth{44100.0f};
+    double quarters = 0;  // the song position at the start of the next block
+
+    SyncRun(int freq, int reset, int fmAmount = 0, bool reverse = false) {
+        synth.setSampleRate(44100.0f);
+        synth.setProgram(0);
+        sq8l::Program& p = synth.editBuffer().current();
+        sq8l::initProgram(p);
+        uint8_t* l = p.bytes + sq8l::ofs::lfo(0);
+        l[sq8l::ofs::Lfo::Freq] = uint8_t(freq);
+        l[sq8l::ofs::Lfo::Reset] = uint8_t(reset);
+        l[sq8l::ofs::Lfo::Modes] = uint8_t(sq8l::ofs::Lfo::SyncBit | (reverse ? 0x10 : 0));  // FM mode UNI
+        if (fmAmount) p.setMod(sq8l::ofs::lfo(0) + sq8l::ofs::Lfo::FreqMod, {sq8l::ModSource::Keyb, int8_t(fmAmount)});
+    }
+    void note(int key) {
+        sq8l::RawMidiEvent e{};
+        e.data[0] = 0x90;
+        e.data[1] = uint8_t(key);
+        e.data[2] = 100;
+        synth.processEvents(&e, 1);
+    }
+    // hostPosition: the transport plays and the host reports where; else the engine runs on
+    void run(int blocks, double bpm, bool hostPosition) {
+        std::vector<float> l(512), r(512);
+        for (int b = 0; b < blocks; b++) {
+            synth.master().setTransport(bpm, hostPosition, quarters);
+            synth.process(l.data(), r.data(), 512, true);
+            quarters += 512 * bpm / 60 / 44100;
+        }
+    }
+    const sq8l::Lfo* lfo(int key) {
+        for (int i = 0; i < sq8l::Master::kMaxVoices; i++) {
+            const sq8l::Voice& v = synth.master().voice(i);
+            if (v.active != 0 && v.key == key) return &synth.modules().lfo[v.slot][0];
+        }
+        return nullptr;
+    }
+};
+
+// LFO tempo sync (LFO -> SYNC, port addition, issue #42): one cycle per division at the host's
+// tempo, FREQ above the last division plays the last, FM steps through the divisions, the
+// rate stops at the free LFO's top, and with RESET=OFF the phase follows the song position,
+// the host's or, with the transport stopped, the one the engine runs on. Needs no files.
+int tempoSync() {
+    // An LFO tick: two control updates of Round(sr / 83.592575 * 512) / 1024 samples each.
+    const double tick = 2 * std::nearbyint(double(float(44100.0 / double(83.592575f) * 512.0))) / 1024 / 44100;
+    const double cycle = std::ldexp(1.0, 30);
+    auto expectedInc = [&](double bpm, double quarters) {
+        return std::min(cycle * bpm / 60 * tick / quarters, std::ldexp(1.0, 29));
+    };
+    int bad = 0;
+    auto checkInc = [&](const char* what, const sq8l::Lfo* l, double want) {
+        const double got = l ? l->phaseInc : 0;
+        if (!l || std::fabs(got - want) > 1 + 1e-5 * want) {
+            bad++;
+            std::printf("BAD %s: phase increment %.0f, want %.0f\n", what, got, want);
+        }
+    };
+
+    // index into kSyncQuarters, bpm
+    const struct { int index; double bpm; const char* name; } rates[] = {
+        {22, 120, "1/4 at 120"}, {18, 93, "1T at 93"}, {14, 140, "2 bars at 140"},
+        {0, 60, "16 bars at 60"}, {33, 175, "32T at 175"}, {26, 87.5, "16D at 87.5"}};
+    for (const auto& c : rates) {
+        SyncRun s(c.index, 0);
+        s.note(60);
+        s.run(20, c.bpm, false);
+        checkInc(c.name, s.lfo(60), expectedInc(c.bpm, sq8l::kSyncQuarters[c.index]));
+    }
+    {
+        SyncRun s(100, 0);  // a free rate left in the byte
+        s.note(60);
+        s.run(20, 60, false);
+        checkInc("FREQ 100 plays 64T", s.lfo(60), expectedInc(60, 1.0 / 24));
+        SyncRun t(35, 0);
+        t.note(60);
+        t.run(20, 200, false);
+        checkInc("64T at 200 stops at half a cycle per tick", t.lfo(60), std::ldexp(1.0, 29));
+    }
+    // KEYB (key 60) * amount 2 * 2 = 240 / 256, rounded: one division either way
+    for (int amount : {2, -2}) {
+        SyncRun s(22, 0, amount);
+        s.note(60);
+        s.run(20, 120, false);
+        checkInc(amount > 0 ? "FM +1 division (8D)" : "FM -1 division (2T)", s.lfo(60),
+                 expectedInc(120, sq8l::kSyncQuarters[22 + amount / 2]));
+    }
+    std::printf("rate: %zu divisions and tempos, FREQ past the last, the cap, FM both ways (%s)\n",
+                std::size(rates), bad ? "FAILED" : "ok");
+
+    // Two notes 7 blocks apart, RESET=OFF: both at the phase of the song position, which is the
+    // phase one cycle per quarter has at the end; the last tick may be up to one tick back.
+    int lockBad = 0;
+    auto lockRun = [&](const char* what, bool hostPosition, double start, bool reverse) {
+        SyncRun s(22, 0xff, 0, reverse);
+        s.quarters = start;
+        s.note(60);
+        s.run(7, 120, hostPosition);
+        s.note(64);
+        s.run(30, 120, hostPosition);
+        const double frac = s.quarters - std::floor(s.quarters);
+        const uint32_t want = uint32_t(frac * cycle) * (reverse ? uint32_t(-1) : 1u);
+        const double slack = 2 * expectedInc(120, 1) + 1;
+        for (int key : {60, 64}) {
+            const sq8l::Lfo* l = s.lfo(key);
+            const uint32_t d = l ? (l->phase - want) & 0x3fffffffu : 0x20000000u;
+            const double off = std::min<double>(d, cycle - d);
+            if (!l || l->syncLock != 1 || off > slack) {
+                lockBad++;
+                std::printf("BAD %s, key %d: %.0f from the song position's phase (allowed %.0f)\n", what, key, off,
+                            slack);
+            }
+        }
+    };
+    lockRun("host position", true, 17.3, false);
+    lockRun("transport stopped", false, 0, false);
+    lockRun("host position, REV", true, 5.6, true);
+    std::printf("lock: notes started apart share the song position's phase: from the host, stopped, "
+                "reversed (%s)\n", lockBad ? "FAILED" : "ok");
+
+    // Envelopes: ENV1 of INIT with SYNC on (ENV4 for the release: the voice ends with ENV4,
+    // INIT's in a tick, and ENV1 stops there); how long a segment really lasts, in samples, from
+    // the end of the previous one (or from note on / off) to the end of its own. Measured in
+    // blocks of 32, against the note value at the tempo. Slack: a block and two ticks, one for
+    // rounding to whole ticks and one because a segment's first tick is the one it starts on.
+    int envBad = 0;
+    struct EnvCase {
+        const char* what;
+        int t1, t2, t4, t1v, tk, key;
+        double bpm;
+        sq8l::Env::Next stageEnd;  // the segment measured ends when `next` leaves this
+        double quarters;
+    };
+    const EnvCase envCases[] = {
+        {"T1 13 = 1/4 at 120", 13, 0, 0, 0, 0, 60, 120, sq8l::Env::Next::Decay, 1},
+        {"T1V ignored", 13, 0, 0, 63, 0, 60, 120, sq8l::Env::Next::Decay, 1},
+        {"T1 19 = 1 bar at 90", 19, 0, 0, 0, 0, 60, 90, sq8l::Env::Next::Decay, 4},
+        {"T1 50 plays 16X", 50, 0, 0, 0, 0, 60, 999, sq8l::Env::Next::Decay, 64},
+        {"T2 7 = 1/16, TK ignored", 0, 7, 0, 0, 63, 96, 120, sq8l::Env::Next::Decay2, 0.25},
+        {"T4 16 = 1/2 at 120", 0, 0, 16, 0, 0, 60, 120, sq8l::Env::Next::Finish, 2},
+    };
+    for (const EnvCase& c : envCases) {
+        sq8l::Synth synth(44100.0f);
+        synth.setSampleRate(44100.0f);
+        synth.setProgram(0);
+        sq8l::Program& p = synth.editBuffer().current();
+        sq8l::initProgram(p);
+        const int index = c.stageEnd == sq8l::Env::Next::Finish ? 3 : 0;
+        uint8_t* e = p.bytes + sq8l::ofs::env(index);
+        e[sq8l::ofs::Env::T1] = uint8_t(c.t1);
+        e[sq8l::ofs::Env::T2] = uint8_t(c.t2);
+        e[sq8l::ofs::Env::T4] = uint8_t(c.t4);
+        e[sq8l::ofs::Env::T1V] = uint8_t(c.t1v);
+        e[sq8l::ofs::Env::TK] = uint8_t(c.tk);
+        e[sq8l::ofs::Env::Flags] = sq8l::ofs::Env::SyncBit;
+        sq8l::RawMidiEvent ev{};
+        ev.data[0] = 0x90;
+        ev.data[1] = uint8_t(c.key);
+        ev.data[2] = 127;
+        synth.processEvents(&ev, 1);
+        const sq8l::Env* env = nullptr;
+        std::vector<float> l(32), r(32);
+        long start = 0, end = -1;
+        bool released = false;
+        for (long s = 0; s < 44100L * 10 && end < 0; s += 32) {
+            synth.master().setTransport(c.bpm, false, 0);
+            synth.process(l.data(), r.data(), 32, true);
+            for (int i = 0; !env && i < sq8l::Master::kMaxVoices; i++)
+                if (synth.master().voice(i).active != 0) env = &synth.modules().env[synth.master().voice(i).slot][index];
+            if (!env) continue;
+            if (c.stageEnd == sq8l::Env::Next::Finish) {
+                if (!released && env->next == sq8l::Env::Next::Sustain && env->sustaining) {
+                    ev.data[2] = 0;  // note off once the envelope sustains
+                    synth.processEvents(&ev, 1);
+                    released = true;
+                    start = s + 32;
+                } else if (released && !env->active) {  // `finished` lasts only within its tick
+                    end = s + 32;
+                }
+            } else if (c.stageEnd == sq8l::Env::Next::Decay2 && env->next != sq8l::Env::Next::Decay && start == 0) {
+                start = s + 32;  // T1 is over, T2 runs
+            } else if (env->next != c.stageEnd && (c.stageEnd == sq8l::Env::Next::Decay || start > 0)) {
+                end = s + 32;
+            }
+        }
+        const double want = c.quarters * 60 / c.bpm * 44100, slack = 2 * tick * 44100 + 32;
+        if (end < 0 || std::fabs((end - start) - want) > slack) {
+            envBad++;
+            std::printf("BAD %s: %ld samples, want %.0f (allowed %.0f)\n", c.what, end < 0 ? -1 : end - start, want,
+                        slack);
+        }
+    }
+    std::printf("envelopes: %zu segments last their note value: T1, T1V ignored, past the last, T2 with TK "
+                "ignored, T4 (%s)\n", std::size(envCases), envBad ? "FAILED" : "ok");
+    return bad || lockBad || envBad ? 1 : 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -575,5 +778,6 @@ int main(int argc, char** argv) {
     if (argc > 2 && std::string(argv[1]) == "--polyphony") return polyphony(argv[2]);
     if (argc > 1 && std::string(argv[1]) == "--direction") return direction();
     if (argc > 2 && std::string(argv[1]) == "--output-gain") return outputGain(argv[2]);
+    if (argc > 1 && std::string(argv[1]) == "--tempo-sync") return tempoSync();
     return golden(argc > 1 ? argv[1] : "tests/golden_raw");
 }

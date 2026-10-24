@@ -45,6 +45,7 @@ struct LcdParam {                // ClcdCtr_param (140 bytes)
     int perColumn = 0;           // +0x68
     int paramIndex = -1;         // +0x74 edit buffer parameter override
     bool highlight = false;      // +0x78 selected (drawn with attribute 1)
+    bool faded = false;          // (port) knob drawn faded: no effect for now (HUMAN while synced)
 
     void reset();                        // FUN_00458c1c
     void setValue(int v, int pageNo);    // FUN_00458e1c (formats the value text)
@@ -97,7 +98,7 @@ class LcdListener {
 public:
     virtual ~LcdListener() = default;
     virtual void lcdKnobValue(int knob, int value) = 0;          // +0x28 (LAB_004846c4)
-    virtual void lcdKnobRange(int knob, int min, int max) = 0;   // +0x30 (FUN_00484700)
+    virtual void lcdKnobRange(int knob, int min, int max, bool faded) = 0;  // +0x30 (FUN_00484700)
     virtual void lcdDrawn() = 0;                                 // +0x38 (FUN_004847a4)
     virtual void lcdParamMouseDown(int param) = 0;               // +0x40 (SUB_00484800)
     virtual void lcdHint(int param) = 0;                         // +0x50 (LAB_00484874)
@@ -150,6 +151,7 @@ public:
 
     // editing
     int readParam(const LcdParam& p) const;                      // FUN_0045b378
+    int readParamIn(const LcdSubPage& sp, const LcdParam& p) const;  // (port) any sub-page's
     void writeParam(const LcdParam& p, int v);                   // FUN_0045b3a4
     int currentValue(int param) const;                           // FUN_0045b538
     void knobChanged(int knob, int value);                       // 0x45b63c
@@ -189,6 +191,7 @@ public:
 
 private:
     void scrollArrows();
+    bool linkSyncRanges();  // (port, issue #42)
 
     LcdDisplay& lcd_;            // +0x08
     EditBuffer* eb_;             // parameter editor of the pages (+0x20 of every page)

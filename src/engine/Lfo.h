@@ -103,6 +103,13 @@ public:
     int32_t waveKeyIn = 0;       // +0xe8  added to the wave table key offset (always 0 in the original)
     int32_t freqShiftIn = 0;     // +0xec  added to the wave table frequency shift (always 0)
 
+    // ---------------------------------------------------------------- (port) tempo sync
+    // Issue #42. Beyond the original's 0xf0 bytes, so the differential tests never see them.
+    // Written by the master before every tick().
+    int32_t syncInc = 0;         // phase increment per tick of the synced division, 0 = FREE
+    int32_t syncLock = 0;        // 1 = the phase is syncPhase (the song position) every tick
+    uint32_t syncPhase = 0;      // the song position within the division's cycle (2^30)
+
     // ---------------------------------------------------------------- API
     Lfo() = default;
     // Constructor FUN_0045cf9c(rate). The original zero-fills the object first.

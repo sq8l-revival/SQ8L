@@ -104,7 +104,8 @@ Field offsets are those of the original objects (used by `oracle/gui_state.py`).
   the frame itself carries in its corner pixel (`Canvas::drawFaded`; the HD renderer blends
   the whole knob over the background with the same amount, `Knob::kFadeAmount`). The editor
   turns it off for the knobs the current display page has no parameter for, which turn
-  nothing — issue #24.
+  nothing — issue #24 — and for a parameter that has no effect for now, which still turns
+  (`LcdParam::faded`: HUMAN of a synced LFO, TK and T1V of a synced envelope, issue #42).
 
 ### GraphButton (TGraphButton, 0x47ba3c-0x47c80c)
 * frame = `AniIdx + (HasTwoFrames && pressed)`; layout (FUN_0047c100) resizes the control to

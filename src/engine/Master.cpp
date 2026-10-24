@@ -1,11 +1,12 @@
 #include "Master.h"
 #include "CrMath.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
 #include "Fpu.h"
-#include "Program.h"  // (port) programPolyphony
+#include "Program.h"  // (port) programPolyphony, kSyncQuarters
 
 namespace sq8l {
 
@@ -568,6 +569,7 @@ void Master::startVoice(int32_t slot, int32_t noteId, bool newNote, NoteRecord* 
             L.p34 = (blk[0xf] & 0x3f) << 2;
             modules_.lfoStart(slot, i, lfoPhase + phase, resetPhase);
         }
+        modules_.envSetSyncTicks(slot, 1.0 / quartersPerTick());  // (port) tempo sync
         for (int i = 0; i < 4; i++) {
             const uint8_t* eblk = prog + 0x6a + i * 0xe;
             const bool cycle = static_cast<int8_t>(prog[0x177]) > 0 || (eblk[0xc] & 1) != 0;
@@ -657,6 +659,7 @@ void Master::release(int32_t slot) {
     if (slot < 0 || slot >= numVoices_) return;
     Voice& v = voices_[slot];
     if (v.active == 0 || v.released != 0) return;
+    modules_.envSetSyncTicks(slot, 1.0 / quartersPerTick());  // (port) tempo sync
     for (int i = 0; i < 4; i++) modules_.envRelease(slot, i, sustainPedal());
     v.released = -1;
 }
@@ -851,6 +854,7 @@ void Master::controlUpdate(Voice& v) {
     // the retune is anchored on. See docs/modules/tuning.md.
     if (tuning_ != nullptr) pitch += modules_.docRetune(v.slot, *tuning_, v.key, word(P + 3));
 
+    modules_.envSetSyncTicks(vi, 1.0 / quartersPerTick());  // (port) tempo sync
     for (int i = 0; i < 4; i++) v.mod[4 + i] = modules_.envTick(vi, i, sustainPedal());
 
     for (int i = 0; i < 4; i++) {
@@ -899,6 +903,13 @@ void Master::controlUpdate(Voice& v) {
             L.p34 = (blk[0xf] & 0x3f) << 2;
         } else {
             L.p34 = (((blk[0xf] & 0x3f) << 8) + L.p34) / 64;
+        }
+        // (port, issue #42) tempo sync: FREQ plus its modulation, rounded, picks the division
+        if (blk[0xd] & ofs::Lfo::SyncBit) {
+            const int32_t d = std::clamp((L.freq + 0x80) >> 8, 0, kSyncDivisions - 1);
+            syncLfo(vi, i, kSyncQuarters[d], s8(blk[1]) < 0);
+        } else {
+            modules_.lfoSetSync(vi, i, 0, false, 0);
         }
         v.mod[i] = modules_.lfoTick(vi, i);
     }
@@ -986,6 +997,28 @@ void Master::controlUpdate(Voice& v) {
     if (v.tickCount >= 0 && v.tickCount < 0x7fffffff) v.tickCount++;
 }
 
+void Master::setTransport(double bpm, bool hasPosition, double quarters) {
+    transportBpm_ = bpm >= 1.0 && bpm <= 999.0 ? bpm : 120.0;
+    if (hasPosition) transportQuarters_ = quarters;
+}
+
+double Master::quartersPerTick() const {
+    // A tick of the LFOs and envelopes is two control updates (tickParity), each
+    // (controlStep_ + 1024) / 1024 samples long.
+    return transportBpm_ / 60.0 * (controlStep_ + 1024) / (512.0 * sampleRate_);
+}
+
+void Master::syncLfo(int vi, int i, double cycle, bool lock) {
+    // The cap is the free LFO's top rate, half a cycle per tick.
+    const double inc = std::min(0x1p30 * quartersPerTick() / cycle, 0x1p29);
+    uint32_t phase = 0;
+    if (lock) {
+        const double c = transportQuarters_ / cycle;
+        phase = static_cast<uint32_t>((c - std::floor(c)) * 0x1p30);
+    }
+    modules_.lfoSetSync(vi, i, std::max(static_cast<int32_t>(inc), 1), lock, phase);
+}
+
 // ---------------------------------------------------------------- audio
 
 bool Master::processVoice(Voice& v, float* acc) {
@@ -1031,7 +1064,8 @@ void Master::process(float* outL, float* outR, int32_t n, bool replacing) {
                 parser_.beginBlock();
                 int32_t finished[kMaxVoices];
                 for (int32_t& f : finished) f = -1;
-                for (int32_t s = 0; s < n; s++) {
+                const double quartersPerSample = transportBpm_ / 60.0 / sampleRate_;  // (port) tempo sync
+                for (int32_t s = 0; s < n; s++, transportQuarters_ += quartersPerSample) {
                     parser_.tick();
                     if (listCount_ > 0) {
                         float acc[2] = {0.0f, 0.0f};

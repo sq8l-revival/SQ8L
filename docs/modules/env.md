@@ -176,3 +176,27 @@ Coverage: every instruction of the unit is executed. Not reached by real play (o
 calls): smoothing amount >= 256 (SMTH <= 63), negative TK product (TK >= 0), time index > 63,
 `ticks <= 0` (table min 1 at rateScale 1), the ramp overshoot clamps at 0x45dff4/0x45e050 (dead
 for consistent states: the truncated step can never pass the target), and `prev == this` in start.
+
+## Tempo sync (port addition)
+
+Issue #42. The SYNC field of an envelope page's second sub-page (`ofs::Env::SyncBit`, flags
+bit 5, see [program.md](program.md#sync-port-addition)) makes T1-T4 note values at the host's
+tempo: time 0..35 = `kSyncQuarters[35 - time]`, 64T up to 16X, and above 35 plays as 16X.
+Not in the original, so not in its object either: `sync` and `syncTicksPerQuarter` sit after
+the 128 bytes the differential tests map.
+
+* `start` takes `sync` from the record. `startSegment` then gives a stage its note value,
+  `ticks = max(1, lround(kSyncQuarters[35 - time] * syncTicksPerQuarter))`, instead of
+  `kEnvTimeTable`; the second half of an "R" release keeps its fixed time 39, which is part of
+  the emulation rather than a time of the patch (`fixedTime`).
+* A synced segment is exactly its note value: T1V in T1 mode (`t1Offset`) and TK
+  (`timeKeyScale`) do not apply. T1V in SMT mode still reduces the smoothing.
+* The master writes the ticks per quarter (`VoiceModules::envSetSyncTicks`, the inverse of the
+  LFO's quarters per tick, see [lfo.md](lfo.md#tempo-sync-port-addition)) before every
+  envStart, envRelease and envTick, the calls that can start a segment. A segment keeps the
+  length it started with if the tempo changes under it.
+
+The editor shows the synced times in a cell more (T4 in four, with its "R"), grown into the gap
+after each field so no label moves; a synced T4's knob runs 0..71, the second half with "R".
+`sq8l_render_check --tempo-sync` measures T1, T2 and T4 segments against their note values,
+with T1V and TK ignored and a time past the last.

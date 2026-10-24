@@ -27,6 +27,7 @@
 #define DISTRHO_PLUGIN_WANT_STATE 1
 #define DISTRHO_PLUGIN_WANT_FULL_STATE 1
 #define DISTRHO_PLUGIN_WANT_PROGRAMS 1
+#define DISTRHO_PLUGIN_WANT_TIMEPOS 1  // LFO tempo sync (port addition, issue #42)
 // VST2 chunks are the original's raw bytes (571-byte "SQ8L.EDIT" record) so projects
 // saved with the original 32-bit plugin load directly (see patches/dpf-vst2-compat.patch).
 #define DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY "editbuffer"

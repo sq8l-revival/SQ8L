@@ -80,6 +80,9 @@ constexpr size_t T3 = 0x09;
 constexpr size_t T4 = 0x0a;   // s8 0..127: bits 0-5 release time, bit 6 = 2nd release ("R")
 constexpr size_t TK = 0x0b;   // s8 0..63
 constexpr size_t Flags = 0x0c;// bit 0 CYC, bits 1-3 SHAPE (0..7), bit 4 T1V mode (0 T1, 1 SMT)
+// (port, issue #42) tempo sync: Flags bit 5, which the original never writes. Set, T1..T4
+// are note values: 0..35 = kSyncQuarters from the last (64T) to the first (16X).
+constexpr uint8_t SyncBit = 0x20;
 constexpr size_t Smooth = 0x0d;// s8 0..63
 }  // namespace Env
 
@@ -98,6 +101,9 @@ constexpr size_t FreqMod = 0x0a;// slot (amount -127..127)
 constexpr size_t Modes = 0x0d;  // bits 0-1 AM mode, 2-3 FM mode (UNI BIP PHS SMT), 4-5 PLAY (FWD REV 1XF 1XR)
 constexpr size_t Phase = 0x0e;  // u8 0..127 (>= 64: twin mode)
 constexpr size_t Smooth = 0x0f; // s8 0..63
+// (port, issue #42) tempo sync: Modes bit 6, which the original never writes, so every
+// program that predates the port is FREE. Set, FREQ is an index into kSyncQuarters.
+constexpr uint8_t SyncBit = 0x40;
 }  // namespace Lfo
 
 // Modulation matrices MAT1..3: 12-byte blocks of 4 slots (M1, M2, M3, AMP).
@@ -148,6 +154,12 @@ constexpr size_t EmuFlags3 = 0x196; // bit 0 (voice flag), bit 1 DCA4 smoothing 
 // keeps the original's 8 voices. See docs/modules/program.md.
 constexpr size_t Polyphony = 0x197;
 }  // namespace ofs
+
+// (port, issue #42) The note values a synced LFO's FREQ (ofs::Lfo::SyncBit) or envelope's
+// times (ofs::Env::SyncBit) select, slowest first: 16 bars down to a 1/64 triplet, in
+// quarter notes (the length of one LFO cycle, of one envelope segment).
+constexpr int kSyncDivisions = 36;
+extern const double kSyncQuarters[kSyncDivisions];
 
 // (port) Playable voices of a program record: ofs::Polyphony, 1..64. The original's 8 for 0
 // (anything the original or an import wrote), for a missing record, and for a value out of

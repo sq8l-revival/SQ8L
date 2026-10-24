@@ -356,9 +356,9 @@ void EditorController::wireControls() {
     for (int i = 0; i < kNumKnobs; i++) {
         Knob& k = view_.knob(i);
         // (port) The cursor goes away for the length of a turn (issue #25). Not on a knob the
-        // page has no parameter for: it is faded for a reason, and turning it does nothing.
+        // page has no parameter for (an empty range): turning it does nothing.
         k.onEditBegin = [this](Knob& kn) {
-            if (kn.active()) hideCursor();
+            if (kn.maxValue() > kn.minValue()) hideCursor();
         };
         k.onEditEnd = [this](Knob&) { showCursor(); };
         k.onDblClick = [this, i](Control&) {  // 0x485148
@@ -751,7 +751,7 @@ void EditorController::lcdKnobValue(int knob, int value) {  // LAB_004846c4
     if (knob >= 0 && knob < kNumKnobs) view_.knob(knob).setValue(float(value));
 }
 
-void EditorController::lcdKnobRange(int knob, int min, int max) {  // FUN_00484700
+void EditorController::lcdKnobRange(int knob, int min, int max, bool faded) {  // FUN_00484700
     if (knob < 0 || knob >= kNumKnobs) return;
     Knob& k = view_.knob(knob);
     // (port, issue #43) A parameter with only two values gets a soft button in
@@ -762,8 +762,10 @@ void EditorController::lcdKnobRange(int knob, int min, int max) {  // FUN_004847
     view_.toggle(knob).setVisible(twoState);
     k.setVisible(!twoState);
     // (port) An empty range is how a page without a parameter for this knob is reported
-    // (updateKnobRanges sends 0, 0): the knob is drawn faded then, see issue #24.
-    k.setActive(max > min);
+    // (updateKnobRanges sends 0, 0): the knob is drawn faded then, see issue #24. So is one
+    // whose parameter has no effect for now (`faded`), but that one still turns: the value
+    // matters again once the parameter does (HUMAN of a synced LFO, issue #42).
+    k.setActive(max > min && !faded);
     k.setMinValue(float(min));
     k.setMaxValue(float(max));
     // (port) How far the mouse travels to cross the whole range. The original:

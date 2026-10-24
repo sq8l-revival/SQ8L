@@ -178,3 +178,35 @@ still matters for FREQ < 7 (`rateRatioLow` is not exact) and for SMTH delay step
 
 Run: `SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_lfo.py`
 (~9 min; `--quick`: 6 factory programs + all edited sounds, ~2.5 min, same block coverage).
+
+## Tempo sync (port addition)
+
+Issue #42. The SYNC field of an LFO page (`ofs::Lfo::SyncBit`, see
+[program.md](program.md#sync-port-addition)) makes FREQ a note value at the host's tempo.
+Not in the original, so it is not in its object either: `syncInc`, `syncLock` and `syncPhase`
+sit after the 0xf0 bytes the differential tests map, and the master writes them before every
+`tick()` through `VoiceModules::lfoSetSync` (increment 0 = FREE).
+
+* **Division.** In `Master::controlUpdate`, after the LFO's inputs: `d = clamp((freqIn +
+  0x80) >> 8, 0, 35)`, i.e. FREQ plus its UNI/BIP frequency modulation, rounded. Modulation
+  steps through the divisions, so the LFO always plays one of them; HUMAN does not apply.
+* **Rate.** `syncInc = 2^30 * q / kSyncQuarters[d]`, `q` the quarter notes per LFO tick:
+  `bpm / 60 * (controlStep + 1024) / (512 * sampleRate)` (two control updates per tick).
+  Truncated, at least 1, and capped at 2^29, half a cycle per tick, the free LFO's top.
+* **In the LFO.** `updateParams` computes the original's increment, then replaces it with
+  `±syncInc` (negative for REV), so the original's code runs unchanged. `freqShift` is not
+  applied: one cycle is one division for the ROM waves too. The phase offsets (PHS, twin)
+  follow the sign as they do for a free LFO; a one-shot stops at the end of its cycle.
+* **Phase.** RESET=n restarts the phase per note as before. RESET=OFF locks it to the song:
+  every tick the phase is set to `frac(position / cycle) * 2^30` (negated for REV), so every
+  voice lines up with the bar grid. The position is the host's while its transport plays
+  (`Master::setTransport`, once per block, then advanced per sample); stopped, or with a host
+  that has none, it runs on at the host's tempo from where it was, so the locked LFOs stay in
+  step with each other. An implausible tempo (outside 1..999) is taken as 120.
+* **Song position.** DPF hands over bar, beat and tick, which each format wrapper derives
+  from the host's position its own way; `SQ8LPlugin::songQuarters` undoes the one the binary
+  was built with (they differ only for a meter whose denominator is not 4).
+
+`sq8l_render_check --tempo-sync` checks the rate per division and tempo, FREQ past the last
+division, the cap, FM in both directions, and the lock (host position, stopped transport,
+REV). With SYNC off nothing changes: the regression renders stay identical to the original.

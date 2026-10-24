@@ -117,6 +117,11 @@ public:
     // FUN_0045d2a4 (trigger): resetPhase clears the phase, then phase << 24 is added.
     virtual void lfoStart(int voice, int lfo, int32_t phase, bool resetPhase) = 0;
     virtual int32_t lfoTick(int voice, int lfo) = 0;                     // FUN_0045db2c: output
+    // (port, issue #42) no counterpart in the original: tempo sync, written before every
+    // lfoTick. increment 0 = FREE, FREQ as the original has it; else the division's phase
+    // increment per tick, and with `lock` the phase is set to `phase` (the song position
+    // within the division's cycle, one cycle = 2^30). See docs/modules/lfo.md.
+    virtual void lfoSetSync(int voice, int lfo, int32_t increment, bool lock, uint32_t phase) = 0;
 
     // ------------------------------------------------------------ Csq_env (4 per voice)
     virtual void envSetControlRate(int voice, int env, float rate) = 0;  // FUN_0045dcb8
@@ -130,6 +135,10 @@ public:
     virtual int32_t envTick(int voice, int env, bool sustainPedal) = 0;  // FUN_0045e210: output
     virtual int32_t envShaped(int voice, int env) = 0;                    // FUN_0045e1d4 (env 3 only)
     virtual bool envActive(int voice, int env) = 0;                       // read of env+0x60 (env 3 only)
+    // (port, issue #42) no counterpart in the original: control ticks per quarter note at the
+    // host tempo, for the voice's synced envelopes (ofs::Env::SyncBit). Written before every
+    // envStart, envRelease and envTick, the calls that can start a segment.
+    virtual void envSetSyncTicks(int voice, double ticksPerQuarter) = 0;
 
     // ------------------------------------------------------------ Camp (1 per voice)
     virtual void ampSetSampleRate(int voice, float sampleRate) = 0;       // FUN_0045e7b8

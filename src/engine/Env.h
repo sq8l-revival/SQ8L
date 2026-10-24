@@ -90,6 +90,11 @@ public:
     float rate = 0;              // +0x78  control rate (Hz)
     float rateScale = 0;         // +0x7c  rate / 83.59257598 (1.0 at the standard rate)
 
+    // ---------------------------------------------------------------- (port) tempo sync
+    // Issue #42. Beyond the original's 128 bytes, so the differential tests never see them.
+    uint8_t sync = 0;               // ofs::Env::SyncBit at start(): T1..T4 are note values
+    double syncTicksPerQuarter = 0; // ticks per quarter note at the host tempo (the master)
+
     // Constructor (FUN_0045dbcc): zero-filled object, then setRate(rate).
     void init(float controlRate);
     // FUN_0045dcb8: set the control rate and reset() (master ctor, FUN_00462380).
@@ -111,7 +116,8 @@ public:
 
 private:
     void setSmoothing(int32_t amount);              // FUN_0045dce4
-    void startSegment(int32_t tgt, int32_t timeIndex);  // FUN_0045df18
+    // FUN_0045df18. (port) fixedTime: a time of the emulation, never a note value
+    void startSegment(int32_t tgt, int32_t timeIndex, bool fixedTime = false);
     void runRamp();                                 // call [+0x68]
     void runNext();                                 // call [+0x70]
     void rampEnd();                                 // shared tail of the ramp routines

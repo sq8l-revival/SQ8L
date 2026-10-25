@@ -122,15 +122,16 @@ static const ParamSetup kParams_5_0[] = {
     {10, "Panning modulation amount", 278, Fmt::None, PopText::None, true, 0, Change::None},  // PMOD.AMT
 };
 static const ParamSetup kParams_6_0[] = {
-    {1, "LFO frequency", 133, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
-    {2, "Reset LFO phase to specified value when voice is triggered", 134, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
-    {3, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 135, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
-    {4, "LFO waveform", 136, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
-    {5, "Start amplitude of LFO", 137, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {6, "Speed of LFO amplitude fading", 138, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
-    {7, "Final amplitude of LFO", 141, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {9, "LFO amplitude modulation source", 142, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
-    {11, "LFO amplitude modulation amount", 143, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
+    {1, "LFO frequency, or the note value when synced", 133, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
+    {2, "LFO rate (FREE=Hertz, SYNC=follow host tempo: X=bars, D=dotted, T=triplet; RST=OFF use song position)", 149, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
+    {3, "Reset LFO phase to specified value when voice is triggered", 134, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
+    {4, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 135, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
+    {5, "LFO waveform", 136, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
+    {6, "Start amplitude of LFO", 137, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {7, "Speed of LFO amplitude fading", 138, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
+    {8, "Final amplitude of LFO", 141, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {10, "LFO amplitude modulation source", 142, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
+    {12, "LFO amplitude modulation amount", 143, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
 };
 static const ParamSetup kParams_6_1[] = {
     {2, "LFO frequency modulation source", 144, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // FMOD.SEL
@@ -143,15 +144,16 @@ static const ParamSetup kParams_6_1[] = {
     {11, "Play mode (FWD=forward, REV=backwards, 1XF=one-shot forw., 1XR=one-shot backw.)", 148, Fmt::LfoPlay, PopText::None, true, 0, Change::None},  // PLAY
 };
 static const ParamSetup kParams_7_0[] = {
-    {1, "LFO frequency", 153, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
-    {2, "Reset LFO phase to specified value when voice is triggered", 154, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
-    {3, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 155, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
-    {4, "LFO waveform", 156, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
-    {5, "Start amplitude of LFO", 157, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {6, "Speed of LFO amplitude fading", 158, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
-    {7, "Final amplitude of LFO", 161, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {9, "LFO amplitude modulation source", 162, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
-    {11, "LFO amplitude modulation amount", 163, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
+    {1, "LFO frequency, or the note value when synced", 153, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
+    {2, "LFO rate (FREE=frequency, SYNC=note value at the host tempo: X=bars, D=dotted, T=triplet; with RST=OFF in step with the song)", 169, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
+    {3, "Reset LFO phase to specified value when voice is triggered", 154, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
+    {4, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 155, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
+    {5, "LFO waveform", 156, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
+    {6, "Start amplitude of LFO", 157, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {7, "Speed of LFO amplitude fading", 158, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
+    {8, "Final amplitude of LFO", 161, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {10, "LFO amplitude modulation source", 162, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
+    {12, "LFO amplitude modulation amount", 163, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
 };
 static const ParamSetup kParams_7_1[] = {
     {2, "LFO frequency modulation source", 164, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // FMOD.SEL
@@ -164,15 +166,16 @@ static const ParamSetup kParams_7_1[] = {
     {11, "Play mode (FWD=forward, REV=backwards, 1XF=one-shot forw., 1XR=one-shot backw.)", 168, Fmt::LfoPlay, PopText::None, true, 0, Change::None},  // PLAY
 };
 static const ParamSetup kParams_8_0[] = {
-    {1, "LFO frequency", 173, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
-    {2, "Reset LFO phase to specified value when voice is triggered", 174, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
-    {3, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 175, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
-    {4, "LFO waveform", 176, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
-    {5, "Start amplitude of LFO", 177, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {6, "Speed of LFO amplitude fading", 178, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
-    {7, "Final amplitude of LFO", 181, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {9, "LFO amplitude modulation source", 182, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
-    {11, "LFO amplitude modulation amount", 183, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
+    {1, "LFO frequency, or the note value when synced", 173, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
+    {2, "LFO rate (FREE=frequency, SYNC=note value at the host tempo: X=bars, D=dotted, T=triplet; with RST=OFF in step with the song)", 189, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
+    {3, "Reset LFO phase to specified value when voice is triggered", 174, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
+    {4, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 175, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
+    {5, "LFO waveform", 176, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
+    {6, "Start amplitude of LFO", 177, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {7, "Speed of LFO amplitude fading", 178, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
+    {8, "Final amplitude of LFO", 181, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {10, "LFO amplitude modulation source", 182, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
+    {12, "LFO amplitude modulation amount", 183, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
 };
 static const ParamSetup kParams_8_1[] = {
     {2, "LFO frequency modulation source", 184, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // FMOD.SEL
@@ -185,15 +188,16 @@ static const ParamSetup kParams_8_1[] = {
     {11, "Play mode (FWD=forward, REV=backwards, 1XF=one-shot forw., 1XR=one-shot backw.)", 188, Fmt::LfoPlay, PopText::None, true, 0, Change::None},  // PLAY
 };
 static const ParamSetup kParams_9_0[] = {
-    {1, "LFO frequency", 193, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
-    {2, "Reset LFO phase to specified value when voice is triggered", 194, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
-    {3, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 195, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
-    {4, "LFO waveform", 196, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
-    {5, "Start amplitude of LFO", 197, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {6, "Speed of LFO amplitude fading", 198, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
-    {7, "Final amplitude of LFO", 201, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {9, "LFO amplitude modulation source", 202, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
-    {11, "LFO amplitude modulation amount", 203, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
+    {1, "LFO frequency, or the note value when synced", 193, Fmt::None, PopText::None, true, 0, Change::None},  // FREQ
+    {2, "LFO rate (FREE=frequency, SYNC=note value at the host tempo: X=bars, D=dotted, T=triplet; with RST=OFF in step with the song)", 209, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
+    {3, "Reset LFO phase to specified value when voice is triggered", 194, Fmt::LfoReset, PopText::None, false, 0, Change::None},  // RESET
+    {4, "LFO humanization (EMU=emulate SQ-80, X1=humanize always, Xn=humanize n times as much)", 195, Fmt::LfoHuman, PopText::None, true, 0, Change::None},  // HUMAN
+    {5, "LFO waveform", 196, Fmt::LfoWave, PopText::LfoWave, false, 0, Change::None},  // WAVE
+    {6, "Start amplitude of LFO", 197, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {7, "Speed of LFO amplitude fading", 198, Fmt::None, PopText::None, true, 0, Change::None},  // DELAY
+    {8, "Final amplitude of LFO", 201, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {10, "LFO amplitude modulation source", 202, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // MOD.SEL
+    {12, "LFO amplitude modulation amount", 203, Fmt::None, PopText::None, true, 0, Change::None},  // MOD.AMT
 };
 static const ParamSetup kParams_9_1[] = {
     {2, "LFO frequency modulation source", 204, Fmt::ModSource, PopText::ModSource, false, 0, Change::None},  // FMOD.SEL
@@ -206,79 +210,83 @@ static const ParamSetup kParams_9_1[] = {
     {11, "Play mode (FWD=forward, REV=backwards, 1XF=one-shot forw., 1XR=one-shot backw.)", 208, Fmt::LfoPlay, PopText::None, true, 0, Change::None},  // PLAY
 };
 static const ParamSetup kParams_10_0[] = {
-    {1, "1st level of envelope (attack)", 58, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {2, "2nd level of envelope (decay)", 59, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {3, "Final level of envelope (sustain)", 60, Fmt::None, PopText::None, true, 0, Change::None},  // L3
+    {1, "First envelope level (attack)", 58, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {2, "Second envelope level (decay)", 59, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {3, "Final envelope level (sustain)", 60, Fmt::None, PopText::None, true, 0, Change::None},  // L3
     {4, "Modulation of levels by velocity (L=linear, X=exponential)", 62, Fmt::EnvVelLevel, PopText::None, false, 0, Change::None},  // LV
     {5, "Modulation of attack time by velocity", 63, Fmt::None, PopText::None, true, 0, Change::None},  // T1V
     {6, "Attack time", 64, Fmt::None, PopText::None, true, 0, Change::None},  // T1
     {7, "Decay time", 65, Fmt::None, PopText::None, true, 0, Change::None},  // T2
-    {8, "2nd decay time (time it takes to reach sustain level)", 66, Fmt::None, PopText::None, true, 0, Change::None},  // T3
-    {9, "Release time (\"R\" indicates the use of 2nd release)", 67, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
+    {8, "Second decay time (to reach sustain level)", 66, Fmt::None, PopText::None, true, 0, Change::None},  // T3
+    {9, "Release time (\"R\" indicates the use of second release)", 67, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
     {10, "Scale envelope times by key position", 68, Fmt::None, PopText::None, true, 0, Change::None},  // TK
 };
 static const ParamSetup kParams_10_1[] = {
     {1, "Start level of envelope", 57, Fmt::None, PopText::None, true, 0, Change::None},  // L0
-    {2, "Envelope plays full cycle without sustain stage", 69, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
+    {2, "Envelope plays a full cycle without sustain stage (one-shot mode)", 69, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
     {3, "Envelope shaping curve (OFF=no shaping)", 70, Fmt::EnvShape, PopText::None, true, 0, Change::None},  // SHP
     {4, "Smoothness of envelope output (0=neutral)", 75, Fmt::None, PopText::None, true, 0, Change::None},  // SMTH
+    {5, "Envelope times (FREE=SQ-80 times, SYNC=note values at the host tempo: X=bars, D=dotted, T=triplet; TK and T1V in T1 mode do not apply)", 72, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
     {6, "T1V mode (T1=T1V is amount of T1 modulation by velocity, SMT=modulate smoothness instead)", 71, Fmt::EnvT1VMode, PopText::None, true, 0, Change::None},  // T1VM
 };
 static const ParamSetup kParams_11_0[] = {
-    {1, "1st level of envelope (attack)", 77, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {2, "2nd level of envelope (decay)", 78, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {3, "Final level of envelope (sustain)", 79, Fmt::None, PopText::None, true, 0, Change::None},  // L3
+    {1, "First envelope level (attack)", 77, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {2, "Second envelope level (decay)", 78, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {3, "Final envelope level (sustain)", 79, Fmt::None, PopText::None, true, 0, Change::None},  // L3
     {4, "Modulation of levels by velocity (L=linear, X=exponential)", 81, Fmt::EnvVelLevel, PopText::None, false, 0, Change::None},  // LV
     {5, "Modulation of attack time by velocity", 82, Fmt::None, PopText::None, true, 0, Change::None},  // T1V
     {6, "Attack time", 83, Fmt::None, PopText::None, true, 0, Change::None},  // T1
     {7, "Decay time", 84, Fmt::None, PopText::None, true, 0, Change::None},  // T2
-    {8, "2nd decay time (time it takes to reach sustain level)", 85, Fmt::None, PopText::None, true, 0, Change::None},  // T3
-    {9, "Release time (\"R\" indicates the use of 2nd release)", 86, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
+    {8, "Second decay time (to reach sustain level)", 85, Fmt::None, PopText::None, true, 0, Change::None},  // T3
+    {9, "Release time (\"R\" indicates the use of second release)", 86, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
     {10, "Scale envelope times by key position", 87, Fmt::None, PopText::None, true, 0, Change::None},  // TK
 };
 static const ParamSetup kParams_11_1[] = {
     {1, "Start level of envelope", 76, Fmt::None, PopText::None, true, 0, Change::None},  // L0
-    {2, "Envelope plays full cycle without sustain stage", 88, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
+    {2, "Envelope plays a full cycle without sustain stage (one-shot mode)", 88, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
     {3, "Envelope shaping curve (OFF=no shaping)", 89, Fmt::EnvShape, PopText::None, true, 0, Change::None},  // SHP
     {4, "Smoothness of envelope output (0=neutral)", 94, Fmt::None, PopText::None, true, 0, Change::None},  // SMTH
+    {5, "Envelope times (FREE=SQ-80 times, SYNC=note values at the host tempo: X=bars, D=dotted, T=triplet; TK and T1V in T1 mode do not apply)", 91, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
     {6, "T1V mode (T1=T1V is amount of T1 modulation by velocity, SMT=modulate smoothness instead)", 90, Fmt::EnvT1VMode, PopText::None, true, 0, Change::None},  // T1VM
 };
 static const ParamSetup kParams_12_0[] = {
-    {1, "1st level of envelope (attack)", 96, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {2, "2nd level of envelope (decay)", 97, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {3, "Final level of envelope (sustain)", 98, Fmt::None, PopText::None, true, 0, Change::None},  // L3
+    {1, "First envelope level (attack)", 96, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {2, "Second envelope level (decay)", 97, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {3, "Final envelope level (sustain)", 98, Fmt::None, PopText::None, true, 0, Change::None},  // L3
     {4, "Modulation of levels by velocity (L=linear, X=exponential)", 100, Fmt::EnvVelLevel, PopText::None, false, 0, Change::None},  // LV
     {5, "Modulation of attack time by velocity", 101, Fmt::None, PopText::None, true, 0, Change::None},  // T1V
     {6, "Attack time", 102, Fmt::None, PopText::None, true, 0, Change::None},  // T1
     {7, "Decay time", 103, Fmt::None, PopText::None, true, 0, Change::None},  // T2
-    {8, "2nd decay time (time it takes to reach sustain level)", 104, Fmt::None, PopText::None, true, 0, Change::None},  // T3
-    {9, "Release time (\"R\" indicates the use of 2nd release)", 105, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
+    {8, "Second decay time (to reach sustain level)", 104, Fmt::None, PopText::None, true, 0, Change::None},  // T3
+    {9, "Release time (\"R\" indicates the use of second release)", 105, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
     {10, "Scale envelope times by key position", 106, Fmt::None, PopText::None, true, 0, Change::None},  // TK
 };
 static const ParamSetup kParams_12_1[] = {
     {1, "Start level of envelope", 95, Fmt::None, PopText::None, true, 0, Change::None},  // L0
-    {2, "Envelope plays full cycle without sustain stage", 107, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
+    {2, "Envelope plays a full cycle without sustain stage (one-shot mode)", 107, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
     {3, "Envelope shaping curve (OFF=no shaping)", 108, Fmt::EnvShape, PopText::None, true, 0, Change::None},  // SHP
     {4, "Smoothness of envelope output (0=neutral)", 113, Fmt::None, PopText::None, true, 0, Change::None},  // SMTH
+    {5, "Envelope times (FREE=SQ-80 times, SYNC=note values at the host tempo: X=bars, D=dotted, T=triplet; TK and T1V in T1 mode do not apply)", 110, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
     {6, "T1V mode (T1=T1V is amount of T1 modulation by velocity, SMT=modulate smoothness instead)", 109, Fmt::EnvT1VMode, PopText::None, true, 0, Change::None},  // T1VM
 };
 static const ParamSetup kParams_13_0[] = {
-    {1, "1st level of envelope (attack)", 115, Fmt::None, PopText::None, true, 0, Change::None},  // L1
-    {2, "2nd level of envelope (decay)", 116, Fmt::None, PopText::None, true, 0, Change::None},  // L2
-    {3, "Final level of envelope (sustain)", 117, Fmt::None, PopText::None, true, 0, Change::None},  // L3
+    {1, "First envelope level (attack)", 115, Fmt::None, PopText::None, true, 0, Change::None},  // L1
+    {2, "Second envelope level (decay)", 116, Fmt::None, PopText::None, true, 0, Change::None},  // L2
+    {3, "Final envelope level (sustain)", 117, Fmt::None, PopText::None, true, 0, Change::None},  // L3
     {4, "Modulation of levels by velocity (L=linear, X=exponential)", 119, Fmt::EnvVelLevel, PopText::None, false, 0, Change::None},  // LV
     {5, "Modulation of attack time by velocity", 120, Fmt::None, PopText::None, true, 0, Change::None},  // T1V
     {6, "Attack time", 121, Fmt::None, PopText::None, true, 0, Change::None},  // T1
     {7, "Decay time", 122, Fmt::None, PopText::None, true, 0, Change::None},  // T2
-    {8, "2nd decay time (time it takes to reach sustain level)", 123, Fmt::None, PopText::None, true, 0, Change::None},  // T3
-    {9, "Release time (\"R\" indicates the use of 2nd release)", 124, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
+    {8, "Second decay time (to reach sustain level)", 123, Fmt::None, PopText::None, true, 0, Change::None},  // T3
+    {9, "Release time (\"R\" indicates the use of second release)", 124, Fmt::EnvT4, PopText::None, false, 0, Change::None},  // T4
     {10, "Scale envelope times by key position", 125, Fmt::None, PopText::None, true, 0, Change::None},  // TK
 };
 static const ParamSetup kParams_13_1[] = {
     {1, "Start level of envelope", 114, Fmt::None, PopText::None, true, 0, Change::None},  // L0
-    {2, "Envelope plays full cycle without sustain stage", 126, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
+    {2, "Envelope plays a full cycle without sustain stage (one-shot mode)", 126, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
     {3, "Envelope shaping curve (OFF=no shaping)", 127, Fmt::EnvShape, PopText::None, true, 0, Change::None},  // SHP
     {4, "Smoothness of envelope output (0=neutral)", 132, Fmt::None, PopText::None, true, 0, Change::None},  // SMTH
+    {5, "Envelope times (FREE=SQ-80 times, SYNC=note values at the host tempo: X=bars, D=dotted, T=triplet; TK and T1V in T1 mode do not apply)", 129, Fmt::TempoSync, PopText::None, true, 0, Change::None},  // (port) SYNC
     {6, "T1V mode (T1=T1V is amount of T1 modulation by velocity, SMT=modulate smoothness instead)", 128, Fmt::EnvT1VMode, PopText::None, true, 0, Change::None},  // T1VM
 };
 static const ParamSetup kParams_14_0[] = {
@@ -315,22 +323,22 @@ static const ParamSetup kParams_17_0[] = {
     {1, "Sync oscillator 2 to oscillator 1", -1, Fmt::None, PopText::None, true, 0, Change::Form},  // SYNC
     {2, "Amplitude of oscillator 2 is modulated by oscillator 1", -1, Fmt::None, PopText::None, true, 0, Change::Form},  // XMOD
     {3, "Monophonic playback", -1, Fmt::None, PopText::None, true, 0, Change::Form},  // MONO
-    {4, "Glide (=portamento) time", -1, Fmt::None, PopText::None, true, 0, Change::None},  // GLIDE
-    {6, "Restart voice (if the same key is restruck, the same voice is used)", -1, Fmt::None, PopText::None, true, 0, Change::None},  // REST.VC
+    {4, "Glide (portamento) time", -1, Fmt::None, PopText::None, true, 0, Change::None},  // GLIDE
+    {6, "Restart voice (when playing the same key multiple times, reuse the same voice)", -1, Fmt::None, PopText::None, true, 0, Change::None},  // REST.VC
     {7, "Restart envelopes (envelopes always start at zero level)", -1, Fmt::None, PopText::None, true, 0, Change::None},  // REST.ENV
     {8, "Restart oscillators when triggering voice", -1, Fmt::None, PopText::None, true, 0, Change::None},  // REST.OSC
-    {9, "Envelopes play full cycle without sustain stage", -1, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
+    {9, "Envelopes play a full cycle without sustain stage (one-shot mode)", -1, Fmt::None, PopText::None, true, 0, Change::None},  // CYC
 };
 static const ParamSetup kParams_17_1[] = {
-    {1, "Pitchbend range in semitones", -1, Fmt::None, PopText::None, true, 0, Change::None},  // BRANGE
-    {2, "Pitchbend mode (selects which voices are affected by bend)", -1, Fmt::BendMode, PopText::None, true, 0, Change::None},  // BMODE
+    {1, "Pitch bend range in semitones", -1, Fmt::None, PopText::None, true, 0, Change::None},  // BRANGE
+    {2, "Pitch bend mode: selects which voices are affected", -1, Fmt::BendMode, PopText::None, true, 0, Change::None},  // BMODE
     {3, "Voice stealing mode (HARD=stop voice, SOFT=fade out)", 366, Fmt::VoiceSteal, PopText::None, false, 0, Change::None},  // VSTEAL
     {4, "Emulation of a bug in the SQ-80 when AM=ON", 358, Fmt::None, PopText::None, true, 0, Change::None},  // AMBUG
     {5, "Playable voices of this program (8 matches the SQ-80)", 375, Fmt::Polyphony, PopText::None, false, 0, Change::None},  // (port) VOICES
 };
 static const ParamSetup kParams_17_2[] = {
-    {2, "DCA1-3 smoothing mode (EMU=like SQ-80, FAST=less accurate but without latency)", 359, Fmt::Dca13Mode, PopText::None, true, 0, Change::None},  // DCA13
-    {3, "Muffling (OFF=crisp sound, ON=slightly muffled sound like SQ-80)", 281, Fmt::None, PopText::None, true, 0, Change::None},  // MUF
+    {2, "DCA1-3 smoothing mode (EMU=like SQ-80, FAST=less accurate, but without latency)", 359, Fmt::Dca13Mode, PopText::None, true, 0, Change::None},  // DCA13
+    {3, "Muffling (OFF=crisp sound, ON=slightly muffled sound, like SQ-80)", 281, Fmt::None, PopText::None, true, 0, Change::None},  // MUF
     {4, "DCA4 smoothing (EMU=soft attack like SQ-80, HARD=hard attack)", 368, Fmt::Dca4Mode, PopText::None, true, 0, Change::None},  // DCA4
     {5, "DC offset blocking filter for oscillator outputs (SMART=on when needed, ON=always on, OFF=off)", 360, Fmt::DcBlock, PopText::None, true, 0, Change::None},  // DCB
 };
@@ -365,45 +373,45 @@ const PageSetup kPages[kNumPages] = {
      1, {
         {"Final Volume (DCA4)", 5, 6, 273, 0, 0, 0, kParams_5_0, 7},
      }},
-    {"[LFO1][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO1][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO1][FREQ={0,FREQ,3,0,127}] [{1,SYNC,4,0,1}] [RST={2,RESET,3,-1,63}] [HUM={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO1][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
-        {"LFO1", 6, 7, 133, 0, 0, 0, kParams_6_0, 9},
+        {"LFO1", 6, 7, 133, 0, 0, 0, kParams_6_0, 10},
         {"LFO1", 6, 7, 133, 0, 0, 1, kParams_6_1, 8},
      }},
-    {"[LFO2][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO2][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO2][FREQ={0,FREQ,3,0,127}] [{1,SYNC,4,0,1}] [RST={2,RESET,3,-1,63}] [HUM={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO2][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
-        {"LFO2", 7, 7, 153, 0, 0, 0, kParams_7_0, 9},
+        {"LFO2", 7, 7, 153, 0, 0, 0, kParams_7_0, 10},
         {"LFO2", 7, 7, 153, 0, 0, 1, kParams_7_1, 8},
      }},
-    {"[LFO3][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO3][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO3][FREQ={0,FREQ,3,0,127}] [{1,SYNC,4,0,1}] [RST={2,RESET,3,-1,63}] [HUM={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO3][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
-        {"LFO3", 8, 7, 173, 0, 0, 0, kParams_8_0, 9},
+        {"LFO3", 8, 7, 173, 0, 0, 0, kParams_8_0, 10},
         {"LFO3", 8, 7, 173, 0, 0, 1, kParams_8_1, 8},
      }},
-    {"[LFO4][FREQ={0,FREQ,3,0,127}] [RESET={1,RESET,3,-1,63}] 1 [HUMAN={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO4][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
+    {"[LFO4][FREQ={0,FREQ,3,0,127}] [{1,SYNC,4,0,1}] [RST={2,RESET,3,-1,63}] [HUM={3,HUMAN,3,0,6}] [WF={4,WAVE,6,0,82}]\\&5 [L1={5,L1,2,0,63}] [DELAY={6,DELAY,2,0,63}] [L2={7,L2,2,0,63}] 1 [MOD=] [{8,MOD.SEL,6,-1,145}] [*] [{9,MOD.AMT,3,-63,+63}]\\&[LFO4][FREQMOD=] [{1,FMOD.SEL,6,-1,145}] [*] [{2,FMOD.AMT,4,-127,+127}] 1 [PHS={3,PHS,3,0,127}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] [DELAY={6,DLYM,4,0,1}] [AM={7,AMM,3,0,3}] [FM={8,FMM,3,0,3}] [PLAY={9,PLAY,3,0,3}]",
      2, {
-        {"LFO4", 9, 7, 193, 0, 0, 0, kParams_9_0, 9},
+        {"LFO4", 9, 7, 193, 0, 0, 0, kParams_9_0, 10},
         {"LFO4", 9, 7, 193, 0, 0, 1, kParams_9_1, 8},
      }},
-    {"[ENV1][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV1][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] 2 [T1V={6,T1VM,3,0,1}]",
+    {"[ENV1][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV1][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&6 [{5,SYNC,4,0,1}] 2 [T1V={6,T1VM,3,0,1}]",
      2, {
         {"ENV1", 10, 8, 57, 0, 0, 0, kParams_10_0, 10},
-        {"ENV1", 10, 8, 57, 0, 0, 1, kParams_10_1, 5},
+        {"ENV1", 10, 8, 57, 0, 0, 1, kParams_10_1, 6},
      }},
-    {"[ENV2][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV2][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] 2 [T1V={6,T1VM,3,0,1}]",
+    {"[ENV2][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV2][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&6 [{5,SYNC,4,0,1}] 2 [T1V={6,T1VM,3,0,1}]",
      2, {
         {"ENV2", 11, 8, 76, 0, 0, 0, kParams_11_0, 10},
-        {"ENV2", 11, 8, 76, 0, 0, 1, kParams_11_1, 5},
+        {"ENV2", 11, 8, 76, 0, 0, 1, kParams_11_1, 6},
      }},
-    {"[ENV3][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV3][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] 2 [T1V={6,T1VM,3,0,1}]",
+    {"[ENV3][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV3][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&6 [{5,SYNC,4,0,1}] 2 [T1V={6,T1VM,3,0,1}]",
      2, {
         {"ENV3", 12, 8, 95, 0, 0, 0, kParams_12_0, 10},
-        {"ENV3", 12, 8, 95, 0, 0, 1, kParams_12_1, 5},
+        {"ENV3", 12, 8, 95, 0, 0, 1, kParams_12_1, 6},
      }},
-    {"[ENV4][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV4][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&5 [MODE-] 2 [T1V={6,T1VM,3,0,1}]",
+    {"[ENV4][L1={0,L1,3,-63,+63}] 1 [L2={1,L2,3,-63,+63}] 1 [L3={2,L3,3,-63,+63}] 1 [LV={3,LV,3,0,127}] 2 [T1V={4,T1V,2,0,63}]\\&5 [T1={5,T1,2,0,63}] 2 [T2={6,T2,2,0,63}] 2 [T3={7,T3,2,0,63}] 2 [T4={8,T4,3,0,127}] 2 [TK={9,TK,2,0,63}]\\&[ENV4][L0={0,L0,3,-63,+63}] 1 [CYC={1,CYC,3,0,1}] 5 [SHAPE={3,SHP,4,0,7}] [SMTH={4,SMTH,2,0,63}]\\&6 [{5,SYNC,4,0,1}] 2 [T1V={6,T1VM,3,0,1}]",
      2, {
         {"ENV4", 13, 8, 114, 0, 0, 0, kParams_13_0, 10},
-        {"ENV4", 13, 8, 114, 0, 0, 1, kParams_13_1, 5},
+        {"ENV4", 13, 8, 114, 0, 0, 1, kParams_13_1, 6},
      }},
     {"[MAT1]5 [M1=] [{1,MOD1.SEL,6,-1,145}] [*] [{2,MOD1.AMT,3,-63,+63}] 1 [M2=] [{3,MOD2.SEL,6,-1,145}] [*] [{4,MOD2.AMT,3,-63,+63}]\\&10 [M3=] [{6,MOD3.SEL,6,-1,145}] [*] [{7,MOD3.AMT,3,-63,+63}] [AMP=] [{8,MOD4.SEL,6,-1,145}] [*] [{9,MOD4.AMT,3,-63,+63}]",
      1, {

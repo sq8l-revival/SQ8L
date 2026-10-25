@@ -34,6 +34,10 @@ enum class Fmt : uint8_t {
     DcBlock,       // 0x461bac  SMART ON OFF
     Polyphony,     // (port) EMU -> VOICES: 0 = the original's 8, else the voices
     WaveDir,       // (port) oscillator wave direction: "->" forward, "<-" reverse
+    TempoSync,     // (port) LFO or envelope tempo sync: "FREE" / "SYNC"
+    LfoDivision,   // (port) a synced LFO's FREQ: 16X..2X, 1D..64T (kSyncQuarters)
+    EnvDivision,   // (port) a synced envelope's T1-T3: 64T..16X, kSyncQuarters backwards
+    EnvT4Division, // (port) a synced T4: EnvDivision, then the same with "R" (36..71)
 };
 
 // Popup menu item texts (ClcdCtr_param +0x40).

@@ -91,6 +91,16 @@ code and verified against the original plugin running inside an x86 emulator.
   recalls what it was set to; the value you last picked is also remembered globally (in
   `SQ8L.ini`) as the cut a newly created instance starts at. A project always wins over that:
   loading one that was saved with no cut puts the instance at 0 dB.
+- **Tempo sync:** every LFO page has a FREE/SYNC switch beside FREQ (RESET and HUMAN are
+  labelled RST and HUM now, to make room). With SYNC, FREQ is a note value at the host's
+  tempo, from 16 bars (`16X`, X for bars) down to a 1/64 triplet, with dotted (`D`) and
+  triplet (`T`) values; frequency modulation steps through the note values, and HUMAN has no
+  effect (its knob is faded). With RST=OFF a synced LFO also follows the song position, so
+  every voice is in step with the bars; with the transport stopped it keeps running at the
+  host's tempo. The envelopes have the same switch on their second page, in place of MODE-:
+  with SYNC, T1-T4 are note values, shortest first (0 = `64T` up to 35 = `16X`, T4 keeping its
+  `R`), and TK and T1V (in T1 mode) have no effect (their knobs are faded). Both switches are
+  stored in the program, and every program made before them is FREE.
 - **Polyphony:** 8 voices like the SQ-80 by default, 1 to 64 with the **VOICES** parameter on
   the EMU page, right below VSTEAL. It belongs to the sound, so it is stored in the program
   and travels with it: into banks and libraries, and into the project your host saves. Every

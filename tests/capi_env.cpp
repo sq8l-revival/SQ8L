@@ -9,6 +9,7 @@
 
 #include "Env.h"
 #include "ModFollower.h"
+#include "Program.h"  // (port) ofs::Env::SyncBit
 
 #include "capi_export.h"
 
@@ -99,6 +100,7 @@ SQ8L_API void sq8l_env_free(void* e) { delete env(e); }
 SQ8L_API int sq8l_env_load(void* e, const uint8_t* orig, uint32_t addr) {
     sq8l::Env& o = *env(e);
     envFields([](const uint8_t* b, uint32_t off, auto& v) { get(b, off, v); }, o, orig);
+    o.sync = 0;  // (port) an object of the original is FREE, whatever start() last saw
     int err = 0;
     uint32_t p = 0;
     get(orig, 0x5c, p);
@@ -161,7 +163,12 @@ SQ8L_API void sq8l_env_set_rate(void* e, float rate, int rc) {
 SQ8L_API void sq8l_env_start(void* e, const uint8_t* rec, int32_t key, int32_t vel, int32_t restart,
                              int32_t cycle, void* prev, int rc) {
     RoundingScope r(rc);
-    env(e)->start(rec, key, vel, static_cast<uint8_t>(restart), static_cast<uint8_t>(cycle), env(prev));
+    // (port) The original ignores flags bit 5, the port's SYNC: a random record must not
+    // switch it on (tempo sync is checked by sq8l_render_check --tempo-sync).
+    uint8_t free[sq8l::EnvRecord::kSize];
+    std::memcpy(free, rec, sizeof free);
+    free[sq8l::EnvRecord::kFlags] &= static_cast<uint8_t>(~sq8l::ofs::Env::SyncBit);
+    env(e)->start(free, key, vel, static_cast<uint8_t>(restart), static_cast<uint8_t>(cycle), env(prev));
 }
 
 SQ8L_API void sq8l_env_release(void* e, int32_t pedal, int rc) {

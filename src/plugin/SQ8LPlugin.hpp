@@ -95,6 +95,13 @@ private:
   sq8l::Synth synth_;
   std::vector<sq8l::RawMidiEvent> events_;
 
+  // (port, issue #42) The song position for the LFOs' tempo sync, in quarter notes, NaN
+  // when there is none. bbtStyle_ is how this binary's format wrapper built the bar, beat
+  // and tick that songQuarters() takes apart again.
+  enum class BbtStyle { Vst, Quarters, Signature };
+  BbtStyle bbtStyle_ = BbtStyle::Signature;
+  double songQuarters(const TimePosition &position) const;
+
   DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SQ8LPlugin)
 };
 

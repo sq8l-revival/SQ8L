@@ -11,6 +11,9 @@ what it adds:
   * OSC "DIR" (program osc byte 0x0b): the wave playback direction of each oscillator, with
     WAVE= shortened to WF= to make room for it, the same label on the OSC1-3 and LFO pages,
     and the LFO field widened to spell the oscillator wave names out (issue #44);
+  * LFO "SYNC" (LFO modes bit 6): FREE/SYNC beside FREQ, which reads as a note value while
+    it is on, with RESET= and HUMAN= shortened to RST= and HUM= to make room, and ENV "SYNC"
+    (envelope flags bit 5) in place of MODE-, T1-T4 note values while it is on (issue #42);
   * OPTIONS "Output gain": a cut of this instance's output, also kept in SQ8L.ini as the
     cut a newly created instance starts at (issue #52);
   * OPTIONS "Zoom" ([port] zoom): the editor's size, 100% to 300%;
@@ -464,7 +467,7 @@ def main():
     check(":" not in ed.lcd_row(0) and ":" not in ed.lcd_row(1), "no colon on the display (it draws blank)")
 
     # the LFO wave field is 6 cells now, so an oscillator wave spells its name out
-    LFO1_PAGE, LFO_SUB, LFO_WAVE = 6, 0, 4
+    LFO1_PAGE, LFO_SUB, LFO_WAVE = 6, 0, 5
     params = ed.pages()[LFO1_PAGE]["subs"][LFO_SUB]["params"]
     w = [q for q in params if q["name"] == "WAVE"][0]
     check(w.get("width") == 6 and w.get("knob") == 4,
@@ -475,6 +478,144 @@ def main():
     ed.idle()
     shown = ed.lcd_row(0)[38:44]
     check(shown.strip() == "SAW", f"LFO wave 5 spells the oscillator wave out ({shown!r}, was ' 00')")
+
+    # LFO -> SYNC (issue #42): an unlabelled FREE/SYNC field on knob 1, paid for by RST= and
+    # HUM=; RST moves to knob 2, and everything after it keeps its columns.
+    print("LFO tempo sync:")
+    LFO_FREQ, LFO_SYNC, LFO_HUMAN = 1, 2, 4  # parameter indices in the sub-page
+    DIVISIONS = ["16X", "15X", "14X", "13X", "12X", "11X", "10X", "9X", "8X", "7X", "6X", "5X",
+                 "4X", "3X", "2X", "1D", "1", "2D", "1T", "2", "4D", "2T", "4", "8D",
+                 "4T", "8", "16D", "8T", "16", "32D", "16T", "32", "64D", "32T", "64", "64T"]
+    for lfo in range(4):
+        sub = ed.pages()[LFO1_PAGE + lfo]["subs"][LFO_SUB]
+        s, rst, hum = param_of(sub, "SYNC"), param_of(sub, "RESET"), param_of(sub, "HUMAN")
+        check(s["knob"] == 1 and s["x"] == 14 and s["y"] == 0 and s["width"] == 4 and s["label"] == ""
+              and (s["min"], s["max"]) == (0, 1) and s["paramIndex"] == 149 + 20 * lfo,
+              f"LFO{lfo + 1} SYNC: knob {s['knob']}, column {s['x']}, width {s['width']}, "
+              f"0..1, parameter {s['paramIndex']}")
+        check(rst["knob"] == 2 and rst["label"] == "RST=" and rst["x"] == 19
+              and hum["knob"] == 3 and hum["label"] == "HUM=" and hum["x"] == 27,
+              f"LFO{lfo + 1} RST= on knob {rst['knob']} at {rst['x']}, HUM= on knob {hum['knob']} at {hum['x']}")
+    MODES = 0xA2 + 0x0D  # LFO1 modes byte; SYNC is bit 6
+    row = ed.lcd_row(0)
+    check(row[5:10] == "FREQ=" and row[14:18] == "FREE" and row[19:23] == "RST=" and row[27:31] == "HUM="
+          and row[35:38] == "WF=" and not ed.program_byte(MODES) & 0x40,
+          f"a program of the original is FREE: {row[:44]!r}")
+    check(ed.toggle_shown(1), "SYNC has two values, so a soft button (issue #43)")
+
+    freq = ed.program_byte(0xA2)
+    L.sq8l_gl_ctr(ed.v, 1, LFO_SYNC, 1)
+    ed.idle()
+    row = ed.lcd_row(0)
+    check(row[14:18] == "SYNC" and ed.program_byte(MODES) & 0x40, f"SYNC on: {row[:44]!r}")
+    check(row[10:13].strip() == DIVISIONS[min(freq, 35)] and ed.knob(0, "max") == 35,
+          f"FREQ {freq} reads as a division ({row[10:13]!r}) and its knob spans the 36 of them")
+    # HUMAN does nothing to a synced LFO: its knob is faded, but still turns, and hides the
+    # cursor while it does, because the value counts again once the LFO is FREE
+    HUMAN_KNOB, HUMAN = 3, 0xA2 + 0x02
+    check(not ed.knob_active(HUMAN_KNOB), "HUMAN's knob is faded while synced")
+    before = ed.program_byte(HUMAN)
+    ed.events()
+    ed.drag_knob(HUMAN_KNOB, dy=60 if before < 6 else -60)
+    evs = ed.events()
+    check(ed.program_byte(HUMAN) != before and ed.cursor_hidden_at(evs, knob_xy(HUMAN_KNOB)),
+          f"and still turns HUMAN ({before} -> {ed.program_byte(HUMAN)}), hiding the cursor")
+    L.sq8l_gl_ctr(ed.v, 1, LFO_HUMAN, before)
+    ed.idle()
+    ed.events()
+    ed.double_click(cell_xy(11, 0))
+    trees = ed.popups(ed.events())
+    items = [it["text"].strip() for it in trees[0] if it.get("text")] if trees else []
+    check(items == DIVISIONS and sum(1 for it in trees[0] if it.get("break")) == 2,
+          f"its value menu lists the divisions slowest first, in 3 columns: {items}")
+
+    # a free rate past the last division plays and reads as the last, and comes back intact
+    L.sq8l_gl_ctr(ed.v, 1, LFO_SYNC, 0)
+    L.sq8l_gl_ctr(ed.v, 1, LFO_FREQ, 100)
+    L.sq8l_gl_ctr(ed.v, 1, LFO_SYNC, 1)
+    ed.idle()
+    check(ed.lcd_row(0)[10:13] == "64T" and ed.knob(0) == 35 and ed.program_byte(0xA2) == 100,
+          f"FREQ 100 synced: {ed.lcd_row(0)[10:13]!r}, knob {ed.knob(0)}, byte {ed.program_byte(0xA2)}")
+    ed.click(knob_xy(1))  # the soft button, the other way to flip it
+    check(ed.lcd_row(0)[10:13] == "100" and ed.lcd_row(0)[14:18] == "FREE" and ed.knob(0, "max") == 127,
+          f"and FREE again it is 100: {ed.lcd_row(0)[:44]!r}, knob max {ed.knob(0, 'max')}")
+    check(ed.knob_active(HUMAN_KNOB), "and HUMAN's knob is back to full")
+    ed.click(knob_xy(1))
+    L.sq8l_gl_ctr(ed.v, 1, LFO_FREQ, 22)
+    ed.idle()
+    check(ed.lcd_row(0)[10:13] == "  4" and ed.program_byte(0xA2) == 22, "division 22 is a quarter note")
+
+    # another program brings its own FREE back with its range
+    ed.click(UP)
+    ed.idle()
+    check(ed.lcd_row(0)[14:18] == "FREE" and ed.knob(0, "max") == 127,
+          f"the next program is FREE again: {ed.lcd_row(0)[:44]!r}, knob max {ed.knob(0, 'max')}")
+    ed.click(DOWN)
+    ed.idle()
+
+    # ENV -> SYNC (issue #42): FREE/SYNC on knob 5 of the second sub-page, where MODE- was;
+    # T1-T4 on the first are note values while it is on, widened into the gap after them.
+    ENV1_PAGE, TIMES_SUB, MODES_SUB = 10, 0, 1
+    ENV_T1V, ENV_T1, ENV_T2, ENV_T4, ENV_SYNC, ENV_T1VM = 5, 6, 7, 9, 5, 6  # parameter indices
+    T1V_KNOB, T1_KNOB, T4_KNOB, TK_KNOB = 4, 5, 8, 9
+    E = 0x6A  # ENV1's record
+    for env in range(4):
+        sub = ed.pages()[ENV1_PAGE + env]["subs"][MODES_SUB]
+        s, t1vm = param_of(sub, "SYNC"), param_of(sub, "T1VM")
+        check(s["knob"] == 5 and s["x"] == 6 and s["y"] == 1 and s["width"] == 4 and s["label"] == ""
+              and s["paramIndex"] == 72 + 19 * env and t1vm["knob"] == 6 and t1vm["x"] == 13,
+              f"ENV{env + 1} SYNC: knob {s['knob']}, column {s['x']}, parameter {s['paramIndex']}; "
+              f"T1V= still at {t1vm['x']}")
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, MODES_SUB)
+    ed.idle()
+    row = ed.lcd_row(1)
+    check(row[6:10] == "FREE" and row[13:17] == "T1V=" and "MODE" not in row,
+          f"MODE- is gone, FREE in its place: {row[:20]!r}")
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, TIMES_SUB)
+    ed.idle()
+    free_row = ed.lcd_row(1)
+    for idx, v in ((ENV_T1, 13), (ENV_T2, 50), (ENV_T4, 16 + 64), (ENV_T1V, 5)):
+        L.sq8l_gl_ctr(ed.v, 1, idx, v)
+    ed.idle()
+    free_row = ed.lcd_row(1)
+    check(free_row[5:10] == "T1=13" and free_row[10] in " \0" and free_row[13:18] == "T2=50",
+          f"FREE times as ever, two digits: {free_row[:44]!r}")
+
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, MODES_SUB)
+    L.sq8l_gl_ctr(ed.v, 1, ENV_SYNC, 1)
+    ed.idle()
+    check(ed.program_byte(E + 12) & 0x20, "SYNC sets bit 5 of the envelope's flags")
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, TIMES_SUB)
+    ed.idle()
+    row = ed.lcd_row(1)
+    check(row[8:11] == "  4" and row[16:19] == "16X" and row[32:36] == "  2R"
+          and (row[5:8], row[13:16], row[21:24], row[29:32], row[38:41]) == ("T1=", "T2=", "T3=", "T4=", "TK="),
+          f"synced: T1 13 = 1/4, T2 50 = 16X, T4 16+R = 1/2 R, labels unmoved: {row[:44]!r}")
+    check(ed.knob(T1_KNOB, "max") == 35 and ed.knob(T4_KNOB, "max") == 71 and ed.knob(T4_KNOB) == 16 + 36,
+          f"T1 spans 36 note values, T4 72 (the second half R): T4 knob at {ed.knob(T4_KNOB)}")
+    check(not ed.knob_active(TK_KNOB) and not ed.knob_active(T1V_KNOB) and ed.knob_active(T1_KNOB),
+          "TK and T1V (T1 mode) are faded: a synced envelope ignores them")
+    L.sq8l_gl_ctr(ed.v, 1, ENV_T4, 4)
+    ed.idle()
+    check(ed.program_byte(E + 10) == 4, f"T4 4 without R is the byte 4 ({ed.program_byte(E + 10)})")
+    L.sq8l_gl_ctr(ed.v, 1, ENV_T4, 36 + 4)
+    ed.idle()
+    check(ed.program_byte(E + 10) == 4 + 64 and ed.lcd_row(1)[32:36] == " 32R",
+          f"and 36 + 4 is 4 with R: byte {ed.program_byte(E + 10)}, {ed.lcd_row(1)[32:36]!r}")
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, MODES_SUB)
+    L.sq8l_gl_ctr(ed.v, 1, ENV_T1VM, 1)  # SMT: T1V modulates the smoothing, which still applies
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, TIMES_SUB)
+    ed.idle()
+    check(ed.knob_active(T1V_KNOB) and not ed.knob_active(TK_KNOB), "T1V in SMT mode is not faded")
+
+    L.sq8l_gl_ctr(ed.v, 1, ENV_T4, 16 + 36)
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, MODES_SUB)
+    L.sq8l_gl_ctr(ed.v, 1, ENV_T1VM, 0)
+    L.sq8l_gl_ctr(ed.v, 1, ENV_SYNC, 0)
+    L.sq8l_gl_ctr(ed.v, 0, ENV1_PAGE, TIMES_SUB)
+    ed.idle()
+    check(ed.lcd_row(1) == free_row and ed.program_byte(E + 8) == 50 and ed.knob_active(TK_KNOB),
+          f"FREE again: the row as it was, T2 still 50: {ed.lcd_row(1)[:44]!r}")
 
     # the OSC1-3 page only follows the rename: its three wave values must not move
     L.sq8l_gl_ctr(ed.v, 0, 0, 1)

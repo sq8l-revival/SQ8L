@@ -5,6 +5,13 @@
 
 namespace sq8l {
 
+const double kSyncQuarters[kSyncDivisions] = {
+    64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8,   // 16X .. 2X (bars)
+    6, 4, 3, 8.0 / 3, 2, 1.5, 4.0 / 3, 1,                        // 1D 1 2D 1T 2 4D 2T 4
+    0.75, 2.0 / 3, 0.5, 0.375, 1.0 / 3, 0.25,                    // 8D 4T 8 16D 8T 16
+    0.1875, 1.0 / 6, 0.125, 0.09375, 1.0 / 12, 0.0625, 1.0 / 24  // 32D 16T 32 64D 32T 64 64T
+};
+
 std::string Program::shortString(size_t off) const {
     // FUN_00403cb4 (ShortString -> AnsiString): the full length byte is honoured.
     size_t n = bytes[off];

@@ -27,6 +27,7 @@ class CplugMaster, instance size 73812 (0x12054), code 0x461c7c–0x4648a4.
 | `editBufferEvent(code, const uint8_t* program)` | LAB_00463230 | edit-buffer callback, see below |
 | `activeVoiceCount()` | FUN_00463328 | playable voices with `active` (GUI) |
 | `midiNoteOn/midiControl/midiReset` | LAB_00463388 / FUN_00463714 / LAB_00463380 | `MidiListener` callbacks of the owned `MidiParser` |
+| `setTransport(bpm, hasPosition, quarters)` | (port, issue #42) | the host's tempo and song position, per block, for LFO and envelope tempo sync; see [lfo.md](lfo.md#tempo-sync-port-addition) and [env.md](env.md#tempo-sync-port-addition) |
 
 Edit-buffer events (LAB_00463230, `code` in ECX, argument on the stack):
 0 program loaded → FUN_0046328c (reset note stacks, notify host twice: `notifyProgram()`,
@@ -221,8 +222,8 @@ order). Every call site of unit plugCore, with the exact arguments:
 | 0x462e4a | kill | `docStopVoice(v)` |
 | 0x4638ba | controlUpdate, odd tick | `docInterpolateLevels(v)` |
 | 0x463949 | controlUpdate | `follTick(v)` if glideActive |
-| 0x463a53 | controlUpdate | `mod[4+i] = envTick(v, i, sustainPedal)` |
-| 0x463c5e | controlUpdate | writes `lfoParams` (all but levelAlt unless bit 6), `mod[i] = lfoTick(v, i)` |
+| 0x463a53 | controlUpdate | `mod[4+i] = envTick(v, i, sustainPedal)`; (port) `envSetSyncTicks(v, …)` before it, as before envStart and envRelease |
+| 0x463c5e | controlUpdate | writes `lfoParams` (all but levelAlt unless bit 6), `mod[i] = lfoTick(v, i)`; (port) `lfoSetSync(v, i, …)` just before the tick, 0 when SYNC is off |
 | 0x463d40 / 0x463f2a | controlUpdate | writes `docVoiceParams(v)`, `docUpdate(v)` |
 | 0x46400b | controlUpdate | `ampSetSaturation(v, (int8)program[0x13a])` |
 | 0x4640ae | controlUpdate | `envShaped(v, 3)` |

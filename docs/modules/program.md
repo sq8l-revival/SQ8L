@@ -130,7 +130,7 @@ still be preserved.
 | 0x073 | 0x051 | 66 | s8 | ENV1 T3 | 0..63 | 0 |  |
 | 0x074 | 0x052 | 67 | s8 | ENV1 T4 | 0..127 | 0 | bits 0-5 time, bit 6 = 2nd release (SQ-80 bit 7) |
 | 0x075 | 0x053 | 68 | s8 | ENV1 TK | 0..63 | 0 |  |
-| 0x076 | 0x054 | 69 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV1 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT) |
+| 0x076 | 0x054 | 69 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV1 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT), b5 SYNC (port addition, see below) |
 | 0x077 | 0x055 | 75 | s8 | ENV1 SMTH | 0..63 | 0 |  |
 | 0x078 | 0x056 | 76 | s8 | ENV2 L0 (start level) | -63..+63 | 0 | SQ8L only (0 from SysEx) |
 | 0x079 | 0x057 | 77 | s8 | ENV2 L1 | -63..+63 | 63 | SQ-80 signed byte / 2 |
@@ -144,7 +144,7 @@ still be preserved.
 | 0x081 | 0x05f | 85 | s8 | ENV2 T3 | 0..63 | 0 |  |
 | 0x082 | 0x060 | 86 | s8 | ENV2 T4 | 0..127 | 0 | bits 0-5 time, bit 6 = 2nd release (SQ-80 bit 7) |
 | 0x083 | 0x061 | 87 | s8 | ENV2 TK | 0..63 | 0 |  |
-| 0x084 | 0x062 | 88 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV2 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT) |
+| 0x084 | 0x062 | 88 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV2 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT), b5 SYNC (port addition, see below) |
 | 0x085 | 0x063 | 94 | s8 | ENV2 SMTH | 0..63 | 0 |  |
 | 0x086 | 0x064 | 95 | s8 | ENV3 L0 (start level) | -63..+63 | 0 | SQ8L only (0 from SysEx) |
 | 0x087 | 0x065 | 96 | s8 | ENV3 L1 | -63..+63 | 63 | SQ-80 signed byte / 2 |
@@ -158,7 +158,7 @@ still be preserved.
 | 0x08f | 0x06d | 104 | s8 | ENV3 T3 | 0..63 | 0 |  |
 | 0x090 | 0x06e | 105 | s8 | ENV3 T4 | 0..127 | 0 | bits 0-5 time, bit 6 = 2nd release (SQ-80 bit 7) |
 | 0x091 | 0x06f | 106 | s8 | ENV3 TK | 0..63 | 0 |  |
-| 0x092 | 0x070 | 107 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV3 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT) |
+| 0x092 | 0x070 | 107 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV3 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT), b5 SYNC (port addition, see below) |
 | 0x093 | 0x071 | 113 | s8 | ENV3 SMTH | 0..63 | 0 |  |
 | 0x094 | 0x072 | 114 | s8 | ENV4 L0 (start level) | -63..+63 | 0 | SQ8L only (0 from SysEx) |
 | 0x095 | 0x073 | 115 | s8 | ENV4 L1 | -63..+63 | 63 | SQ-80 signed byte / 2 |
@@ -172,7 +172,7 @@ still be preserved.
 | 0x09d | 0x07b | 123 | s8 | ENV4 T3 | 0..63 | 0 |  |
 | 0x09e | 0x07c | 124 | s8 | ENV4 T4 | 0..127 | 0 | bits 0-5 time, bit 6 = 2nd release (SQ-80 bit 7) |
 | 0x09f | 0x07d | 125 | s8 | ENV4 TK | 0..63 | 0 |  |
-| 0x0a0 | 0x07e | 126 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV4 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT) |
+| 0x0a0 | 0x07e | 126 | bits 0:1 1:3 4:1 5:1 6:1 7:1 | ENV4 mode bits |  | 0x00 | b0 CYC, b1-3 SHAPE (OFF EXP EXP2 EXP3 EXP4 TAN TAN2 TAN3), b4 T1V mode (T1/SMT), b5 SYNC (port addition, see below) |
 | 0x0a1 | 0x07f | 132 | s8 | ENV4 SMTH | 0..63 | 0 |  |
 | 0x0a2 | 0x080 | 133 | s8 | LFO1 FREQ | 0..127 | 24 | SQ-80 0..63 |
 | 0x0a3 | 0x081 | 134 | s8 | LFO1 RESET | -1..63 | -1 | -1 = OFF; SQ-80 bit 7 -> 0 (reset) / -1 |
@@ -185,7 +185,7 @@ still be preserved.
 | 0x0ab | 0x089 | 143 | s8 | LFO1 MOD amount | -63..+63 | 0 | 63 from SysEx |
 | 0x0ac | 0x08a | 144 | s16 | LFO1 FREQMOD source | -1..145 | -1 |  |
 | 0x0ae | 0x08c | 145 | s8 | LFO1 FREQMOD amount | -127..+127 | 0 |  |
-| 0x0af | 0x08d | 146 | bits 0:2 2:2 4:2 6:1 7:1 | LFO1 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR) |
+| 0x0af | 0x08d | 146 | bits 0:2 2:2 4:2 6:1 7:1 | LFO1 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR), b6 SYNC (port addition, see below) |
 | 0x0b0 | 0x08e | 151 | u8 | LFO1 PHS | 0..127 | 0 | unsigned; 64..127 = twin mode |
 | 0x0b1 | 0x08f | 152 | s8 | LFO1 SMTH | 0..63 | 0 |  |
 | 0x0b2 | 0x090 | 153 | s8 | LFO2 FREQ | 0..127 | 24 | SQ-80 0..63 |
@@ -199,7 +199,7 @@ still be preserved.
 | 0x0bb | 0x099 | 163 | s8 | LFO2 MOD amount | -63..+63 | 0 | 63 from SysEx |
 | 0x0bc | 0x09a | 164 | s16 | LFO2 FREQMOD source | -1..145 | -1 |  |
 | 0x0be | 0x09c | 165 | s8 | LFO2 FREQMOD amount | -127..+127 | 0 |  |
-| 0x0bf | 0x09d | 166 | bits 0:2 2:2 4:2 6:1 7:1 | LFO2 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR) |
+| 0x0bf | 0x09d | 166 | bits 0:2 2:2 4:2 6:1 7:1 | LFO2 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR), b6 SYNC (port addition, see below) |
 | 0x0c0 | 0x09e | 171 | u8 | LFO2 PHS | 0..127 | 0 | unsigned; 64..127 = twin mode |
 | 0x0c1 | 0x09f | 172 | s8 | LFO2 SMTH | 0..63 | 0 |  |
 | 0x0c2 | 0x0a0 | 173 | s8 | LFO3 FREQ | 0..127 | 24 | SQ-80 0..63 |
@@ -213,7 +213,7 @@ still be preserved.
 | 0x0cb | 0x0a9 | 183 | s8 | LFO3 MOD amount | -63..+63 | 0 | 63 from SysEx |
 | 0x0cc | 0x0aa | 184 | s16 | LFO3 FREQMOD source | -1..145 | -1 |  |
 | 0x0ce | 0x0ac | 185 | s8 | LFO3 FREQMOD amount | -127..+127 | 0 |  |
-| 0x0cf | 0x0ad | 186 | bits 0:2 2:2 4:2 6:1 7:1 | LFO3 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR) |
+| 0x0cf | 0x0ad | 186 | bits 0:2 2:2 4:2 6:1 7:1 | LFO3 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR), b6 SYNC (port addition, see below) |
 | 0x0d0 | 0x0ae | 191 | u8 | LFO3 PHS | 0..127 | 0 | unsigned; 64..127 = twin mode |
 | 0x0d1 | 0x0af | 192 | s8 | LFO3 SMTH | 0..63 | 0 |  |
 | 0x0d2 | 0x0b0 | 193 | s8 | LFO4 FREQ | 0..127 | 24 | SQ-80 0..63 |
@@ -227,7 +227,7 @@ still be preserved.
 | 0x0db | 0x0b9 | 203 | s8 | LFO4 MOD amount | -63..+63 | 0 | 63 from SysEx |
 | 0x0dc | 0x0ba | 204 | s16 | LFO4 FREQMOD source | -1..145 | -1 |  |
 | 0x0de | 0x0bc | 205 | s8 | LFO4 FREQMOD amount | -127..+127 | 0 |  |
-| 0x0df | 0x0bd | 206 | bits 0:2 2:2 4:2 6:1 7:1 | LFO4 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR) |
+| 0x0df | 0x0bd | 206 | bits 0:2 2:2 4:2 6:1 7:1 | LFO4 modes |  | 0x00 | b0-1 AM mode, b2-3 FM mode (UNI BIP PHS SMT), b4-5 PLAY (FWD REV 1XF 1XR), b6 SYNC (port addition, see below) |
 | 0x0e0 | 0x0be | 211 | u8 | LFO4 PHS | 0..127 | 0 | unsigned; 64..127 = twin mode |
 | 0x0e1 | 0x0bf | 212 | s8 | LFO4 SMTH | 0..63 | 0 |  |
 | 0x0e2 | 0x0c0 | 213 | s16 | MAT1 M1 source | -1..145 | -1 |  |
@@ -501,6 +501,36 @@ of the MTS-ESP retuning and for the same reason — `DocOsc`, `DocOscParams`, `D
 differential tests, so nothing may be added inside them. The master writes it with the rest
 of the oscillator parameters through `VoiceModules::docSetOscReverse`. See
 [doc.md](doc.md#wave-direction-port-addition).
+
+## SYNC (port addition)
+
+LFO tempo sync (LFO1-4 pages, `ofs::Lfo::SyncBit` in `ofs::Lfo::Modes`, parameters 149, 169,
+189 and 209): 0 FREE, 1 SYNC. No byte is added: the modes byte declared bits 6 and 7 as
+parameters of their own (`bits 0:2 2:2 4:2 6:1 7:1`) that the original's GUI never writes.
+They are 0 in all 168 factory programs and INIT, the SysEx import writes the whole byte as
+0, and `convertOldProgram` leaves it at INIT's, so everything that predates the port is FREE.
+Bit 7 is still free.
+
+Synced, the FREQ byte is reinterpreted as an index 0..35 into `kSyncQuarters`, the cycle
+length in quarter notes, slowest first; a value above 35 (a free rate left in the byte) plays
+as 35, and the editor shows it so without writing it, so flipping back to FREE before FREQ is
+edited restores it. See [lfo.md](lfo.md#tempo-sync-port-addition) for the playback.
+
+| index | 0..14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| shown | 16X..2X | 1D | 1 | 2D | 1T | 2 | 4D | 2T | 4 | 8D | 4T | 8 | 16D | 8T |
+| quarters | 64..8 | 6 | 4 | 3 | 8/3 | 2 | 1.5 | 4/3 | 1 | 0.75 | 2/3 | 0.5 | 0.375 | 1/3 |
+
+and 28..35: 16, 32D, 16T, 32, 64D, 32T, 64, 64T. `X` marks bars of four quarters (`1` is one
+bar), `D` dotted, `T` triplet.
+
+**Envelopes** (ENV1-4 pages, second sub-page, `ofs::Env::SyncBit` in `ofs::Env::Flags`,
+parameters 72, 91, 110 and 129): the same switch in bit 5 of the flags byte, likewise declared
+as a parameter of its own (`bits 0:1 1:3 4:1 5:1 6:1 7:1`) and 0 in all 168 factory programs
+and INIT; the SysEx import and `convertOldProgram` never write that byte. Bits 6 and 7 are
+still free. Synced, T1-T4 (bits 0-5; T4 keeps "R" in bit 6) are note values the other way
+round, shortest first: time 0..35 = `kSyncQuarters[35 - time]`, 64T..16X, and above 35 plays
+as 16X. See [env.md](env.md#tempo-sync-port-addition).
 
 ## VOICES (port addition, 0x197)
 

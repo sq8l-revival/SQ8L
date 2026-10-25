@@ -92,6 +92,11 @@ public:
     // (port) MTS-ESP: the tuning snapshot read at note on and at every full control tick.
     // Owned by the caller and refreshed per block; nullptr = no retuning at all.
     void setTuning(const Tuning* t) { tuning_ = t; }
+    // (port, issue #42) The host's tempo and song position (in quarter notes) for the LFOs'
+    // tempo sync, before each process(). Without a position (transport stopped, or a host
+    // that has none) it runs on at `bpm` from where it was, so locked LFOs stay in step.
+    // An implausible tempo is taken as 120.
+    void setTransport(double bpm, bool hasPosition, double quarters);
     // The edit buffer's current program (CeditBuf+0xa94) and program number (+0xb74):
     // read at note on. The record must stay valid while voices play it.
     void setCurrentProgram(const uint8_t* program, uint16_t number);
@@ -158,6 +163,9 @@ private:
     void storeController(int32_t ctrl, int16_t value);  // FUN_004637d4
     int32_t modSource(const Voice* v, int32_t src) const;  // FUN_00463808
     void controlUpdate(Voice& v);                     // FUN_00463890
+    // (port, issue #42) the sync of LFO i of voice vi to a division `cycle` quarters long
+    void syncLfo(int vi, int i, double cycle, bool lock);
+    double quartersPerTick() const;  // (port) at the host tempo, per LFO/envelope tick
     bool processVoice(Voice& v, float* acc);          // FUN_00464410: true = finished
 
     VoiceModules& modules_;
@@ -222,6 +230,8 @@ private:
     int16_t polyPressure_[128] = {};                  // +0x11840 + key * 16
     int16_t pitchBend_ = 0;                           // +0x12040 raw -8192..8191
     const Tuning* tuning_ = nullptr;                  // (port) MTS-ESP snapshot, not owned
+    double transportBpm_ = 120.0;                     // (port) tempo sync, see setTransport
+    double transportQuarters_ = 0;                    // (port) song position at the current sample
     uint8_t inProcess_ = 0;                           // +0x12050
     // (port, issue #40) Last CC0 received, -1 until one is. ctrl_ cannot stand in for it:
     // its 0 is both "bank A" and "nothing arrived yet", and those must differ.

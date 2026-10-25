@@ -98,6 +98,10 @@ struct Forwarder final : VoiceModules {
         call(M_LFO_START, v, l, {double(phase), reset ? 1.0 : 0.0});
     }
     int32_t lfoTick(int v, int l) override { return icall(M_LFO_TICK, v, l, {0.0}); }
+    // (port) not recorded, like docSetOscReverse: the differential programs leave the sync bit
+    // (LFO modes bit 6) at 0, so the master always passes FREE here.
+    void lfoSetSync(int, int, int32_t, bool, uint32_t) override {}
+    void envSetSyncTicks(int, double) override {}  // (port) the same for the envelopes' bit 5
 
     void envSetControlRate(int v, int e, float rate) override { call(M_ENV_RATE, v, e, {rate}); }
     void envStart(int v, int e, const uint8_t* block, int32_t key, int32_t vel, bool restart, bool cycle,

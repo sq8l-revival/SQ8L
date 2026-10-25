@@ -1,9 +1,11 @@
 #include "Env.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
 #include "Fpu.h"
+#include "Program.h"  // (port) tempo sync
 
 namespace sq8l {
 
@@ -169,16 +171,26 @@ void Env::start(const uint8_t* rec, int32_t key, int32_t velocity, uint8_t resta
     released = 0;
     releasePending = 0;
     finished = 0;
+    // (port) a synced T1 is exactly its note value: T1V (T1 mode) and TK do not apply
+    sync = (rec[EnvRecord::kFlags] & ofs::Env::SyncBit) != 0 ? 1 : 0;
+    if (sync != 0) t1Offset = 0;
     startSegment(sar8(mul32(level[1], levelScale)), sub32(time[0], t1Offset));
 }
 
-void Env::startSegment(int32_t tgt, int32_t timeIndex) {
+void Env::startSegment(int32_t tgt, int32_t timeIndex, bool fixedTime) {
     target = tgt;
     if (timeIndex < 0) timeIndex = 0;
     else if (timeIndex > 63) timeIndex = 63;
-    // FILD word; FMUL single [+0x7c]; FSTP single; Round()
-    const float ticks = sgl(static_cast<double>(data::kEnvTimeTable[timeIndex]) * rateScale);
-    const int32_t n = fistp32(ticks);
+    int32_t n;
+    if (sync != 0 && !fixedTime) {
+        // (port) tempo sync; a time past the last note value plays the last
+        const int32_t d = kSyncDivisions - 1 - std::min(timeIndex, kSyncDivisions - 1);
+        n = static_cast<int32_t>(std::lround(kSyncQuarters[d] * syncTicksPerQuarter));
+    } else {
+        // FILD word; FMUL single [+0x7c]; FSTP single; Round()
+        const float ticks = sgl(static_cast<double>(data::kEnvTimeTable[timeIndex]) * rateScale);
+        n = fistp32(ticks);
+    }
     ticksLeft = n > 0 ? n : 1;
     int32_t diff = sub32(tgt, sar8(value));
     if (diff == 0) {
@@ -227,14 +239,14 @@ void Env::runNext() {
         return;
     case Next::Decay: {  // 0x45e0c0
         next = Next::Decay2;
-        int32_t t = sub32(time[1], timeKeyScale);
+        int32_t t = sub32(time[1], sync != 0 ? 0 : timeKeyScale);  // (port) synced: no TK
         if (t < 0) t = 0;
         startSegment(sar8(mul32(level[2], levelScale)), t);
         return;
     }
     case Next::Decay2: {  // 0x45e0f8
         next = Next::Sustain;
-        int32_t t = sub32(time[2], timeKeyScale);
+        int32_t t = sub32(time[2], sync != 0 ? 0 : timeKeyScale);
         if (t < 0) t = 0;
         startSegment(sar8(mul32(level[3], levelScale)), t);
         return;
@@ -252,7 +264,7 @@ void Env::runNext() {
     case Next::SecondRelease:  // 0x45e160
         sustaining = 0;
         next = Next::Finish;
-        startSegment(0, 0x27);
+        startSegment(0, 0x27, true);
         return;
     case Next::Finish:  // 0x45e17c
         finish();

@@ -359,6 +359,13 @@ void Lfo::updateParams() {
             phaseInc = neg32(static_cast<int32_t>(static_cast<uint32_t>(neg32(phaseInc)) >> n));
         }
     }
+    // (port) tempo sync replaces all of the above: the master has folded FM into the division
+    // already, HUMAN does not apply, and freqShift neither, so a cycle is one division for
+    // every wave. The phase offsets below follow the sign as they do for a free LFO.
+    if (syncInc != 0) {
+        phaseInc = reverse > 0 ? neg32(syncInc) : syncInc;
+        if (syncLock > 0) phase = reverse > 0 ? 0u - syncPhase : syncPhase;
+    }
 
     phaseOffset[0] = shl32(phaseIn, 14);
     if (twinIn <= 0) {

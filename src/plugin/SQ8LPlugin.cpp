@@ -1,6 +1,10 @@
 #include "SQ8LPlugin.hpp"
 
+#include <cmath>
 #include <cstring>
+#include <limits>
+
+#include "DistrhoPluginUtils.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -48,6 +52,36 @@ SQ8LPlugin::SQ8LPlugin()
     synth_.setSampleRate(static_cast<float>(getSampleRate()));
     // (port) MTS-ESP: the engine reads this snapshot, run() refreshes it per block.
     synth_.setTuning(&mts_.tuning());
+    const char* format = getPluginFormatName();
+    if (std::strcmp(format, "VST2") == 0 || std::strcmp(format, "VST3") == 0)
+        bbtStyle_ = BbtStyle::Vst;
+    else if (std::strcmp(format, "CLAP") == 0 || std::strcmp(format, "AudioUnit") == 0)
+        bbtStyle_ = BbtStyle::Quarters;
+}
+
+// VST2 and VST3 split a bar of int(num * 4 / denom) quarters into num beats, CLAP and AU count
+// quarter notes as the beats, and LV2 passes the host's own bar and beat through. These only
+// differ for a meter whose denominator is not 4.
+double SQ8LPlugin::songQuarters(const TimePosition& position) const {
+    const TimePosition::BarBeatTick& t = position.bbt;
+    double q = std::numeric_limits<double>::quiet_NaN();
+    if (!position.playing || !t.valid || !(t.ticksPerBeat > 0) || !(t.beatsPerBar > 0) || !(t.beatType > 0))
+        return q;
+    const double beats = (t.beat - 1) + t.tick / t.ticksPerBeat;
+    switch (bbtStyle_) {
+    case BbtStyle::Vst: {
+        const int perBar = static_cast<int>(t.beatsPerBar) * 4 / static_cast<int>(t.beatType);
+        if (perBar > 0) q = (t.bar - 1) * perBar + beats * perBar / t.beatsPerBar;
+        break;
+    }
+    case BbtStyle::Quarters:
+        q = (t.bar - 1) * static_cast<double>(t.beatsPerBar) + beats;
+        break;
+    case BbtStyle::Signature:
+        q = ((t.bar - 1) * static_cast<double>(t.beatsPerBar) + beats) * 4.0 / t.beatType;
+        break;
+    }
+    return q;
 }
 
 SQ8LPlugin::~SQ8LPlugin() { sq8l::SharedLibrary::release(); }
@@ -124,6 +158,9 @@ void SQ8LPlugin::run(const float**, float** outputs, uint32_t frames, const Midi
     // (port) MTS-ESP: one snapshot per block, before the events are dispatched, so the MIDI
     // and voice paths never call into the client.
     mts_.refresh(synth_.mtsEnabled(), synth_.mtsCorrectPitch());
+    const TimePosition& position = getTimePosition();
+    const double quarters = songQuarters(position);
+    synth_.master().setTransport(position.bbt.beatsPerMinute, std::isfinite(quarters), quarters);
     events_.clear();
     for (uint32_t i = 0; i < midiCount; i++) {
         const MidiEvent& m = midi[i];

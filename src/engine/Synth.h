@@ -59,6 +59,11 @@ public:
     LfoParams& lfoParams(int v, int i) override;
     void lfoStart(int v, int i, int32_t phase, bool reset) override { lfo[v][i].trigger(phase, reset); }
     int32_t lfoTick(int v, int i) override { return lfo[v][i].tick(); }
+    void lfoSetSync(int v, int i, int32_t increment, bool lock, uint32_t phase) override {
+        lfo[v][i].syncInc = increment;
+        lfo[v][i].syncLock = lock ? 1 : 0;
+        lfo[v][i].syncPhase = phase;
+    }
 
     void envSetControlRate(int v, int i, float rate) override { env[v][i].setRate(rate); }
     void envStart(int v, int i, const uint8_t* block, int32_t key, int32_t velocity, bool restart, bool cycle,
@@ -70,6 +75,9 @@ public:
     int32_t envTick(int v, int i, bool pedal) override { return env[v][i].tick(pedal); }
     int32_t envShaped(int v, int i) override { return env[v][i].shaped(); }
     bool envActive(int v, int i) override { return env[v][i].active != 0; }
+    void envSetSyncTicks(int v, double ticksPerQuarter) override {
+        for (Env& e : env[v]) e.syncTicksPerQuarter = ticksPerQuarter;
+    }
 
     void ampSetSampleRate(int v, float sr) override { amp[v].setSampleRate(sr); }
     void ampSetSaturation(int v, int32_t a) override { amp[v].setSaturation(a); }

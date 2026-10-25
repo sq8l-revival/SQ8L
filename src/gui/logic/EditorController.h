@@ -114,7 +114,7 @@ public:
 
     // LcdListener (ClcdCtr callbacks)
     void lcdKnobValue(int knob, int value) override;
-    void lcdKnobRange(int knob, int min, int max) override;
+    void lcdKnobRange(int knob, int min, int max, bool faded) override;
     void lcdDrawn() override;
     void lcdParamMouseDown(int param) override;
     void lcdHint(int param) override;

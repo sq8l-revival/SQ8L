@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "Program.h"     // (port) kSyncDivisions
 #include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
 
 namespace sq8l::gui {
@@ -62,6 +63,16 @@ void twoDigitsFlag(int value, const char* lo, const char* hi, std::string& s) {
     s = strWidth(n, 2);
     if (n < 10) s[0] = '0';
     s += v < 0x40 ? lo : hi;
+}
+
+// (port) kSyncQuarters[i] as the display shows it, right-aligned in 3 cells. X marks bars:
+// B is D plus one segment on the VFD, so 4B and 4D would look alike.
+const char* divisionName(int i) {
+    static const char* const k[kSyncDivisions] = {
+        "16X", "15X", "14X", "13X", "12X", "11X", "10X", " 9X", " 8X", " 7X", " 6X", " 5X",
+        " 4X", " 3X", " 2X", " 1D", "  1", " 2D", " 1T", "  2", " 4D", " 2T", "  4", " 8D",
+        " 4T", "  8", "16D", " 8T", " 16", "32D", "16T", " 32", "64D", "32T", " 64", "64T"};
+    return k[i < 0 ? 0 : (i < kSyncDivisions ? i : kSyncDivisions - 1)];
 }
 
 }  // namespace
@@ -188,6 +199,19 @@ void formatValue(Fmt f, int width, int v, std::string& s) {
         // "-<" and ">-" would not read as arrows (the chevron sits at the far edge of its
         // cell, pointing away), so the arrow always leads with the bar it closes on.
         s = v != 0 ? "<-" : "->";
+        break;
+    case Fmt::TempoSync:  // (port) LFO or envelope tempo sync
+        s = v != 0 ? "SYNC" : "FREE";
+        break;
+    case Fmt::LfoDivision:  // (port) a synced LFO's FREQ
+        s = divisionName(v);
+        break;
+    case Fmt::EnvDivision:  // (port) a synced envelope time, shortest first
+        s = divisionName(kSyncDivisions - 1 - v);
+        break;
+    case Fmt::EnvT4Division:  // (port) a synced T4: the second half of the range is "R"
+        s = std::string(divisionName(kSyncDivisions - 1 - v % kSyncDivisions)) +
+            (v >= kSyncDivisions ? "R" : " ");
         break;
     }
 }

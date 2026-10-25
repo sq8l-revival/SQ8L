@@ -164,6 +164,7 @@ Requirements: CMake ≥ 3.22, Ninja, a C++17 compiler (Clang, GCC or MSVC), Git.
 
 ```sh
 git clone --recursive <this repository>
+cd SQ8L
 cmake -S . -B build -G Ninja
 cmake --build build
 ```

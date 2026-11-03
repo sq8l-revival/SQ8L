@@ -237,6 +237,12 @@ import/export, parameter writes.
   events 4, 5, 0). Verified against the emulated startup state.
 * Keep one `SoundLibrary` per process, constructed from the `SQ8L_backup.dat` bytes (or
   none), and write `saveBackup()` when the last instance goes away.
+* Every format's program list is `programName(index)` over the 512 slots: VST2 serves the
+  indexed names the original does, VST3 a single-unit `IUnitInfo` program list
+  (`patches/dpf-vst3-program-change.patch`), and CLAP declares them to the host's preset
+  browser through preset discovery, keyed by the index
+  (`patches/dpf-clap-preset-discovery.patch`). CLAP indexing runs with no instance open,
+  so what it lists is the library as a fresh process reads it.
 * The voices must read the program through `EditBuffer::current()` and handle events 4/5
   (slot changes) like the original master does.
 * Parameter edits do not send events; only the modified flag changes.

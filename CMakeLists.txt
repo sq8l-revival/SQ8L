@@ -101,6 +101,7 @@ if(SQ8L_BUILD_PLUGIN)
   foreach(entry "dpf-vst2-compat.patch=third_party/DPF" "dpf-msvc-enum.patch=third_party/DPF"
                 "dpf-swap-interval.patch=third_party/DPF" "dpf-au-preset-name.patch=third_party/DPF"
                 "dpf-vst3-program-change.patch=third_party/DPF"
+                "dpf-clap-preset-discovery.patch=third_party/DPF"
                 "pugl-x11-nested-update.patch=third_party/DPF/dgl/src/pugl-upstream")
     string(REPLACE "=" ";" entry "${entry}")
     list(GET entry 0 patch)
@@ -215,6 +216,16 @@ if(APPLE)
   add_executable(sq8l_au_check tests/au_check.cpp)
   target_link_libraries(sq8l_au_check PRIVATE "-framework AudioToolbox" "-framework CoreFoundation")
 endif()
+
+# The CLAP preset list and preset load as a host drives them (tests/clap_check.cpp), and the
+# VST3 program list as a host reads it (tests/vst3_check.cpp).
+add_executable(sq8l_clap_check tests/clap_check.cpp)
+target_include_directories(sq8l_clap_check PRIVATE third_party/DPF/distrho/src)
+target_link_libraries(sq8l_clap_check PRIVATE sq8l_engine ${CMAKE_DL_LIBS})
+
+add_executable(sq8l_vst3_check tests/vst3_check.cpp)
+target_include_directories(sq8l_vst3_check PRIVATE third_party/DPF/distrho/src)
+target_link_libraries(sq8l_vst3_check PRIVATE sq8l_engine ${CMAKE_DL_LIBS})
 
 # Native full-render checker (tests/render_check.cpp), see tests/export_golden_raw.py.
 add_executable(sq8l_render_check tests/render_check.cpp)

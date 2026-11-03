@@ -1,4 +1,5 @@
-VST3: receive MIDI program changes (sq8l-revival/SQ8L#40).
+VST3: receive MIDI program changes (sq8l-revival/SQ8L#40), and name the programs
+the host lists (sq8l-revival/SQ8L#65).
 
 VST3 has no raw MIDI program change event, and DPF's own TODO list says as much
 ("== MIDI / - MIDI program changes"). The host converts the message into a change
@@ -11,13 +12,19 @@ So a VST3 plugin built with DPF could not see a program change at all, while eve
 other format receives it as the two bytes it is.
 
 - dpf_unit_info implements IUnitInfo with one root unit owning one program list of
-  the plugin's program count. All constant, so one static instance serves every
-  instance, like dpf_midi_mapping. get_unit_by_bus maps every channel of the event
-  bus to that unit, which is what lets an omni plugin be reached on any channel;
-  left unimplemented, hosts route only channel 1, or nothing. Entries are numbered
-  rather than named: the change reaches the plugin as MIDI, so what it selects is
-  the plugin's business and a name here would promise a mapping the plugin need
-  not honour.
+  the plugin's program count, its entries named by getProgramName() - the same names
+  the program parameter converts its value to, which is where a host that reads no
+  unit info takes its list from. Names are per instance, so this is one object per
+  instance, owned by the component and by the controller like dpf_audio_processor.
+  get_unit_by_bus maps every channel of the event bus to that unit, which is what
+  lets an omni plugin be reached on any channel; left unimplemented, hosts route
+  only channel 1, or nothing.
+- Both unref paths count it among the child interfaces that keep a component or a
+  controller from being deleted. A host holds the unit info for as long as it holds
+  the plugin and releases the component first - REAPER does - and since the object
+  lives inside the component, deleting it there hands the host a pointer into freed
+  memory: it crashed on removing the plugin, every time. Unlisted children are
+  exactly what that "unclean instances" chain is for.
 - The program parameter now names that unit (unit_id 0) instead of keeping
   whatever the caller passed in, and is queryable on the component as well as the
   controller, since hosts differ on which they ask.
@@ -49,7 +56,7 @@ rather than controllers; at 512 per block that needs a pathological stream, and 
 alternative is worse in every ordinary one.
 
 diff --git a/distrho/src/DistrhoPluginVST3.cpp b/distrho/src/DistrhoPluginVST3.cpp
-index 7295c892..321f084e 100644
+index 7295c892..b6f9d00c 100644
 --- a/distrho/src/DistrhoPluginVST3.cpp
 +++ b/distrho/src/DistrhoPluginVST3.cpp
 @@ -53,6 +53,7 @@
@@ -69,22 +76,19 @@ index 7295c892..321f084e 100644
          // misc
          { V3_ID(0x309ECE78,0xEB7D4FAE,0x8B2225D9,0x09FD08B6), "{v3_audio_presentation_latency|NOT}" },
          { V3_ID(0xB4E8287F,0x1BB346AA,0x83A46667,0x68937BAB), "{v3_automation_state|NOT}" },
-@@ -254,6 +255,14 @@ v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, void* instan
+@@ -254,6 +255,11 @@ v3_plugin_view** dpf_plugin_view_create(v3_host_application** host, void* instan
  
  // --------------------------------------------------------------------------------------------------------------------
  
 +#if DISTRHO_PLUGIN_WANT_PROGRAMS
 +// (SQ8L) The program list dpf_unit_info describes, so that hosts route MIDI program changes.
-+// The count is the plugin's own program count: the same for every instance of a plugin, which
-+// is why one value can serve a static singleton. Set by the PluginVst3 constructor.
 +static constexpr int32_t kDpfProgramListId = 1;
-+static uint32_t gDpfProgramListCount = 0;
 +#endif
 +
  /**
   * VST3 DSP class.
   *
-@@ -310,6 +319,7 @@ class PluginVst3
+@@ -310,6 +316,7 @@ class PluginVst3
              CC_Normal,
              CC_ChannelPressure,
              CC_Pitchbend,
@@ -92,7 +96,7 @@ index 7295c892..321f084e 100644
              UI_MIDI // event from UI
          };
          struct InputEventStorage {
-@@ -398,6 +408,14 @@ class PluginVst3
+@@ -398,6 +405,14 @@ class PluginVst3
                      midiEvent.data[1] = eventStorage.midi[1];
                      midiEvent.data[2] = eventStorage.midi[2];
                      break;
@@ -107,7 +111,7 @@ index 7295c892..321f084e 100644
                  case UI_MIDI:
                      midiEvent.size = 3;
                      midiEvent.data[0] = eventStorage.midi[0];
-@@ -492,6 +510,23 @@ class PluginVst3
+@@ -492,6 +507,23 @@ class PluginVst3
              return placeSorted(sampleOffset);
          }
  
@@ -131,18 +135,7 @@ index 7295c892..321f084e 100644
         #if DISTRHO_PLUGIN_HAS_UI
          // NOTE always runs first
          bool appendFromUI(const uint8_t midiData[3])
-@@ -619,6 +654,10 @@ public:
-         DISTRHO_SAFE_ASSERT(isComponent);
-        #endif
- 
-+       #if DISTRHO_PLUGIN_WANT_PROGRAMS
-+        gDpfProgramListCount = fProgramCountMinusOne + 1;  // (SQ8L) see dpf_unit_info
-+       #endif
-+
-        #if DISTRHO_PLUGIN_NUM_INPUTS > 0
-         std::memset(fEnabledInputs, 0, sizeof(fEnabledInputs));
-         fillInBusInfoDetails<true>();
-@@ -1535,24 +1574,6 @@ public:
+@@ -1535,24 +1567,6 @@ public:
          }
         #endif
  
@@ -167,7 +160,7 @@ index 7295c892..321f084e 100644
        #endif
  
          if (v3_param_changes** const inparamsptr = data->input_params)
-@@ -1607,7 +1628,88 @@ public:
+@@ -1607,7 +1621,88 @@ public:
              }
          }
  
@@ -256,7 +249,29 @@ index 7295c892..321f084e 100644
          const uint32_t midiEventCount = inputEventList.convert(fMidiEvents);
          fPlugin.run(inputs, outputs, data->nframes, fMidiEvents, midiEventCount);
         #else
-@@ -1708,6 +1810,10 @@ public:
+@@ -1662,6 +1757,21 @@ public:
+         return 0;
+     }
+ 
++   #if DISTRHO_PLUGIN_WANT_PROGRAMS
++    // ----------------------------------------------------------------------------------------------------------------
++    // v3_unit_information interface calls (SQ8L)
++
++    uint32_t getProgramCount() const noexcept
++    {
++        return fProgramCountMinusOne + 1;
++    }
++
++    const char* getProgramName(const uint32_t index) const noexcept
++    {
++        return fPlugin.getProgramName(index);
++    }
++   #endif
++
+     // ----------------------------------------------------------------------------------------------------------------
+     // v3_edit_controller interface calls
+ 
+@@ -1708,6 +1818,10 @@ public:
          case kVst3InternalParameterProgram:
              info->flags = V3_PARAM_CAN_AUTOMATE | V3_PARAM_IS_LIST | V3_PARAM_PROGRAM_CHANGE | V3_PARAM_IS_HIDDEN;
              info->step_count = fProgramCountMinusOne;
@@ -267,7 +282,7 @@ index 7295c892..321f084e 100644
              strncpy_utf16(info->title, "Current Program", 128);
              strncpy_utf16(info->short_title, "Program", 128);
              return V3_OK;
-@@ -3434,6 +3540,157 @@ struct dpf_midi_mapping : v3_midi_mapping_cpp {
+@@ -3434,6 +3548,171 @@ struct dpf_midi_mapping : v3_midi_mapping_cpp {
  };
  #endif // DISTRHO_PLUGIN_WANT_MIDI_INPUT
  
@@ -277,16 +292,22 @@ index 7295c892..321f084e 100644
 +#if DISTRHO_PLUGIN_WANT_PROGRAMS
 +/* A host only routes MIDI program changes to a plugin that describes a program list, which
 + * means IUnitInfo: it converts the message into a change on the program-change parameter of
-+ * the unit owning that list. One root unit owning one list is all a monotimbral plugin needs,
-+ * and it is entirely constant, so a static instance serves every plugin instance.
++ * the unit owning that list. One root unit owning one list is all a monotimbral plugin needs.
++ * The list carries the plugin's own program names, which are per instance, so this is one
++ * object per instance rather than a static singleton.
 + */
 +struct dpf_unit_info : v3_unit_information_cpp {
-+    dpf_unit_info()
++    std::atomic_int refcounter;
++    ScopedPointer<PluginVst3>& vst3;
++
++    dpf_unit_info(ScopedPointer<PluginVst3>& v)
++        : refcounter(1),
++          vst3(v)
 +    {
-+        // v3_funknown, static
++        // v3_funknown, single instance
 +        query_interface = query_interface_unit_info;
-+        ref = dpf_static_ref;
-+        unref = dpf_static_unref;
++        ref = dpf_single_instance_ref<dpf_unit_info>;
++        unref = dpf_single_instance_unref<dpf_unit_info>;
 +
 +        // v3_unit_information
 +        unit.get_unit_count = get_unit_count;
@@ -308,10 +329,13 @@ index 7295c892..321f084e 100644
 +
 +    static v3_result V3_API query_interface_unit_info(void* const self, const v3_tuid iid, void** const iface)
 +    {
++        dpf_unit_info* const info = *static_cast<dpf_unit_info**>(self);
++
 +        if (v3_tuid_match(iid, v3_funknown_iid) ||
 +            v3_tuid_match(iid, v3_unit_information_iid))
 +        {
 +            d_debug("query_interface_unit_info => %p %s %p | OK", self, tuid2str(iid), iface);
++            ++info->refcounter;
 +            *iface = self;
 +            return V3_OK;
 +        }
@@ -348,31 +372,38 @@ index 7295c892..321f084e 100644
 +        return 1;
 +    }
 +
-+    static v3_result V3_API get_program_list_info(void*, const int32_t list_idx, v3_program_list_info* const info)
++    static v3_result V3_API get_program_list_info(void* const self, const int32_t list_idx,
++                                                  v3_program_list_info* const info)
 +    {
 +        DISTRHO_SAFE_ASSERT_RETURN(info != nullptr, V3_INVALID_ARG);
 +        DISTRHO_SAFE_ASSERT_INT_RETURN(list_idx == 0, list_idx, V3_INVALID_ARG);
 +
++        PluginVst3* const vst3 = (*static_cast<dpf_unit_info**>(self))->vst3;
++        DISTRHO_SAFE_ASSERT_RETURN(vst3 != nullptr, V3_NOT_INITIALIZED);
++
 +        std::memset(info, 0, sizeof(*info));
 +        info->id = kDpfProgramListId;
-+        info->programCount = static_cast<int32_t>(gDpfProgramListCount);
++        info->programCount = static_cast<int32_t>(vst3->getProgramCount());
 +        strncpy_utf16(info->name, "Programs", 128);
 +        return V3_OK;
 +    }
 +
-+    /* Numbered, not named. A program change is delivered to the plugin as MIDI, so what it
-+     * selects is the plugin's business; naming the entries here would promise the host a
-+     * mapping that the plugin does not have to honour.
++    /* The plugin's own program names, the same ones the program parameter converts its value
++     * to. A host that reads the list through IUnitInfo shows these; one that only reads the
++     * parameter sees them anyway.
 +     */
-+    static v3_result V3_API get_program_name(void*, const int32_t list_id, const int32_t program_idx, v3_str_128 name)
++    static v3_result V3_API get_program_name(void* const self, const int32_t list_id,
++                                             const int32_t program_idx, v3_str_128 name)
 +    {
 +        DISTRHO_SAFE_ASSERT_INT_RETURN(list_id == kDpfProgramListId, list_id, V3_INVALID_ARG);
 +        DISTRHO_SAFE_ASSERT_INT_RETURN(program_idx >= 0, program_idx, V3_INVALID_ARG);
-+        DISTRHO_SAFE_ASSERT_UINT_RETURN(static_cast<uint32_t>(program_idx) < gDpfProgramListCount, program_idx, V3_INVALID_ARG);
 +
-+        char buf[24];
-+        std::snprintf(buf, sizeof(buf), "Program %03d", program_idx);
-+        strncpy_utf16(name, buf, 128);
++        PluginVst3* const vst3 = (*static_cast<dpf_unit_info**>(self))->vst3;
++        DISTRHO_SAFE_ASSERT_RETURN(vst3 != nullptr, V3_NOT_INITIALIZED);
++        DISTRHO_SAFE_ASSERT_UINT_RETURN(static_cast<uint32_t>(program_idx) < vst3->getProgramCount(),
++                                        program_idx, V3_INVALID_ARG);
++
++        strncpy_utf16(name, vst3->getProgramName(static_cast<uint32_t>(program_idx)), 128);
 +        return V3_OK;
 +    }
 +
@@ -417,15 +448,33 @@ index 7295c892..321f084e 100644
 +    {
 +        return V3_NOT_IMPLEMENTED;
 +    }
-+
-+    DISTRHO_PREVENT_HEAP_ALLOCATION
 +};
 +#endif // DISTRHO_PLUGIN_WANT_PROGRAMS
 +
  // --------------------------------------------------------------------------------------------------------------------
  // dpf_edit_controller
  
-@@ -3562,6 +3819,23 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+@@ -3442,6 +3721,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+    #if DISTRHO_PLUGIN_HAS_UI
+     ScopedPointer<dpf_ctrl2view_connection_point> connectionCtrl2View;
+    #endif
++   #if DISTRHO_PLUGIN_WANT_PROGRAMS
++    ScopedPointer<dpf_unit_info> unitInfo;  // (SQ8L)
++   #endif
+    #if DPF_VST3_USES_SEPARATE_CONTROLLER
+     ScopedPointer<dpf_comp2ctrl_connection_point> connectionComp2Ctrl;
+     ScopedPointer<PluginVst3> vst3;
+@@ -3517,6 +3799,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+        #if DISTRHO_PLUGIN_HAS_UI
+         connectionCtrl2View = nullptr;
+        #endif
++       #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        unitInfo = nullptr;
++       #endif
+        #if DPF_VST3_USES_SEPARATE_CONTROLLER
+         connectionComp2Ctrl = nullptr;
+         vst3 = nullptr;
+@@ -3562,6 +3847,27 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
             #endif
          }
  
@@ -434,10 +483,14 @@ index 7295c892..321f084e 100644
 +        if (v3_tuid_match(iid, v3_unit_information_iid))
 +        {
 +           #if DISTRHO_PLUGIN_WANT_PROGRAMS
-+            d_debug("query_interface_edit_controller => %p %s %p | OK convert static", self, tuid2str(iid), iface);
-+            static dpf_unit_info unit_info;
-+            static dpf_unit_info* unit_info_ptr = &unit_info;
-+            *iface = &unit_info_ptr;
++            d_debug("query_interface_edit_controller => %p %s %p | OK convert %p",
++                    self, tuid2str(iid), iface, controller->unitInfo.get());
++
++            if (controller->unitInfo == nullptr)
++                controller->unitInfo = new dpf_unit_info(controller->vst3);
++            else
++                ++controller->unitInfo->refcounter;
++            *iface = &controller->unitInfo;
 +            return V3_OK;
 +           #else
 +            d_debug("query_interface_edit_controller => %p %s %p | reject unused", self, tuid2str(iid), iface);
@@ -449,7 +502,46 @@ index 7295c892..321f084e 100644
          if (v3_tuid_match(iid, v3_connection_point_iid))
          {
             #if DPF_VST3_USES_SEPARATE_CONTROLLER
-@@ -4243,6 +4517,22 @@ struct dpf_component : v3_component_cpp {
+@@ -3623,6 +3929,18 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+             }
+         }
+ 
++       #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        // (SQ8L) see dpf_unit_info: a host keeps the unit info as long as it keeps the plugin
++        if (dpf_unit_info* const info = controller->unitInfo)
++        {
++            if (const int refcount = info->refcounter)
++            {
++                unclean = true;
++                d_stderr("DPF warning: asked to delete controller while unit info still active (refcount %d)", refcount);
++            }
++        }
++       #endif
++
+         if (unclean)
+             return handleUncleanController(controllerptr);
+ 
+@@ -4155,6 +4473,9 @@ struct dpf_audio_processor : v3_audio_processor_cpp {
+ struct dpf_component : v3_component_cpp {
+     std::atomic_int refcounter;
+     ScopedPointer<dpf_audio_processor> processor;
++   #if DISTRHO_PLUGIN_WANT_PROGRAMS
++    ScopedPointer<dpf_unit_info> unitInfo;  // (SQ8L)
++   #endif
+    #if DPF_VST3_USES_SEPARATE_CONTROLLER
+     ScopedPointer<dpf_comp2ctrl_connection_point> connectionComp2Ctrl;
+    #else
+@@ -4200,6 +4521,9 @@ struct dpf_component : v3_component_cpp {
+     {
+         d_debug("~dpf_component()");
+         processor = nullptr;
++       #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        unitInfo = nullptr;
++       #endif
+        #if DPF_VST3_USES_SEPARATE_CONTROLLER
+         connectionComp2Ctrl = nullptr;
+        #else
+@@ -4243,6 +4567,26 @@ struct dpf_component : v3_component_cpp {
             #endif
          }
  
@@ -457,10 +549,14 @@ index 7295c892..321f084e 100644
 +        if (v3_tuid_match(iid, v3_unit_information_iid))
 +        {
 +           #if DISTRHO_PLUGIN_WANT_PROGRAMS
-+            d_debug("query_interface_component => %p %s %p | OK convert static", self, tuid2str(iid), iface);
-+            static dpf_unit_info unit_info;
-+            static dpf_unit_info* unit_info_ptr = &unit_info;
-+            *iface = &unit_info_ptr;
++            d_debug("query_interface_component => %p %s %p | OK convert %p",
++                    self, tuid2str(iid), iface, component->unitInfo.get());
++
++            if (component->unitInfo == nullptr)
++                component->unitInfo = new dpf_unit_info(component->vst3);
++            else
++                ++component->unitInfo->refcounter;
++            *iface = &component->unitInfo;
 +            return V3_OK;
 +           #else
 +            d_debug("query_interface_component => %p %s %p | reject unused", self, tuid2str(iid), iface);
@@ -472,3 +568,42 @@ index 7295c892..321f084e 100644
          if (v3_tuid_match(iid, v3_audio_processor_iid))
          {
              d_debug("query_interface_component => %p %s %p | OK convert %p",
+@@ -4337,6 +4681,19 @@ struct dpf_component : v3_component_cpp {
+             }
+         }
+ 
++       #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        // (SQ8L) the unit info lives in the component, so a host still holding it would be left
++        // with a pointer into freed memory: hosts do keep it for the lifetime of the plugin.
++        if (dpf_unit_info* const info = component->unitInfo)
++        {
++            if (const int refcount = info->refcounter)
++            {
++                unclean = true;
++                d_stderr("DPF warning: asked to delete component while unit info still active (refcount %d)", refcount);
++            }
++        }
++       #endif
++
+        #if DPF_VST3_USES_SEPARATE_CONTROLLER
+         if (dpf_comp2ctrl_connection_point* const point = component->connectionComp2Ctrl)
+         {
+@@ -4354,6 +4711,18 @@ struct dpf_component : v3_component_cpp {
+                 unclean = true;
+                 d_stderr("DPF warning: asked to delete component while edit controller still active (refcount %d)", refcount);
+             }
++
++           #if DISTRHO_PLUGIN_WANT_PROGRAMS
++            // (SQ8L) the controller is deleted with the component, so its unit info counts too
++            if (dpf_unit_info* const info = controller->unitInfo)
++            {
++                if (const int refcount = info->refcounter)
++                {
++                    unclean = true;
++                    d_stderr("DPF warning: asked to delete component while controller unit info still active (refcount %d)", refcount);
++                }
++            }
++           #endif
+         }
+        #endif
+ 

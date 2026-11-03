@@ -625,6 +625,18 @@ protected:
         if (std::getenv("SQ8L_UI_DEBUG"))
             std::fprintf(stderr, "[sq8l-ui] key %s %#x (keycode %u) modal %d name %d\n", ev.press ? "down" : "up", ev.key,
                          ev.keycode, drawn_ && drawn_->modal(), drawn_ && drawn_->nameEditing());
+#if SQ8L_NATIVE_UI
+        // The native name box is a control of its own and the OS hands it its keys, except that
+        // VST2 and VST3 give the host a keyboard channel of their own (effEditKeyDown,
+        // IPlugView::on_key_down) and REAPER takes Return through it rather than leaving it to
+        // the focused box, so there it only arrives here. CLAP has no such channel.
+        if (!drawn_) {
+            if (!ev.press || ev.key != kKeyEnter || controller_ == nullptr || !nameEditing()) return false;
+            Engine lock(*this);
+            controller_->nameEditKeyDown(0x0d);  // focusForm(): the name itself commits on focus loss
+            return true;
+        }
+#endif
         if (!drawn_ || !drawn_->wantsKeyboard() || !ev.press) return false;
         int vk = 0;
         switch (ev.key) {

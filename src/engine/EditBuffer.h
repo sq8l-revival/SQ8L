@@ -9,6 +9,7 @@
 // back into the program before it is stored (WRITE) or saved in a chunk.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -53,6 +54,22 @@ public:
     };
     using Listener = std::function<void(Event, const Program* slot)>;
 
+    // Optional observer, separate from the master's listener. All callbacks run
+    // under the caller's engine ownership; observer must detach before destruction.
+    enum class Replacement { Load, ComparePreview, CompareRestore, FailedSelection };
+    struct LifecycleObserver {
+        virtual ~LifecycleObserver() = default;
+        virtual void synchronize() = 0;
+        virtual void backupCompare() = 0;
+        virtual void replaced(Replacement) = 0;
+    };
+    LifecycleObserver* lifecycleObserver() const { return lifecycle_; }
+    void setLifecycleObserver(LifecycleObserver* observer) { lifecycle_ = observer; }
+    void synchronize() const { if (lifecycle_) lifecycle_->synchronize(); }
+    void completedReplacement(Replacement kind = Replacement::Load) {
+        if (lifecycle_) lifecycle_->replaced(kind);
+    }
+
     static constexpr int kRingSize = 4;
     static constexpr size_t kChunkSize = 0x23b;     // 0x1f header + 540
     static constexpr size_t kChunkHeaderSize = 0x1f;
@@ -91,8 +108,10 @@ public:
     bool comparing() const { return compare_ > 0; }
 
     // Host chunk (effGetChunk / effSetChunk): FUN_00460b84 / FUN_00460b40.
+    using Chunk = std::array<uint8_t, kChunkSize>;
+    void copyChunk(Chunk&); // fixed-size synchronized base snapshot
     const std::vector<uint8_t>& getChunk();
-    int setChunk(const uint8_t* data, size_t size);  // bytes consumed (0x23b / 0x220) or 0
+    int setChunk(const uint8_t* data, size_t size, bool notifyCompletion = true);  // bytes consumed (0x23b / 0x220) or 0
 
     // SQ-80/ESQ-1 single program SysEx (FUN_00460c68 / FUN_00460d10).
     bool importSysex(const uint8_t* data, size_t size, bool checkHeader);
@@ -124,6 +143,7 @@ private:
         if (listener) listener(e, slot);
     }
 
+    LifecycleObserver* lifecycle_ = nullptr;
     SoundLibrary* lib_;
     Program slots_[kRingSize + 1];   // +0x004 (ring) and +0x874 (compare backup)
     int32_t ring_ = 0;               // +0xa90

@@ -82,5 +82,10 @@
     { "name": "msvc-debug", "configurePreset": "msvc-debug" },
     { "name": "unix", "configurePreset": "unix" },
     { "name": "unix-debug", "configurePreset": "unix-debug" }
+  ],
+  "testPresets": [
+    { "name": "msvc", "configurePreset": "msvc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "clang-cl", "configurePreset": "clang-cl", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "unix", "configurePreset": "unix", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
   ]
 }

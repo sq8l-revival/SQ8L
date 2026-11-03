@@ -1,0 +1,119 @@
+{
+  "schema_version": 3,
+  "purpose": "Native tool foundation; calibration never establishes release qualification",
+  "matrix": {
+    "sample_rates": [
+      44100,
+      48000,
+      96000
+    ],
+    "frames": [
+      32,
+      64,
+      128,
+      512
+    ],
+    "voices": [
+      8,
+      64
+    ],
+    "scenarios": [
+      "closed",
+      "open",
+      "concurrent-save-refresh"
+    ],
+    "workloads": [
+      "idle",
+      "dense",
+      "coalesced"
+    ],
+    "lanes": [
+      "prechange",
+      "direct",
+      "new"
+    ]
+  },
+  "qualification_protocol": {
+    "warmup_seconds_min": 10,
+    "measurement_seconds_min": 60,
+    "repeats_min": 3,
+    "reference_architectures": [
+      "arm64",
+      "x86_64"
+    ]
+  },
+  "trajectory": {
+    "version": 1,
+    "programs": "256 + (block / 128) modulo 16 every 128 blocks",
+    "notes": "8 or 64 notes at pitches 24.. every 32 blocks, release frame 0/retrigger frame 1",
+    "polyphony": "existing instance polyphony override 8/64, independent of sound VOICES edits",
+    "dense": "all 256 native identities once; legal cyclic values (block + index) modulo domain width",
+    "coalesced": "all 256 four times, first three minima, fourth same as dense; direct lane replays final active codec writes",
+    "parity": "current native preflight compares both channels and540-byte program exactly for160blocks; runner compares cumulative audio/program fingerprint at every measured block across all three lanes"
+  },
+  "raw_record_schema": {
+    "block": "uint64",
+    "producer_begin_ns": "monotonic uint64 before existing program selection and parameter producer work (including mutex acquisition)",
+    "producer_end_ns": "monotonic uint64",
+    "render_begin_ns": "monotonic uint64 before actual run including lock acquisition",
+    "render_end_ns": "monotonic uint64 after actual run",
+    "trajectory_fnv64": "hex cumulative audio/program trajectory fingerprint; integrity uses separate SHA256"
+  },
+  "summary_schema": {
+    "schema_version": 3,
+    "producer": "count/p50_ns/p95_ns/p99_ns/max_ns/deadline_misses",
+    "render": "count/p50_ns/p95_ns/p99_ns/max_ns/deadline_misses",
+    "recorder_calibration": "10000 empty timestamp/store intervals; reported uncorrected",
+    "deadline_ns": "frames/sample_rate * 1e9",
+    "timing_eligible": "duration only; never release status"
+  },
+  "gate_policy": {
+    "added_p99_deadline_fraction_strict_max": 0.05,
+    "headroom_p99_deadline_fraction_strict_max": 0.7,
+    "headroom_baseline_misses": 0,
+    "induced_render_misses": 0,
+    "overlap": "report producer and render separately; never add overlapping thread times",
+    "missing": "incomplete; never pass or synthesize"
+  },
+  "external_evidence_required": [
+    "Actual pre-change/current wrapper transport timing (source-linked callback/mutex comparator is available)",
+    "Actual VST2/VST3/CLAP/AU wrapper costs and DAW workflows",
+    "Native editor-open observation",
+    "Required native OS/compiler/architecture matrix",
+    "arm64 and x86_64 reference machines",
+    "Listening/dropout/glitch observations",
+    "Actual DAW/editor concurrent save/refresh timing beyond native scheduled producer-quiescent windows"
+  ],
+  "result_schema": {
+    "file": "result.json",
+    "schema_version": 3,
+    "runs": "exact argv, real exit, matrix cell, summary, raw/log SHA256 or explicit unavailable",
+    "comparisons": "paired trajectory, separate producer/render p99 differences, dense/new-idle and pre-change comparison, strict gates and baseline headroom",
+    "release_qualified": "false until external evidence is reconciled by later qualification owner"
+  },
+  "baseline_attribution": "Archived SQ8LPlugin.cpp/.hpp byte-identical copies, archived engine/core-math/MTS/DPF implementation; current pure codec files copied byte-identically to resolve archived Program/EditBuffer; current generated version header; sole SharedLibrary helper change is explicit fixture data-directory override used outside timed callbacks",
+  "native_concurrent_protocol": {
+    "cadence": "one background save then full256-identity refresh every16 audio blocks, warmup included",
+    "window": "producer completes before worker request; worker may overlap actual render; finite completion wait before next producer; no producer/save concurrency claim",
+    "operations": "actual current/archived getState editbuffer callbacks; current new accepted getters, current direct/archived per-identity codec reads under existing recursive mutex",
+    "validation": "outside timing compare saved string with actual post-render save and all refreshed values with post-render refresh; next program/producer cannot start until completion",
+    "coordination": "separate mutex/condition-variable waits excluded from production timings;5s native timeout aborts process; runner finite process timeout; worker stop/join after completion",
+    "roles": "save and refresh are separate worker operations; render/producer separate; never sum overlapping durations",
+    "scope": "finite deterministic schedule only; no general race/deadlock or wrapper/editor claim"
+  },
+  "individual_callback_sampling": {
+    "blocks": "at most32 measured blocks evenly spaced, step=ceil(measured_blocks/32), starting first measured block",
+    "scope": "full actual setter/getter invocation including engine acquisition; timestamps bracket callback only; record store/validation outside callback",
+    "capacity": 65536,
+    "coverage": "all256 identities on selected blocks, all4 setter calls for coalesced; only new lane automation workload; no baseline invented setter/getter",
+    "raw": "raw_path.callbacks.jsonl kind/index/block/begin_ns/end_ns; raw_path.background.jsonl block/save_begin_ns/save_end_ns/refresh_begin_ns/refresh_end_ns; all monotonic nanoseconds",
+    "overhead": "producer includes individual timestamp/recording overhead on sampled blocks; no overhead subtraction; sampling disabled on other blocks"
+  },
+  "harness_diagnostic": {
+    "cli": "--harness-diagnostic with current new/direct lanes; concurrent-save-refresh, zero warmup, at most2 seconds",
+    "path": "same actual native adapter, paired audio/program preflight and shared background helper; finite external process timeout required",
+    "output": "independent mode=harness-diagnostic summary and per-background diagnostic raw JSONL, timing_eligible=false/release_qualified=false; no benchmark schema3 timing records or distributions",
+    "guard": "instrumented/TSan --benchmark remains rejected with exit2",
+    "coverage": "finite native background save/256 getter or manual refresh coordination and worker stop/join; no wrapper/editor/DAW or general race/deadlock proof"
+  }
+}

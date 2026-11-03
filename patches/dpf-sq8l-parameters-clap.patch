@@ -1,0 +1,444 @@
+--- a/distrho/src/DistrhoPluginCLAP.cpp
++++ b/distrho/src/DistrhoPluginCLAP.cpp
+@@ -37,6 +37,7 @@
+ #if DISTRHO_PLUGIN_HAS_UI
+ # include "DistrhoUIInternal.hpp"
+ # include "../extra/Mutex.hpp"
++
+ #endif
+ 
+ #if DISTRHO_PLUGIN_HAS_UI && DISTRHO_PLUGIN_WANT_MIDI_INPUT
+@@ -67,6 +68,16 @@
+ # define DPF_CLAP_TIMER_INTERVAL 16 /* ~60 fps */
+ #endif
+ 
++#ifndef DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++# define DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH 0
++#endif
++#if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++# include <atomic>
++# include <cmath>
++# include "ClapPanelNotifications.h"
++
++#endif
++
+ START_NAMESPACE_DISTRHO
+ 
+ // --------------------------------------------------------------------------------------------------------------------
+@@ -86,6 +97,9 @@
+         EventType type;
+         uint32_t index;
+         float value;
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        SQ8LPanelNotificationStamp stamp{};
++       #endif
+     };
+ 
+     struct Queue {
+@@ -101,7 +115,11 @@
+ 
+         ~Queue()
+         {
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            std::free(events);
++           #else
+             delete[] events;
++           #endif
+         }
+ 
+         void addEventFromUI(const Event& event)
+@@ -141,8 +159,13 @@
+ 
+     struct CachedParameters {
+         uint numParams;
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        std::atomic<bool>* changed;
++        std::atomic<float>* values;
++       #else
+         bool* changed;
+         float* values;
++       #endif
+ 
+         CachedParameters()
+             : numParams(0),
+@@ -161,11 +184,17 @@
+                 return;
+ 
+             numParams = numParameters;
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            changed = new std::atomic<bool>[numParameters];
++            values = new std::atomic<float>[numParameters];
++            for (uint i=0; i<numParameters; ++i) { changed[i]=false; values[i]=0.f; }
++           #else
+             changed = new bool[numParameters];
+             values = new float[numParameters];
+ 
+             std::memset(changed, 0, sizeof(bool)*numParameters);
+             std::memset(values, 0, sizeof(float)*numParameters);
++           #endif
+         }
+     } fCachedParameters;
+ 
+@@ -178,6 +207,10 @@
+         fCurrentProgram = 0;
+        #endif
+     }
++
++   #if DISTRHO_PLUGIN_HAS_UI && DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    virtual void refreshSQ8LAfterEditorIdle() = 0;
++   #endif
+ 
+     virtual ~ClapEventQueue() {}
+ };
+@@ -210,6 +243,9 @@
+         : fPlugin(plugin),
+          #if DISTRHO_PLUGIN_WANT_STATE
+           fPluginEventQueue(eventQueue),
++         #endif
++         #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++          fSQ8LEventQueue(eventQueue),
+          #endif
+           fEventQueue(eventQueue->fEventQueue),
+           fCachedParameters(eventQueue->fCachedParameters),
+@@ -494,13 +530,34 @@
+            #else
+             ui->idleFromNativeIdle();
+            #endif
+-
++        }
++
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        // Editor idle has released outer engine ownership. Discover direct
++        // INIT/COMPARE/import replacements even while processing is stopped.
++        fSQ8LEventQueue->refreshSQ8LAfterEditorIdle();
++       #endif
++
++        if (UIExporter* const ui = fUI.get())
++        {
+             for (uint i=0; i<fCachedParameters.numParams; ++i)
+             {
++                #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                if (fCachedParameters.changed[i].exchange(false))
++               #else
+                 if (fCachedParameters.changed[i])
++               #endif
+                 {
++                   #if !DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
+                     fCachedParameters.changed[i] = false;
++                   #endif
++                   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                    // The accepted service is authoritative even if main/audio
++                    // observation snapshots overlapped after engine unlock.
++                    ui->parameterChanged(i, fPlugin.getParameterValue(i));
++                   #else
+                     ui->parameterChanged(i, fCachedParameters.values[i]);
++                   #endif
+                 }
+             }
+         }
+@@ -537,6 +594,9 @@
+     PluginExporter& fPlugin;
+    #if DISTRHO_PLUGIN_WANT_STATE
+     ClapEventQueue* const fPluginEventQueue;
++   #endif
++   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    ClapEventQueue* const fSQ8LEventQueue;
+    #endif
+     ClapEventQueue::Queue& fEventQueue;
+     ClapEventQueue::CachedParameters& fCachedParameters;
+@@ -615,8 +675,13 @@
+ 
+         for (uint32_t i=0; i<fCachedParameters.numParams; ++i)
+         {
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            fCachedParameters.changed[i].exchange(false);
++            const float value = fPlugin.getParameterValue(i);
++           #else
+             const float value = fCachedParameters.values[i] = fPlugin.getParameterValue(i);
+             fCachedParameters.changed[i] = false;
++           #endif
+             fUI->parameterChanged(i, value);
+         }
+ 
+@@ -640,6 +705,11 @@
+             rindex, 0.f
+         };
+         fEventQueue.addEventFromUI(ev);
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        if (const auto* const params = static_cast<const clap_host_params_t*>(
++                fHost->get_extension(fHost, CLAP_EXT_PARAMS)))
++            params->request_flush(fHost);
++       #endif
+     }
+ 
+     static void editParameterCallback(void* const ptr, const uint32_t rindex, const bool started)
+@@ -649,11 +719,24 @@
+ 
+     void setParameterValue(const uint32_t rindex, const float value)
+     {
+-        const ClapEventQueue::Event ev = {
++        ClapEventQueue::Event ev = {
+             ClapEventQueue::kEventParamSet,
+             rindex, value
+         };
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        if (auto* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++                static_cast<Plugin*>(fPlugin.getInstancePointer())))
++        {
++            if (!hooks->sq8lCapturePanelNotification(rindex, value, ev.stamp))
++                return;
++        }
++       #endif
+         fEventQueue.addEventFromUI(ev);
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        if (const auto* const params = static_cast<const clap_host_params_t*>(
++                fHost->get_extension(fHost, CLAP_EXT_PARAMS)))
++            params->request_flush(fHost);
++       #endif
+     }
+ 
+     static void setParameterCallback(void* const ptr, const uint32_t rindex, const float value)
+@@ -859,6 +942,7 @@
+         fMidiEventCount = 0;
+        #endif
+ 
++       #if !DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
+        #if DISTRHO_PLUGIN_HAS_UI
+         if (const clap_output_events_t* const outputEvents = process->out_events)
+         {
+@@ -905,6 +989,8 @@
+                 fEventQueue.used = 0;
+             }
+         }
++       #endif
++
+        #endif
+ 
+        #if DISTRHO_PLUGIN_WANT_TIMEPOS
+@@ -1129,6 +1215,13 @@
+ 
+     void onMainThread()
+     {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        if (fSQ8LRefreshRetry.exchange(false)) refreshSQ8LParameters(false);
++        if (fSQ8LFlushRetry.exchange(false) && fHostExtensions.params != nullptr)
++            fHostExtensions.params->request_flush(fHost);
++        if (fSQ8LRescan.exchange(false) && fHostExtensions.params != nullptr)
++            fHostExtensions.params->rescan(fHost, CLAP_PARAM_RESCAN_VALUES|CLAP_PARAM_RESCAN_TEXT);
++       #endif
+        #if DISTRHO_PLUGIN_WANT_LATENCY
+         reportLatencyChangeIfNeeded();
+        #endif
+@@ -1282,6 +1375,12 @@
+             }
+         }
+ 
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        refreshSQ8LParameters();
++       #if DISTRHO_PLUGIN_HAS_UI
++        drainSQ8LUIEvents(out, frameOffset);
++       #endif
++       #endif
+         if (out != nullptr)
+         {
+             clap_event_param_value_t clapEvent = {
+@@ -1296,7 +1395,7 @@
+                 {
+                     value = fPlugin.getParameterValue(i);
+ 
+-                    if (d_isEqual(fCachedParameters.values[i], value))
++                    if (d_isEqual(static_cast<float>(fCachedParameters.values[i]), value))
+                         continue;
+ 
+                     fCachedParameters.values[i] = value;
+@@ -1347,11 +1446,107 @@
+     }
+    #endif
+ 
++   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    std::atomic<uint64_t> fSQ8LGeneration{0};
++    std::atomic<bool> fSQ8LRescan{false};
++    std::atomic<bool> fSQ8LRefreshRetry{false};
++    std::atomic<bool> fSQ8LFlushRetry{false};
++
++    void scheduleSQ8LFlushRetry()
++    {
++        if (!fSQ8LFlushRetry.exchange(true)) fHost->request_callback(fHost);
++    }
++
++   #if DISTRHO_PLUGIN_HAS_UI
++    void refreshSQ8LAfterEditorIdle() override
++    {
++        refreshSQ8LParameters();
++    }
++   #endif
++
++    void refreshSQ8LParameters(const bool schedule = true)
++    {
++        auto* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++            static_cast<Plugin*>(fPlugin.getInstancePointer()));
++        float values[SQ8LParameterRefreshHooks::kParameterCount];
++        uint64_t observed = fSQ8LGeneration.load();
++        uint64_t generation = observed;
++        if (hooks == nullptr || !hooks->sq8lCopyParameterRefresh(
++                generation, values, fCachedParameters.numParams))
++            return;
++        // One election, never a realtime wait/spin. A newer snapshot can lose
++        // to an older observer; ask main to re-read even if audio stays stopped.
++        if (!fSQ8LGeneration.compare_exchange_strong(observed, generation)) {
++            fSQ8LRescan = true;
++            if (!fSQ8LRefreshRetry.exchange(true)) fHost->request_callback(fHost);
++            return;
++        }
++        for (uint32_t i=0; i<fCachedParameters.numParams; ++i)
++        {
++            fCachedParameters.values[i] = values[i];
++            fCachedParameters.changed[i] = true;
++        }
++        // Snapshot ownership has ended. request_callback is thread-safe; the
++        // host performs value/text rescan on its main thread, without gestures.
++        if (schedule && !fSQ8LRescan.exchange(true))
++            fHost->request_callback(fHost);
++    }
++
++   #if DISTRHO_PLUGIN_HAS_UI
++    void drainSQ8LUIEvents(const clap_output_events_t* const out, const uint32_t time)
++    {
++        const RecursiveMutexTryLocker locker(fEventQueue.lock);
++        if (!locker.wasLocked()) { scheduleSQ8LFlushRetry(); return; }
++        auto* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++            static_cast<Plugin*>(fPlugin.getInstancePointer()));
++        const uint32_t consumed = sq8l::drainClapPanelNotifications(
++            fEventQueue.events, fEventQueue.used,
++            [hooks](const Event& event) {
++                return event.type != kEventParamSet || (hooks != nullptr &&
++                    hooks->sq8lCurrentPanelNotification(event.stamp));
++            },
++            [out, time](const Event& event) {
++                clap_event_param_value_t value = {
++                    {sizeof(clap_event_param_value_t), time, 0, CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_IS_LIVE},
++                    event.index, nullptr, -1, -1, -1, -1, event.value
++                };
++                if (event.type != kEventParamSet) {
++                    value.header.size = sizeof(clap_event_param_gesture_t);
++                    value.header.type = event.type == kEventGestureBegin
++                        ? CLAP_EVENT_PARAM_GESTURE_BEGIN : CLAP_EVENT_PARAM_GESTURE_END;
++                }
++                return out != nullptr && out->try_push(out, &value.header);
++            });
++        if (consumed != 0)
++        {
++            fEventQueue.used -= consumed;
++            std::memmove(fEventQueue.events, fEventQueue.events + consumed,
++                         fEventQueue.used * sizeof(Event));
++        }
++        // Retry requests cross to main before request_flush (!audio-thread).
++        // One request per failed drain; host cooperation controls the next try.
++        if (fEventQueue.used != 0) scheduleSQ8LFlushRetry();
++    }
++   #endif
++   #endif
++
+     void setParameterValueFromEvent(const clap_event_param_value_t* const event)
+     {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        if (event->param_id >= fCachedParameters.numParams || !std::isfinite(event->value))
++            return;
++        const ParameterRanges& ranges(fPlugin.getParameterRanges(event->param_id));
++        // Saturate in the original type before narrowing to the DPF float API.
++        const double value = event->value < ranges.min ? ranges.min
++                           : event->value > ranges.max ? ranges.max : event->value;
++        fPlugin.setParameterValue(event->param_id, static_cast<float>(value));
++        fCachedParameters.values[event->param_id] = fPlugin.getParameterValue(event->param_id);
++        fCachedParameters.changed[event->param_id] = true;
++       #else
+         fCachedParameters.values[event->param_id] = event->value;
+         fCachedParameters.changed[event->param_id] = true;
+         fPlugin.setParameterValue(event->param_id, event->value);
++       #endif
+     }
+ 
+     // ----------------------------------------------------------------------------------------------------------------
+@@ -1513,7 +1708,7 @@
+         }
+        #endif
+ 
+-        if (paramCount != 0)
++        if (paramCount != 0 && !DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH)
+         {
+             state += "__dpf_parameters_begin__\xff";
+ 
+@@ -1711,6 +1906,16 @@
+                             if (fPlugin.getParameterSymbol(j) != key)
+                                 continue;
+ 
++                           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                            {
++                                const ScopedSafeLocale ssl;
++                                const double input = std::atof(value.buffer());
++                                if (!std::isfinite(input)) break;
++                                const ParameterRanges& ranges(fPlugin.getParameterRanges(j));
++                                fvalue = static_cast<float>(input < ranges.min ? ranges.min
++                                                          : input > ranges.max ? ranges.max : input);
++                            }
++                           #else
+                             if (fPlugin.getParameterHints(j) & kParameterIsInteger)
+                             {
+                                 fvalue = std::atoi(value.buffer());
+@@ -1721,6 +1926,7 @@
+                                 fvalue = std::atof(value.buffer());
+                             }
+ 
++                           #endif
+                             fCachedParameters.values[j] = fvalue;
+                            #if DISTRHO_PLUGIN_HAS_UI
+                             if (ui != nullptr)
+@@ -1730,6 +1936,9 @@
+                             }
+                            #endif
+                             fPlugin.setParameterValue(j, fvalue);
++                           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                            fCachedParameters.values[j] = fPlugin.getParameterValue(j);
++                           #endif
+                             break;
+                         }
+                     }
+@@ -1741,6 +1950,16 @@
+             }
+         }
+ 
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        refreshSQ8LParameters(false);
++        // Legacy explicit entries have precedence over the chunk; refresh all
++        // mirrors from the final accepted state, including pending pair intent.
++        for (uint32_t i=0; i<fCachedParameters.numParams; ++i)
++        {
++            fCachedParameters.values[i] = fPlugin.getParameterValue(i);
++            fCachedParameters.changed[i] = true;
++        }
++       #endif
+         if (fHostExtensions.params != nullptr)
+             fHostExtensions.params->rescan(fHost, CLAP_PARAM_RESCAN_VALUES|CLAP_PARAM_RESCAN_TEXT);
+ 
+@@ -1757,7 +1976,11 @@
+                 if (fPlugin.isParameterOutputOrTrigger(i))
+                     continue;
+                 fCachedParameters.changed[i] = false;
++                #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                ui->setParameterValueFromPlugin(i, fPlugin.getParameterValue(i));
++               #else
+                 ui->setParameterValueFromPlugin(i, fCachedParameters.values[i]);
++               #endif
+             }
+         }
+        #endif
+@@ -1802,6 +2025,9 @@
+     void setStateFromUI(const char* const key, const char* const value) override
+     {
+         fPlugin.setState(key, value);
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        refreshSQ8LParameters();
++       #endif
+ 
+         if (fPlugin.wantStateKey(key))
+         {

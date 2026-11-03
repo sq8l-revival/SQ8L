@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "EditBuffer.h"
+#include "SoundParameters.h"
 #include "Settings.h"
 #include "SoundLibrary.h"
 
@@ -23,6 +24,26 @@ namespace sq8l::gui {
 class EditorHost {
 public:
     virtual ~EditorHost() = default;
+
+    // Caller owns the engine. These semantic hooks never depend on a GUI framework.
+    virtual int soundValue(unsigned index) {
+        const auto* p = sound::parameter(index);
+        return p ? sound::read(*p, editBuffer().current()) : 0;
+    }
+    // AM raw2 is a legacy panel state: LED off and the next AM click selects1.
+    // Hosts with accepted state override this projection so a newer edit wins.
+    virtual int soundButtonValue(unsigned index) {
+        const auto* p = sound::parameter(index);
+        if (p && p->field == 325 && editBuffer().current().s8(ofs::AmMod) == 2) return 2;
+        return soundValue(index);
+    }
+    virtual void soundEdit(unsigned index, int value) {
+        const auto* p = sound::parameter(index);
+        if (p && sound::write(*p, editBuffer().current(), value)) editBuffer().setModified(true);
+    }
+    virtual void soundBegin(unsigned) {}
+    virtual void soundEnd(unsigned) {}
+    virtual uint64_t soundGeneration() { return 0; }
 
     virtual EditBuffer& editBuffer() = 0;          // form +0x4d8
     virtual SoundLibrary& library() = 0;           // PTR_DAT_004c3178

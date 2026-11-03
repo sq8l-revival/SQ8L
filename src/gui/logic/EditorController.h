@@ -86,6 +86,11 @@ public:
     // `delta` is the platform's own value, positive away from the user; its scale does not
     // matter, the smallest one ever seen is taken for a notch. Ctrl makes a notch a jump.
     // `keys` are the MK_* flags the view's mouse entry points take.
+    void cancelSoundEdit();
+    // End physical input for a modal loop without discarding its captured value menu.
+    void prepareModalInput();
+    void prepareSoundInput();
+    void lcdCancelEdit() override;
     void wheel(int x, int y, double delta, uint32_t keys);
     // progNameEdit focus (WM_SETFOCUS / WM_KILLFOCUS through the hooked window procedure
     // FUN_004839a4) with the edit text, and its OnKeyDown (VK_RETURN ends editing).
@@ -253,6 +258,8 @@ private:
     // (port) The two-state field the left button went down on, flipped when it comes up again
     // over the same one (the index inside the sub-page, -1 = none).
     int lcdToggleParam_ = -1;
+    Control* soundPress_ = nullptr;
+    uint64_t soundPressGeneration_ = 0;
     // (port, issue #35) The wheel. `wheelStep_` is the smallest delta the device has ever
     // reported, taken for one notch; `wheelAccum_` is what has come in since the last notch
     // fired, and belongs to `wheelKnob_` alone so a part notch cannot carry to another knob.
@@ -260,6 +267,7 @@ private:
     static constexpr int kWheelCtrlStep = 10;
     double wheelAccum_ = 0.0, wheelStep_ = 0.0;
     int wheelKnob_ = -1;
+    uint64_t soundGeneration_ = 0;
     bool naturalScroll_ = false;     // port addition (issue #35)
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510

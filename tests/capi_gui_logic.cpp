@@ -8,6 +8,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@
 #include "SQ8LVersion.h"
 #include "Settings.h"
 #include "SoundLibrary.h"
+#include "SoundParameterState.h"
 #include "VfdText.h"
 
 #include "capi_export.h"
@@ -73,15 +75,68 @@ struct Box;
 // ---------------------------------------------------------------- engine side
 struct TestHost : EditorHost {
     SoundLibrary lib;
-    EditBuffer eb{&lib};
     Settings cfg;
+    Synth synth{44100.0f, &lib, &cfg};
+    EditBuffer& eb = synth.editBuffer();
+    sound::SoundParameterService service{eb.current()};
+    sound::SoundParameterLifecycle lifecycle{synth, service};
+    std::ostringstream soundTrace;
+    bool echo = true;
+    std::recursive_mutex mutex;
+    sound::PanelNotificationQueue notifications;
+    struct Engine {
+        TestHost& host;
+        explicit Engine(TestHost& h) : host(h) { host.mutex.lock(); host.notifications.engineEntered(); }
+        ~Engine() {
+            host.mutex.unlock(); host.notifications.engineLeft(); host.drain();
+        }
+    };
+    void drain() {
+        notifications.drain([this](const sound::PanelNotification& event) {
+            if (notifications.engineDepth() != 0) soundTrace << "BAD_LOCK\n";
+            if (event.kind == sound::PanelNotification::Value) {
+                Engine lock(*this);
+                if (!service.currentPanelEcho(event.token)) return;
+            }
+            const char kind = event.kind == sound::PanelNotification::Begin ? 'B' :
+                              event.kind == sound::PanelNotification::End ? 'E' : 'V';
+            soundTrace << kind << " " << event.index;
+            if (kind == 'V') {
+                soundTrace << " " << event.token.value << " " << event.token.stamp.revision;
+                if (echo) {
+                    Engine lock(*this);
+                    auto echoed = service.acceptScopedPanelEcho(event.index, event.token.value, event.token);
+                    if (echoed.status != sound::Acceptance::Echo) soundTrace << " BAD_ECHO";
+                }
+            }
+            soundTrace << "\n";
+        });
+    }
+    int soundValue(unsigned id) override { int v = 0; service.get(id, v); return v; }
+    int soundButtonValue(unsigned index) override {
+        const auto* p = sound::parameter(index);
+        if (p && p->field == 325 && service.stamp(index).origin == sound::Origin::Replacement &&
+            eb.current().s8(ofs::AmMod) == 2) return 2;
+        return soundValue(index);
+    }
+    uint64_t soundGeneration() override { return service.generation(); }
+    void soundBegin(unsigned id) override { notifications.push({sound::PanelNotification::Begin, id, {}}); }
+    void soundEnd(unsigned id) override { notifications.push({sound::PanelNotification::End, id, {}}); }
+    void soundEdit(unsigned id, int v) override {
+        auto result = service.accept(id, v, sound::Origin::Panel);
+        if (result.status != sound::Acceptance::Accepted) return;
+        eb.setModified(true);
+        notifications.push({sound::PanelNotification::Value, id, result.token});
+    }
     EditorController* ctl = nullptr;
     int maxVoices = 8, usedVoices = 0;
     std::string dir = "C:\\VST\\SQ8L\\";
     std::ostringstream log;
 
     TestHost() {
-        eb.listener = [this](EditBuffer::Event e, const Program*) {
+        const auto engineListener = eb.listener;
+        eb.listener = [this, engineListener](EditBuffer::Event e, const Program* p) {
+            if (engineListener) engineListener(e, p);
             if (e == EditBuffer::Event::ProgramLoaded && ctl) ctl->post(kMsgNotify, 0x10002, 0);
         };
     }
@@ -146,9 +201,18 @@ struct TestUi : PlatformUi {
     std::deque<std::vector<std::string>> modalScripts;
     Point cursor;
     std::function<void()> pumpDuringModal;
+    std::function<void()> beginPopup, endPopup, popupAction;
     int formX = 0, formY = 0;                 // screen position of the form client area
 
     int popupMenu(const std::vector<MenuItem>& items, int x, int y) override {
+        if (beginPopup) beginPopup();
+        struct Finish {
+            std::function<void()>& action;
+            ~Finish() { if (action) action(); }
+        } finish{endPopup};
+        auto action = std::move(popupAction);
+        popupAction = {};
+        if (action) action();
         events << "{\"ev\":\"popup\",\"x\":" << x + formX << ",\"y\":" << y + formY << ",\"tree\":" << menuJson(items)
                << "}\n";
         if (menuChoices.empty()) return 0;
@@ -267,10 +331,23 @@ struct Box {
     std::unique_ptr<EditorController> ctl;
     bool autoContextMenu = false;
 
+    ~Box() { TestHost::Engine engine(host); ctl.reset(); }
+
     explicit Box(int first) {
         ctl = std::make_unique<EditorController>(view, host, ui, first != 0);
         host.ctl = ctl.get();
         ui.pumpDuringModal = [this] { ctl->pump(); };
+        // Match SQ8LUI's modal hook, including its outer engine release/reacquire.
+        ui.beginPopup = [this] {
+            ctl->prepareModalInput();
+            host.mutex.unlock();
+            host.notifications.engineLeft();
+            host.drain();
+        };
+        ui.endPopup = [this] {
+            host.mutex.lock();
+            host.notifications.engineEntered();
+        };
         host.events = &ui.events;
         view.onContextMenu = [this](Control&, int x, int y) {
             if (autoContextMenu) ctl->contextMenu(x, y);
@@ -305,55 +382,196 @@ std::string lcdJson(const LcdDisplay& l) {
 
 // ------------------------------------------------------------------ lifecycle
 
+SQ8L_API int32_t sq8l_gl_sound_queue_check(void* v) {
+    auto& h = B(v)->host;
+    int callbacks = 0, bad = 0;
+    h.mutex.lock(); h.notifications.engineEntered();
+    h.notifications.push({sound::PanelNotification::Begin, 0, {}});
+    h.mutex.lock(); h.notifications.engineEntered();
+    h.notifications.push({sound::PanelNotification::End, 0, {}});
+    auto callback = [&](const sound::PanelNotification&) {
+        ++callbacks;
+        if (h.notifications.engineDepth()) ++bad;
+        if (callbacks == 1) {
+            h.notifications.push({sound::PanelNotification::Begin, 1, {}});
+            h.notifications.drain([&](const sound::PanelNotification&) { ++bad; });
+        }
+    };
+    h.mutex.unlock(); h.notifications.engineLeft(); h.notifications.drain(callback);
+    if (callbacks) ++bad; // recursive unlock cannot dispatch
+    h.mutex.unlock(); h.notifications.engineLeft(); h.notifications.drain(callback);
+    if (callbacks != 3) ++bad;
+    // Modal release/reacquire uses the same outer scope; empty final drain is inert.
+    h.mutex.lock(); h.notifications.engineEntered();
+    h.notifications.push({sound::PanelNotification::End, 1, {}});
+    h.mutex.unlock(); h.notifications.engineLeft(); h.notifications.drain(callback);
+    h.mutex.lock(); h.notifications.engineEntered();
+    h.mutex.unlock(); h.notifications.engineLeft(); h.notifications.drain(callback);
+    if (callbacks != 4) ++bad;
+    sound::PanelNotificationQueue queue;
+    std::array<int, sound::kParameterCount> balance{}, latest{}, expected{};
+    for (unsigned n = 0; n < 5000; ++n) {
+        const unsigned id = n % sound::kParameterCount;
+        expected[id] = int(n);
+        queue.push({sound::PanelNotification::Begin, id, {}});
+        sound::EchoToken token; token.value = int(n);
+        queue.push({sound::PanelNotification::Value, id, token});
+        queue.push({sound::PanelNotification::End, id, {}});
+    }
+    queue.drain([&](const sound::PanelNotification& event) {
+        auto& b = balance[event.index];
+        if (event.kind == sound::PanelNotification::Begin && ++b != 1) ++bad;
+        if (event.kind == sound::PanelNotification::Value) { if (b != 1) ++bad; latest[event.index] = event.token.value; }
+        if (event.kind == sound::PanelNotification::End && --b != 0) ++bad;
+    });
+    for (unsigned id = 0; id < sound::kParameterCount; ++id)
+        if (balance[id] || latest[id] != expected[id]) ++bad;
+    // Reproduce the unlocked bridge gap with the exact production setter helper.
+    {
+        TestHost::Engine engine(h);
+        auto accepted = h.service.accept(0, 2, sound::Origin::Panel);
+        if (!h.service.currentPanelEcho(accepted.token)) ++bad;
+        h.service.accept(0, 3, sound::Origin::Host);
+        if (h.service.acceptScopedPanelEcho(0, 2, accepted.token).status != sound::Acceptance::Rejected || h.soundValue(0) != 3) ++bad;
+        accepted = h.service.accept(0, 2, sound::Origin::Panel);
+        h.eb.initProgram();
+        if (h.service.acceptScopedPanelEcho(0, 2, accepted.token).status != sound::Acceptance::Rejected) ++bad;
+        const auto revision = h.service.snapshot().revision;
+        h.service.accept(0, h.soundValue(0), sound::Origin::Host);
+        if (h.service.snapshot().revision != revision + 1) ++bad;
+    }
+    return bad;
+}
+SQ8L_API int32_t sq8l_gl_sound_trace(void* v, char* out, int32_t max) { TestHost::Engine engine(B(v)->host);
+    auto& trace = B(v)->host.soundTrace;
+    const auto result = trace.str(); trace.str(""); return copyOut(result, out, max);
+}
+SQ8L_API void sq8l_gl_sound_host(void* v, unsigned id, int value) { TestHost::Engine engine(B(v)->host);
+    B(v)->host.service.accept(id, value, sound::Origin::Host);
+}
+SQ8L_API int32_t sq8l_gl_sound_get(void* v, unsigned id) { TestHost::Engine engine(B(v)->host); return B(v)->host.soundValue(id); }
+SQ8L_API void sq8l_gl_sound_action(void* v, int op) { TestHost::Engine engine(B(v)->host);
+    auto& h = B(v)->host;
+    if (op >= 0 && op <= 2) {
+        auto* b = B(v);
+        const auto& button = b->view.button(op == 0 ? "buttSync" : op == 1 ? "buttAm" : "buttMono");
+        const int x = button.left() + button.width() / 2, y = button.top() + button.height() / 2;
+        b->ctl->prepareSoundInput();
+        b->view.mouseMove(x, y, 0);
+        b->view.mouseDown(MouseButton::Left, x, y, 1);
+        b->view.mouseUp(MouseButton::Left, x, y, 0);
+    }
+    if (op == 9) { h.eb.current().setS8(ofs::AmMod, 2); h.service.replace(h.eb.current()); }
+    if (op == 3) h.eb.initProgram();
+    if (op == 4) h.eb.selectIndex(4);
+    if (op == 5) h.eb.compare(5, 0);
+    if (op == 6) h.eb.compareOff();
+    if (op == 7) { auto chunk = h.eb.getChunk(); h.eb.setChunk(chunk.data(), chunk.size()); }
+    if (op == 8) { auto sysex = h.eb.exportSysex(); h.eb.importSysex(sysex.data(), sysex.size(), true); }
+}
+SQ8L_API int32_t sq8l_gl_sound_raw(void* v, unsigned id) { TestHost::Engine engine(B(v)->host);
+    const auto* p = sound::parameter(id); return p ? sound::read(*p, B(v)->host.eb.current()) : 0;
+}
+SQ8L_API void sq8l_gl_sound_sync(void* v, int legacy) { TestHost::Engine engine(B(v)->host);
+    B(v)->host.eb.synchronize();
+    if (legacy) B(v)->host.service.replace(B(v)->host.eb.current());
+}
+SQ8L_API void sq8l_gl_sound_cancel(void* v) { TestHost::Engine engine(B(v)->host); B(v)->ctl->cancelSoundEdit(); }
+// Focus loss invokes cancelSoundEdit under Engine in SQ8LUI::uiFocus. Destruction
+// keeps this Box alive so the resulting real host trace remains inspectable.
+SQ8L_API void sq8l_gl_sound_boundary(void* v, int op) {
+    auto* b = B(v);
+    TestHost::Engine engine(b->host);
+    if (op == 0) b->ctl->cancelSoundEdit();
+    if (op == 1) b->view.cancelMouseMode();
+    if (op == 2) { b->ctl.reset(); b->host.ctl = nullptr; }
+}
+SQ8L_API uint64_t sq8l_gl_sound_revision(void* v) {
+    TestHost::Engine engine(B(v)->host);
+    return B(v)->host.service.snapshot().revision;
+}
+SQ8L_API int32_t sq8l_gl_sound_project(void* v) {
+    auto& h = B(v)->host;
+    sound::SoundParameterProjectSnapshot snapshot;
+    { TestHost::Engine engine(h); snapshot = h.lifecycle.capture(); }
+    std::vector<uint8_t> bytes;
+    sound::ValidatedSoundParameterState state;
+    if (!sound::encodeSoundParameterState(snapshot.base.data(), snapshot.base.size(), snapshot.pairs, bytes) ||
+        !sound::parseSoundParameterState(bytes.data(), bytes.size(), state)) return 0;
+    TestHost::Engine engine(h);
+    return h.lifecycle.restore(state) ? int32_t(bytes.size()) : 0;
+}
+SQ8L_API void sq8l_gl_sound_popup_action(void* v, int op, unsigned id) {
+    auto* b = B(v);
+    TestHost::Engine engine(b->host);
+    b->ui.popupAction = [b, op, id] {
+        TestHost::Engine reentrant(b->host);
+        if (op == 0) b->host.eb.initProgram();
+        if (op == 1) b->ctl->lcd().selectPageSub(0, 0);
+        if (op == 2) b->host.service.accept(id, 0, sound::Origin::Host);
+        if (op == 3) b->ctl->cancelSoundEdit();
+        if (op == 4) {
+            const auto& knob = b->view.knob(int(id));
+            b->ctl->wheel(knob.left() + knob.width() / 2, knob.top() + knob.height() / 2, -1, 0);
+        }
+    };
+}
+SQ8L_API void sq8l_gl_sound_reopen(void* v) { TestHost::Engine engine(B(v)->host);
+    auto* b = B(v);
+    b->ctl.reset();
+    b->ctl = std::make_unique<EditorController>(b->view, b->host, b->ui, false);
+    b->host.ctl = b->ctl.get();
+    b->ctl->show();
+}
 SQ8L_API void* sq8l_gl_new(int first) { return new Box(first); }
 // (port) OPTIONS -> Polyphony, the playable voices of this instance (0 = set by the program)
-SQ8L_API int32_t sq8l_gl_poly_override(void* v) { return B(v)->host.polyOverride; }
+SQ8L_API int32_t sq8l_gl_poly_override(void* v) { TestHost::Engine engine(B(v)->host); return B(v)->host.polyOverride; }
 // (port, issue #52) OPTIONS -> Output gain, the cut of this instance in dB (0 = none)
-SQ8L_API int32_t sq8l_gl_output_cut(void* v) { return B(v)->host.outputCutDb; }
+SQ8L_API int32_t sq8l_gl_output_cut(void* v) { TestHost::Engine engine(B(v)->host); return B(v)->host.outputCutDb; }
 // (port) Knob::active: false for the knobs the current page has no parameter for, which are
 // drawn faded.
-SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) {
+SQ8L_API int32_t sq8l_gl_knob_active(void* v, int32_t i) { TestHost::Engine engine(B(v)->host);
     return i >= 0 && i < 10 ? int32_t(B(v)->view.knob(i).active()) : -1;
 }
 // (port, issue #43) Whether knob slot i shows its soft button instead of the knob, i.e. the
 // page's parameter there has only two values. Kept out of the state dump for the same reason.
-SQ8L_API int32_t sq8l_gl_toggle_shown(void* v, int32_t i) {
+SQ8L_API int32_t sq8l_gl_toggle_shown(void* v, int32_t i) { TestHost::Engine engine(B(v)->host);
     return i >= 0 && i < 10 ? int32_t(B(v)->view.toggle(i).visible()) : -1;
 }
 // (port, issue #35) The mouse wheel at a form point; `delta` as the platform would report it.
-SQ8L_API void sq8l_gl_wheel(void* v, int32_t x, int32_t y, double delta, int32_t keys) {
+SQ8L_API void sq8l_gl_wheel(void* v, int32_t x, int32_t y, double delta, int32_t keys) { TestHost::Engine engine(B(v)->host);
     B(v)->ctl->wheel(x, y, delta, uint32_t(keys));
 }
-SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
+SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) { TestHost::Engine engine(B(v)->host);
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }
 SQ8L_API void sq8l_gl_free(void* v) { delete B(v); }
 
 // engine state (before show): library image (512 x 540 bytes), header (0x3c), clean flag;
 // edit buffer state image (EditBuffer::kStateSize); settings gui[6] + synth[5].
-SQ8L_API void sq8l_gl_set_library(void* v, const uint8_t* progs, const uint8_t* header, int clean) {
+SQ8L_API void sq8l_gl_set_library(void* v, const uint8_t* progs, const uint8_t* header, int clean) { TestHost::Engine engine(B(v)->host);
     std::memcpy(B(v)->host.lib.raw(), progs, size_t(SoundLibrary::kNumPrograms) * kProgramSize);
     (void)header;
     B(v)->host.lib.setClean(clean != 0);
 }
-SQ8L_API void sq8l_gl_set_editbuffer(void* v, const uint8_t* img) { B(v)->host.eb.loadState(img); }
-SQ8L_API void sq8l_gl_set_settings(void* v, const int32_t* gui, const int32_t* synth) {
+SQ8L_API void sq8l_gl_set_editbuffer(void* v, const uint8_t* img) { TestHost::Engine engine(B(v)->host); B(v)->host.eb.loadState(img); B(v)->host.service.replace(B(v)->host.eb.current()); }
+SQ8L_API void sq8l_gl_set_settings(void* v, const int32_t* gui, const int32_t* synth) { TestHost::Engine engine(B(v)->host);
     for (int i = 0; i < Settings::kNumGui; i++) B(v)->host.cfg.gui[i] = gui[i];
     for (int i = 0; i < Settings::kNumSynth; i++) B(v)->host.cfg.synth[i] = synth[i];
 }
-SQ8L_API void sq8l_gl_set_host(void* v, int maxVoices, int usedVoices, const char* dir) {
+SQ8L_API void sq8l_gl_set_host(void* v, int maxVoices, int usedVoices, const char* dir) { TestHost::Engine engine(B(v)->host);
     B(v)->host.maxVoices = maxVoices;
     B(v)->host.usedVoices = usedVoices;
     if (dir) B(v)->host.dir = dir;
 }
-SQ8L_API void sq8l_gl_set_form_origin(void* v, int x, int y) {
+SQ8L_API void sq8l_gl_set_form_origin(void* v, int x, int y) { TestHost::Engine engine(B(v)->host);
     B(v)->ui.formX = x;
     B(v)->ui.formY = y;
 }
 
 // FormShow, then the first paint (like the original's window: the LEDs fit their size to the
 // GIF frame when painted, which matters for the mouse hit test)
-SQ8L_API void sq8l_gl_show(void* v) {
+SQ8L_API void sq8l_gl_show(void* v) { TestHost::Engine engine(B(v)->host);
     B(v)->ctl->show();
     Bitmap frame;
     B(v)->view.render(frame);
@@ -361,8 +579,9 @@ SQ8L_API void sq8l_gl_show(void* v) {
 
 // ------------------------------------------------------------------ input / time
 
-SQ8L_API void sq8l_gl_mouse(void* v, int32_t msg, int32_t x, int32_t y, int32_t keys) {
+SQ8L_API void sq8l_gl_mouse(void* v, int32_t msg, int32_t x, int32_t y, int32_t keys) { TestHost::Engine engine(B(v)->host);
     Box* b = B(v);
+    b->ctl->prepareSoundInput();
     b->ui.cursor = Point{x, y};
     EditorView& ev = b->view;
     switch (msg) {
@@ -376,34 +595,34 @@ SQ8L_API void sq8l_gl_mouse(void* v, int32_t msg, int32_t x, int32_t y, int32_t 
         default: break;
     }
 }
-SQ8L_API void sq8l_gl_context_menu(void* v, int32_t x, int32_t y) {
+SQ8L_API void sq8l_gl_context_menu(void* v, int32_t x, int32_t y) { TestHost::Engine engine(B(v)->host);
     B(v)->ui.cursor = Point{x, y};
     B(v)->ctl->contextMenu(x, y);
 }
 // What the plugin UI does after a press that opened a menu or a dialog (SQ8LUI::onMouse):
 // the modal loop keeps the button up, so the control the press was made on must not keep the
 // mouse. Scripted input drives the logic without that shell, so a test says it itself.
-SQ8L_API void sq8l_gl_cancel_mouse_mode(void* v) { B(v)->view.cancelMouseMode(); }
-SQ8L_API void sq8l_gl_idle(void* v, int32_t ms) { B(v)->ctl->idle(ms); }
-SQ8L_API void sq8l_gl_timer(void* v) { B(v)->ctl->timerTick(); }
-SQ8L_API int32_t sq8l_gl_pump(void* v) { return B(v)->ctl->pump(); }
-SQ8L_API void sq8l_gl_post(void* v, uint32_t msg, uint32_t wp, int32_t lp) { B(v)->ctl->post(msg, wp, lp); }
-SQ8L_API void sq8l_gl_name_focus(void* v, int focused, const char* text) {
+SQ8L_API void sq8l_gl_cancel_mouse_mode(void* v) { TestHost::Engine engine(B(v)->host); B(v)->ctl->cancelSoundEdit(); B(v)->view.cancelMouseMode(); }
+SQ8L_API void sq8l_gl_idle(void* v, int32_t ms) { TestHost::Engine engine(B(v)->host); B(v)->ctl->idle(ms); }
+SQ8L_API void sq8l_gl_timer(void* v) { TestHost::Engine engine(B(v)->host); B(v)->ctl->timerTick(); }
+SQ8L_API int32_t sq8l_gl_pump(void* v) { TestHost::Engine engine(B(v)->host); return B(v)->ctl->pump(); }
+SQ8L_API void sq8l_gl_post(void* v, uint32_t msg, uint32_t wp, int32_t lp) { TestHost::Engine engine(B(v)->host); B(v)->ctl->post(msg, wp, lp); }
+SQ8L_API void sq8l_gl_name_focus(void* v, int focused, const char* text) { TestHost::Engine engine(B(v)->host);
     B(v)->view.progNameEdit().text = text;
     B(v)->ctl->nameEditFocus(focused != 0, text);
 }
-SQ8L_API void sq8l_gl_name_key(void* v, int key) { B(v)->ctl->nameEditKeyDown(key); }
-SQ8L_API void sq8l_gl_set_name_text(void* v, const char* text) { B(v)->view.progNameEdit().text = text; }
+SQ8L_API void sq8l_gl_name_key(void* v, int key) { TestHost::Engine engine(B(v)->host); B(v)->ctl->nameEditKeyDown(key); }
+SQ8L_API void sq8l_gl_set_name_text(void* v, const char* text) { TestHost::Engine engine(B(v)->host); B(v)->view.progNameEdit().text = text; }
 
 // scripted platform answers
-SQ8L_API void sq8l_gl_menu_choice(void* v, const int32_t* path, int32_t n) {
+SQ8L_API void sq8l_gl_menu_choice(void* v, const int32_t* path, int32_t n) { TestHost::Engine engine(B(v)->host);
     B(v)->ui.menuChoices.emplace_back(path, path + n);
 }
-SQ8L_API void sq8l_gl_msg_answer(void* v, int32_t r) { B(v)->ui.msgAnswers.push_back(r); }
-SQ8L_API void sq8l_gl_file_answer(void* v, const char* path) { B(v)->ui.fileAnswers.emplace_back(path); }
+SQ8L_API void sq8l_gl_msg_answer(void* v, int32_t r) { TestHost::Engine engine(B(v)->host); B(v)->ui.msgAnswers.push_back(r); }
+SQ8L_API void sq8l_gl_file_answer(void* v, const char* path) { TestHost::Engine engine(B(v)->host); B(v)->ui.fileAnswers.emplace_back(path); }
 // drop the scripted answers not used (popup choices, message boxes, file and modal dialogs)
 // MIDI ports: names separated by '\n'; ok = opening succeeds
-SQ8L_API void sq8l_gl_set_midi(void* v, const char* ins, const char* outs, int ok) {
+SQ8L_API void sq8l_gl_set_midi(void* v, const char* ins, const char* outs, int ok) { TestHost::Engine engine(B(v)->host);
     auto split = [](const char* s) {
         std::vector<std::string> out;
         std::string cur;
@@ -424,7 +643,7 @@ SQ8L_API void sq8l_gl_set_midi(void* v, const char* ins, const char* outs, int o
 }
 // direct calls of the page controller (like calling the original ClcdCtr methods):
 // op 0 = selectPageSub(a, b) (FUN_0045a9a0), 1 = setParam(a, b) (FUN_0045b574)
-SQ8L_API void sq8l_gl_ctr(void* v, int op, int a, int b) {
+SQ8L_API void sq8l_gl_ctr(void* v, int op, int a, int b) { TestHost::Engine engine(B(v)->host);
     LcdController& ctr = B(v)->ctl->lcd();
     if (op == 0)
         ctr.selectPageSub(a, b);
@@ -433,34 +652,34 @@ SQ8L_API void sq8l_gl_ctr(void* v, int op, int a, int b) {
 }
 // (port) The main VFD's dotted text (src/gui/logic/VfdText.h), as the boot message writes the
 // version: a '.' is the decimal point of the cell before it, not a column. Returns the width.
-SQ8L_API int32_t sq8l_gl_write_dotted(void* v, int32_t col, int32_t row, const char* text, int32_t attr) {
+SQ8L_API int32_t sq8l_gl_write_dotted(void* v, int32_t col, int32_t row, const char* text, int32_t attr) { TestHost::Engine engine(B(v)->host);
     return writeDotted(B(v)->view.lcd(), col, row, text ? text : "", attr);
 }
 // (port) The version of this build (SQ8LVersion.h, written by cmake/Version.cmake).
 SQ8L_API const char* sq8l_gl_version() { return kVersion; }
 // the host changes the program while the editor is open (effSetProgram -> master FUN_004631f0)
-SQ8L_API void sq8l_gl_host_program(void* v, int index) { B(v)->host.eb.selectIndex(index); }
+SQ8L_API void sq8l_gl_host_program(void* v, int index) { TestHost::Engine engine(B(v)->host); B(v)->host.eb.selectIndex(index); }
 // a SysEx message received on the open MIDI input (CmidiIO callback -> FUN_0048427c)
-SQ8L_API void sq8l_gl_sysex_received(void* v, const uint8_t* data, int32_t n) {
+SQ8L_API void sq8l_gl_sysex_received(void* v, const uint8_t* data, int32_t n) { TestHost::Engine engine(B(v)->host);
     B(v)->ctl->sysexReceived(data, size_t(n));
 }
-SQ8L_API void sq8l_gl_clear_answers(void* v) {
+SQ8L_API void sq8l_gl_clear_answers(void* v) { TestHost::Engine engine(B(v)->host);
     B(v)->ui.menuChoices.clear();
     B(v)->ui.msgAnswers.clear();
     B(v)->ui.fileAnswers.clear();
     B(v)->ui.modalScripts.clear();
 }
-SQ8L_API void sq8l_gl_set_file(void* v, const char* path, const uint8_t* data, int32_t n) {
+SQ8L_API void sq8l_gl_set_file(void* v, const char* path, const uint8_t* data, int32_t n) { TestHost::Engine engine(B(v)->host);
     B(v)->ui.files[path] = std::vector<uint8_t>(data, data + n);
 }
-SQ8L_API int32_t sq8l_gl_get_file(void* v, const char* path, uint8_t* out, int32_t max) {
+SQ8L_API int32_t sq8l_gl_get_file(void* v, const char* path, uint8_t* out, int32_t max) { TestHost::Engine engine(B(v)->host);
     auto f = B(v)->ui.files.find(path);
     if (f == B(v)->ui.files.end()) return -1;
     if (out) std::memcpy(out, f->second.data(), std::min<size_t>(f->second.size(), size_t(max)));
     return int32_t(f->second.size());
 }
 // one modal dialog: actions separated by ';' ("item 5;compare;bank;ok", "cancel")
-SQ8L_API void sq8l_gl_modal_script(void* v, const char* script) {
+SQ8L_API void sq8l_gl_modal_script(void* v, const char* script) { TestHost::Engine engine(B(v)->host);
     std::vector<std::string> acts;
     std::string s = script, cur;
     for (char c : s) {
@@ -475,7 +694,7 @@ SQ8L_API void sq8l_gl_modal_script(void* v, const char* script) {
     B(v)->ui.modalScripts.push_back(acts);
 }
 
-SQ8L_API int32_t sq8l_gl_events(void* v, char* out, int32_t max) {
+SQ8L_API int32_t sq8l_gl_events(void* v, char* out, int32_t max) { TestHost::Engine engine(B(v)->host);
     std::string s = B(v)->ui.events.str();
     B(v)->ui.events.str("");
     s += B(v)->host.log.str();
@@ -485,16 +704,16 @@ SQ8L_API int32_t sq8l_gl_events(void* v, char* out, int32_t max) {
 
 // ------------------------------------------------------------------ state
 
-SQ8L_API void sq8l_gl_editbuffer(void* v, uint8_t* img) { B(v)->host.eb.saveState(img); }
-SQ8L_API void sq8l_gl_library(void* v, uint8_t* progs) {
+SQ8L_API void sq8l_gl_editbuffer(void* v, uint8_t* img) { TestHost::Engine engine(B(v)->host); B(v)->host.eb.synchronize(); B(v)->host.eb.saveState(img); }
+SQ8L_API void sq8l_gl_library(void* v, uint8_t* progs) { TestHost::Engine engine(B(v)->host);
     std::memcpy(progs, B(v)->host.lib.raw(), size_t(SoundLibrary::kNumPrograms) * kProgramSize);
 }
-SQ8L_API void sq8l_gl_settings(void* v, int32_t* out) {
+SQ8L_API void sq8l_gl_settings(void* v, int32_t* out) { TestHost::Engine engine(B(v)->host);
     for (int i = 0; i < Settings::kNumGui; i++) out[i] = B(v)->host.cfg.gui[i];
     for (int i = 0; i < Settings::kNumSynth; i++) out[6 + i] = B(v)->host.cfg.synth[i];
 }
 
-SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
+SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) { TestHost::Engine engine(B(v)->host);
     Box* b = B(v);
     EditorView& ev = b->view;
     EditorController& c = *b->ctl;
@@ -550,7 +769,7 @@ SQ8L_API int32_t sq8l_gl_state(void* v, char* out, int32_t max) {
 }
 
 // The page tree as built.
-SQ8L_API int32_t sq8l_gl_pages(void* v, char* out, int32_t max) {
+SQ8L_API int32_t sq8l_gl_pages(void* v, char* out, int32_t max) { TestHost::Engine engine(B(v)->host);
     LcdController& ctr = B(v)->ctl->lcd();
     std::ostringstream s;
     s << "[";

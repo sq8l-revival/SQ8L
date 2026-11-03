@@ -29,6 +29,10 @@
 namespace sq8l {
 
 inline std::string userDataDir() {
+    // Explicit fixture/portable-storage override; leave platform defaults unchanged.
+    if (const char* directory = std::getenv("SQ8L_DATA_DIRECTORY")) {
+        if (*directory) return std::string(directory) + "/";
+    }
 #if defined(_WIN32)
     const char* base = std::getenv("APPDATA");
     std::string dir = std::string(base ? base : ".") + "\\SQ8L\\";

@@ -1,0 +1,439 @@
+--- a/distrho/src/DistrhoPluginVST3.cpp
++++ b/distrho/src/DistrhoPluginVST3.cpp
+@@ -55,9 +55,14 @@
+ #include "travesty/host.h"
+ #include "travesty/unit.h"
+ 
++#include <atomic>
+ #include <map>
+ #include <string>
+ #include <vector>
++
++#ifndef DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++# define DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH 0
++#endif
+ 
+ START_NAMESPACE_DISTRHO
+ 
+@@ -669,7 +674,7 @@
+ 
+         if (const uint32_t extraParameterCount = fParameterCount + kVst3InternalParameterBaseCount)
+         {
+-            fCachedParameterValues = new float[extraParameterCount];
++            fCachedParameterValues = new CachedParameterValue[extraParameterCount];
+ 
+            #if DPF_VST3_USES_SEPARATE_CONTROLLER
+             fCachedParameterValues[kVst3InternalParameterBufferSize] = fPlugin.getBufferSize();
+@@ -685,12 +690,14 @@
+             for (uint32_t i=0; i < fParameterCount; ++i)
+                 fCachedParameterValues[kVst3InternalParameterBaseCount + i] = fPlugin.getParameterDefault(i);
+ 
+-            fParameterValuesChangedDuringProcessing = new bool[extraParameterCount];
+-            std::memset(fParameterValuesChangedDuringProcessing, 0, sizeof(bool)*extraParameterCount);
++            fParameterValuesChangedDuringProcessing = new ParameterChanged[extraParameterCount];
++            for (uint32_t i=0; i<extraParameterCount; ++i)
++                fParameterValuesChangedDuringProcessing[i] = false;
+ 
+            #if DISTRHO_PLUGIN_HAS_UI
+-            fParameterValueChangesForUI = new bool[extraParameterCount];
+-            std::memset(fParameterValueChangesForUI, 0, sizeof(bool)*extraParameterCount);
++            fParameterValueChangesForUI = new ParameterChanged[extraParameterCount];
++            for (uint32_t i=0; i<extraParameterCount; ++i)
++                fParameterValueChangesForUI[i] = false;
+            #endif
+         }
+ 
+@@ -748,6 +755,12 @@
+ 
+     void _setNormalizedPluginParameterValue(const uint32_t index, const double normalized)
+     {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        // Reject invalid host numbers before boolean/integer coercion or cache writes.
++        if (!std::isfinite(normalized))
++            return;
++       #endif
++
+         const ParameterRanges& ranges(fPlugin.getParameterRanges(index));
+         const uint32_t hints = fPlugin.getParameterHints(index);
+         float value = ranges.getUnnormalizedValue(normalized);
+@@ -758,7 +771,7 @@
+             const float midRange = ranges.min + (ranges.max - ranges.min) / 2.f;
+             const bool isHigh = value > midRange;
+ 
+-            if (isHigh == (fCachedParameterValues[kVst3InternalParameterBaseCount + index] > midRange))
++            if (!DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH && isHigh == (fCachedParameterValues[kVst3InternalParameterBaseCount + index] > midRange))
+                 return;
+ 
+             value = isHigh ? ranges.max : ranges.min;
+@@ -767,7 +780,7 @@
+         {
+             const int ivalue = d_roundToInt(value);
+ 
+-            if (d_roundToInt(fCachedParameterValues[kVst3InternalParameterBaseCount + index]) == ivalue)
++            if (!DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH && d_roundToInt(static_cast<float>(fCachedParameterValues[kVst3InternalParameterBaseCount + index])) == ivalue)
+                 return;
+ 
+             value = ivalue;
+@@ -775,7 +788,7 @@
+         else
+         {
+             // deal with low resolution of some hosts, which convert double to float internally and lose precision
+-            if (std::abs(ranges.getNormalizedValue(static_cast<double>(fCachedParameterValues[kVst3InternalParameterBaseCount + index])) - normalized) < 0.0000001)
++            if (!DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH && std::abs(ranges.getNormalizedValue(static_cast<double>(fCachedParameterValues[kVst3InternalParameterBaseCount + index])) - normalized) < 0.0000001)
+                 return;
+         }
+ 
+@@ -792,6 +805,9 @@
+ 
+         if (!fPlugin.isParameterOutputOrTrigger(index))
+             fPlugin.setParameterValue(index, value);
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        fCachedParameterValues[kVst3InternalParameterBaseCount + index] = fPlugin.getParameterValue(index);
++       #endif
+     }
+ 
+     // ----------------------------------------------------------------------------------------------------------------
+@@ -1143,6 +1159,22 @@
+                             if (fPlugin.getParameterSymbol(j) != key)
+                                 continue;
+ 
++                           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                            {
++                                // Legacy explicit state is an input, including equal pair values.
++                                // Preserve fractions for the shared codec and reject nonfinite
++                                // numbers before changing accepted state, mirrors or notifications.
++                                const ScopedSafeLocale ssl;
++                                const double input = std::atof(value.buffer());
++                                if (!std::isfinite(input))
++                                    break;
++                                const ParameterRanges& ranges(fPlugin.getParameterRanges(j));
++                                fvalue = static_cast<float>(input < ranges.min ? ranges.min
++                                                          : input > ranges.max ? ranges.max : input);
++                                fPlugin.setParameterValue(j, fvalue);
++                                fvalue = fPlugin.getParameterValue(j);
++                            }
++                           #else
+                             if (fPlugin.getParameterHints(j) & kParameterIsInteger)
+                             {
+                                 fvalue = std::atoi(value.buffer());
+@@ -1152,6 +1184,7 @@
+                                 const ScopedSafeLocale ssl;
+                                 fvalue = std::atof(value.buffer());
+                             }
++                           #endif
+ 
+                             fCachedParameterValues[kVst3InternalParameterBaseCount + j] = fvalue;
+ 
+@@ -1173,7 +1206,9 @@
+                                 fParameterValueChangesForUI[kVst3InternalParameterBaseCount + j] = true;
+                             }
+                            #endif
++                           #if !DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
+                             fPlugin.setParameterValue(j, fvalue);
++                           #endif
+                             break;
+                         }
+                     }
+@@ -1185,6 +1220,9 @@
+             }
+         }
+ 
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        componentValuesChanged = refreshSQ8LParameters() || componentValuesChanged;
++       #endif
+         if (fComponentHandler != nullptr && componentValuesChanged)
+             v3_cpp_obj(fComponentHandler)->restart_component(fComponentHandler, V3_RESTART_PARAM_VALUES_CHANGED);
+ 
+@@ -1197,7 +1235,7 @@
+                     continue;
+                 fParameterValueChangesForUI[kVst3InternalParameterBaseCount + i] = false;
+                 sendParameterSetToUI(kVst3InternalParameterCount + i,
+-                                     fCachedParameterValues[kVst3InternalParameterBaseCount + i]);
++                                     observedParameterValue(i));
+             }
+         }
+        #endif
+@@ -1266,7 +1304,7 @@
+         }
+        #endif
+ 
+-        if (paramCount != 0)
++        if (paramCount != 0 && !DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH)
+         {
+             state += "__dpf_parameters_begin__\xff";
+ 
+@@ -1496,6 +1534,20 @@
+ 
+         if (data->nframes <= 0)
+         {
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            if (v3_param_changes** const changes = data->input_params)
++                for (int32_t i = 0; i < v3_cpp_obj(changes)->get_param_count(changes); ++i)
++                {
++                    v3_param_value_queue** const queue = v3_cpp_obj(changes)->get_param_data(changes, i);
++                    if (queue == nullptr) continue;
++                    const v3_param_id id = v3_cpp_obj(queue)->get_param_id(queue);
++                    const int32_t count = v3_cpp_obj(queue)->get_point_count(queue);
++                    int32_t offset; double normalized;
++                    if (id >= kVst3InternalParameterCount && id < fVst3ParameterCount && count > 0 &&
++                        v3_cpp_obj(queue)->get_point(queue, count - 1, &offset, &normalized) == V3_OK)
++                        _setNormalizedPluginParameterValue(id - kVst3InternalParameterCount, normalized);
++                }
++           #endif
+             updateParametersFromProcessing(data->output_params, 0);
+             return V3_OK;
+         }
+@@ -2144,7 +2196,7 @@
+         const uint32_t index = static_cast<uint32_t>(rindex - kVst3InternalParameterCount);
+         DISTRHO_SAFE_ASSERT_UINT2_RETURN(index < fParameterCount, index, fParameterCount, 0.0);
+ 
+-        return _getNormalizedParameterValue(index, fCachedParameterValues[kVst3InternalParameterBaseCount + index]);
++        return _getNormalizedParameterValue(index, observedParameterValue(index));
+     }
+ 
+     v3_result setParameterNormalized(const v3_param_id rindex, const double normalized)
+@@ -2211,15 +2263,47 @@
+ 
+         DISTRHO_SAFE_ASSERT_UINT2_RETURN(rindex >= kVst3InternalParameterCount, rindex, kVst3InternalParameterCount, V3_INVALID_ARG);
+ 
+-       #if DPF_VST3_USES_SEPARATE_CONTROLLER
++       #if DPF_VST3_USES_SEPARATE_CONTROLLER || DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
+         const uint32_t index = static_cast<uint32_t>(rindex - kVst3InternalParameterCount);
+         DISTRHO_SAFE_ASSERT_UINT2_RETURN(index < fParameterCount, index, fParameterCount, V3_INVALID_ARG);
+ 
+-        if (fIsComponent) {
++        if (true
++           #if DPF_VST3_USES_SEPARATE_CONTROLLER
++            && fIsComponent
++           #endif
++           ) {
+             DISTRHO_SAFE_ASSERT_RETURN(!fPlugin.isParameterOutputOrTrigger(index), V3_INVALID_ARG);
+         }
+ 
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        // Host -> controller synchronization is an observation, not an engine edit.
++        // Processor acceptance occurs exclusively through process input queues.
++        const ParameterRanges& ranges(fPlugin.getParameterRanges(index));
++        float value = ranges.getUnnormalizedValue(normalized);
++        const uint32_t hints = fPlugin.getParameterHints(index);
++        if (hints & kParameterIsBoolean)
++            value = value > ranges.min + (ranges.max-ranges.min)/2.f ? ranges.max : ranges.min;
++        else if (hints & kParameterIsInteger)
++            value = d_roundToInt(value);
++        SQ8LAcceptedParameter accepted;
++        if (readSQ8LAcceptedParameter(index, accepted))
++        {
++            // VST3 controller writes are main-thread observations. Readers on
++            // other threads get one bounded coherent attempt, then accepted state.
++            ControllerObservation& observation(fSQ8LControllerObservations[index]);
++            observation.version.fetch_add(1);
++            observation.value = value;
++            observation.acceptedValue = accepted.value;
++            observation.generation = accepted.generation;
++            observation.revision = accepted.revision;
++            observation.version.fetch_add(1);
++        }
++       #if DISTRHO_PLUGIN_HAS_UI
++        fParameterValueChangesForUI[kVst3InternalParameterBaseCount + index] = true;
++       #endif
++       #else
+         _setNormalizedPluginParameterValue(index, normalized);
++       #endif
+        #endif
+ 
+         return V3_OK;
+@@ -2296,6 +2380,9 @@
+         if (std::strcmp(msgid, "init") == 0)
+         {
+             fConnectedToUI = true;
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            refreshSQ8LController();
++           #endif
+ 
+            #if DPF_VST3_USES_SEPARATE_CONTROLLER
+             fParameterValueChangesForUI[kVst3InternalParameterSampleRate] = false;
+@@ -2332,7 +2419,7 @@
+             {
+                 fParameterValueChangesForUI[kVst3InternalParameterBaseCount + i] = false;
+                 sendParameterSetToUI(kVst3InternalParameterCount + i,
+-                                     fCachedParameterValues[kVst3InternalParameterBaseCount + i]);
++                                     observedParameterValue(i));
+             }
+ 
+             sendReadyToUI();
+@@ -2346,6 +2433,9 @@
+ 
+         if (std::strcmp(msgid, "idle") == 0)
+         {
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            refreshSQ8LController();
++           #endif
+            #if DPF_VST3_USES_SEPARATE_CONTROLLER
+             if (fParameterValueChangesForUI[kVst3InternalParameterSampleRate])
+             {
+@@ -2365,12 +2455,16 @@
+ 
+             for (uint32_t i=0; i<fParameterCount; ++i)
+             {
++               #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                if (! fParameterValueChangesForUI[kVst3InternalParameterBaseCount + i].exchange(false))
++                    continue;
++               #else
+                 if (! fParameterValueChangesForUI[kVst3InternalParameterBaseCount + i])
+                     continue;
+-
+                 fParameterValueChangesForUI[kVst3InternalParameterBaseCount + i] = false;
++               #endif
+                 sendParameterSetToUI(kVst3InternalParameterCount + i,
+-                                     fCachedParameterValues[kVst3InternalParameterBaseCount + i]);
++                                     observedParameterValue(i));
+             }
+ 
+             sendReadyToUI();
+@@ -2562,11 +2656,86 @@
+   #endif
+ 
+     // Temporary data
++   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    // Both cursors are read/written only inside the engine-owned snapshot hook.
++    // Idle discovery cannot consume the process-output obligation (or vice versa).
++    uint64_t fSQ8LParameterGeneration = 0;
++    uint64_t fSQ8LControllerGeneration = 0;
++    struct ControllerObservation {
++        std::atomic<uint64_t> version{0}, generation{0}, revision{0};
++        std::atomic<float> value{0.f}, acceptedValue{0.f};
++    };
++    ControllerObservation fSQ8LControllerObservations[SQ8LParameterRefreshHooks::kParameterCount];
++
++    bool readSQ8LAcceptedParameter(uint32_t index, SQ8LAcceptedParameter& out)
++    {
++        auto* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++            static_cast<Plugin*>(fPlugin.getInstancePointer()));
++        return hooks != nullptr && hooks->sq8lReadAcceptedParameter(index, out);
++    }
++
++    void refreshSQ8LController()
++    {
++        if (refreshSQ8LParameters(true) && fComponentHandler != nullptr)
++            v3_cpp_obj(fComponentHandler)->restart_component(fComponentHandler, V3_RESTART_PARAM_VALUES_CHANGED);
++    }
++
++    bool refreshSQ8LParameters(const bool controller = false)
++    {
++        auto* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++            static_cast<Plugin*>(fPlugin.getInstancePointer()));
++        float values[SQ8LParameterRefreshHooks::kParameterCount];
++        if (hooks == nullptr || !hooks->sq8lCopyParameterRefresh(
++                controller ? fSQ8LControllerGeneration : fSQ8LParameterGeneration, values, fParameterCount))
++            return false;
++        for (uint32_t i = 0; i < fParameterCount; ++i)
++        {
++            const uint32_t index = kVst3InternalParameterBaseCount + i;
++            fCachedParameterValues[index] = values[i];
++            if (!controller)
++                fParameterValuesChangedDuringProcessing[index] = true;
++           #if DISTRHO_PLUGIN_HAS_UI
++            fParameterValueChangesForUI[index] = true;
++           #endif
++        }
++        return true;
++    }
++   #endif
++    // Registered values are always revalidated against authoritative accepted
++    // stamps. Cached snapshot values are observations, never semantic inputs.
++    float observedParameterValue(const uint32_t index)
++    {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        ControllerObservation& observation(fSQ8LControllerObservations[index]);
++        const uint64_t version = observation.version.load();
++        const uint64_t generation = observation.generation.load();
++        const uint64_t revision = observation.revision.load();
++        const float value = observation.value.load();
++        const float acceptedValue = observation.acceptedValue.load();
++        SQ8LAcceptedParameter accepted;
++        if (readSQ8LAcceptedParameter(index, accepted))
++        {
++            if (version != 0 && !(version & 1) && version == observation.version.load()
++                && generation == accepted.generation && revision == accepted.revision
++                && acceptedValue == accepted.value)
++                return value;
++            return accepted.value;
++        }
++       #endif
++        return fCachedParameterValues[kVst3InternalParameterBaseCount + index];
++    }
++   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    using CachedParameterValue = std::atomic<float>;
++    using ParameterChanged = std::atomic<bool>;
++   #else
++    using CachedParameterValue = float;
++    using ParameterChanged = bool;
++   #endif
+     const uint32_t fParameterCount;
+     const uint32_t fVst3ParameterCount; // full offset + real
+-    float* fCachedParameterValues; // basic offset + real
++    CachedParameterValue* fCachedParameterValues; // basic offset + real
+     float* fDummyAudioBuffer;
+-    bool* fParameterValuesChangedDuringProcessing; // basic offset + real
++    ParameterChanged* fParameterValuesChangedDuringProcessing; // basic offset + real
+    #if DISTRHO_PLUGIN_NUM_INPUTS > 0
+     bool fEnabledInputs[DISTRHO_PLUGIN_NUM_INPUTS];
+    #endif
+@@ -2577,7 +2746,7 @@
+     const bool fIsComponent;
+    #endif
+    #if DISTRHO_PLUGIN_HAS_UI
+-    bool* fParameterValueChangesForUI; // basic offset + real
++    ParameterChanged* fParameterValueChangesForUI; // basic offset + real
+     bool fConnectedToUI;
+    #endif
+    #if DISTRHO_PLUGIN_WANT_LATENCY
+@@ -2986,6 +3155,11 @@
+ 
+     void updateParametersFromProcessing(v3_param_changes** const outparamsptr, const int32_t offset)
+     {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        // run() has released engine ownership. Only format output queues are used
++        // here; the host delivers them to its controller, including stopped flush.
++        refreshSQ8LParameters();
++       #endif
+         DISTRHO_SAFE_ASSERT_RETURN(outparamsptr != nullptr,);
+ 
+         float curValue, defValue;
+@@ -3010,7 +3184,7 @@
+                 // NOTE: no output parameter support in VST3, simulate it here
+                 curValue = fPlugin.getParameterValue(i);
+ 
+-                if (d_isEqual(curValue, fCachedParameterValues[kVst3InternalParameterBaseCount + i]))
++                if (d_isEqual(curValue, static_cast<float>(fCachedParameterValues[kVst3InternalParameterBaseCount + i])))
+                     continue;
+             }
+             else if (fPlugin.isParameterTrigger(i))
+@@ -3025,9 +3199,14 @@
+                 curValue = defValue;
+                 fPlugin.setParameterValue(i, curValue);
+             }
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            else if (fParameterValuesChangedDuringProcessing[kVst3InternalParameterBaseCount + i].exchange(false))
++            {
++           #else
+             else if (fParameterValuesChangedDuringProcessing[kVst3InternalParameterBaseCount + i])
+             {
+                 fParameterValuesChangedDuringProcessing[kVst3InternalParameterBaseCount + i] = false;
++           #endif
+                 curValue = fPlugin.getParameterValue(i);
+             }
+             else
+@@ -3043,7 +3222,12 @@
+             normalized = _getNormalizedParameterValue(i, curValue);
+ 
+             if (! addParameterDataToHostOutputEvents(outparamsptr, kVst3InternalParameterCount + i, normalized, offset))
++            {
++               #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                fParameterValuesChangedDuringProcessing[kVst3InternalParameterBaseCount + i] = true;
++               #endif
+                 break;
++            }
+         }
+ 
+        #if DISTRHO_PLUGIN_WANT_LATENCY

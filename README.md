@@ -199,6 +199,29 @@ cmake --build build --target sq8l_render_check
 This renders 243 MIDI cases and compares a hash of the output with the hash of the original
 plugin's output.
 
+## Sound parameter automation
+
+The host exposes 256 sound parameters, organized into OSC, DCA, ENV, LFO, Matrix,
+Filter, Final and Mode groups. Parameter names use readable labels such as
+`OSC 1 Mod 1 Source` and `ENV 1 Time 1 (Sync)`.
+
+Envelope times and LFO rates have separate `(Free)` and `(Sync)` parameters. The
+corresponding `Sync` switch selects which value drives the sound. Both values can
+be retained in project state. See [sound parameter automation](docs/SOUND_PARAMETERS.md)
+for state behavior, implementation boundaries and regression checks.
+
+On macOS, build and stage signed universal bundles, preview installation, then install
+into your user plug-in folders:
+
+```sh
+./build-macos.sh
+./install-macos.sh --dry-run
+./install-macos.sh
+```
+
+Quit the host before installation, then restart it and rescan plug-ins if necessary.
+The bundles are ad-hoc signed; these scripts do not produce a notarized release.
+
 ## How it was made
 
 - `oracle/` — a small Win32 emulator (Unicorn) that runs the **original** `SQ8L.dll` on any

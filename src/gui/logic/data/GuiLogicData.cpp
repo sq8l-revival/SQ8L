@@ -433,62 +433,6 @@ const PageSetup kPages[kNumPages] = {
      }},
 };
 
-// oscillator waves (FUN_00461114)
-const char* const kWaveNames[75] = {
-    "   SAW", "  BELL", "  SINE", "SQUARE", " PULSE", "NOISE1", "NOISE2", "NOISE3",
-    "  BASS", " PIANO", "EL PNO", "VOICE1", "VOICE2", "  KICK", "  REED", " ORGAN",
-    "SYNTH1", "SYNTH2", "SYNTH3", "FORMT1", "FORMT2", "FORMT3", "FORMT4", "FORMT5",
-    "PULSE2", "SQR  2", "4 OCTS", " PRIME", "BASS 2", "E PNO2", "OCTAVE", " OCT+5",
-    "SAW  2", "TRIANG", "REED 2", "REED 3", "GRIT 1", "GRIT 2", "GRIT 3", "GLINT1",
-    "GLINT2", "GLINT3", "  CLAV", " BRASS", "STRING", "DIGIT1", "DIGIT2", "BELL 2",
-    " ALIEN", "BREATH", "VOICE3", " STEAM", " METAL", " CHIME", "BOWING", "PICK 1",
-    "PICK 2", "MALLET", "  SLAP", " PLINK", " PLUCK", " PLUNK", " CLICK", " CHIFF",
-    " THUMP", "LOGDRM", "KICK 2", " SNARE", "TOMTOM", "HI-HAT", "DRUMS1", "DRUMS2",
-    "DRUMS3", "DRUMS4", "DRUMS5",
-};
-// modulation sources -1..145 (FUN_00461184)
-const char* const kModSourceNames[147] = {
-    " *OFF*", "  LFO1", "  LFO2", "  LFO3", "  LFO4", "  ENV1", "  ENV2", "  ENV3",
-    "  ENV4", "   VEL", " VEL-X", "  KEYB", " KEYB2", " PRESS", "  MAT1", "  MAT2",
-    "  MAT3", "  BANK", " WHEEL", "BREATH", " CTR 3", " PEDAL", " PORTA", "  DATA",
-    "VOLUME", "BALANC", " CTR 9", "   PAN", "EXPRES", "EFFCT1", "EFFCT2", "CTR 14",
-    "CTR 15", "GENP 1", "GENP 2", "GENP 3", "GENP 4", "CTR 20", "CTR 21", "CTR 22",
-    "CTR 23", "CTR 24", "CTR 25", "CTR 26", "CTR 27", "CTR 28", "CTR 29", "CTR 30",
-    "CTR 31", "BANKLO", "WHEELL", "BRTHLO", "CTR 35", "PEDALL", "PORTAL", "DATALO",
-    "VOL LO", "BANKLO", "CTR 41", "PAN LO", "EXPRLO", "EFF1LO", "EFF2LO", "CTR 46",
-    "CTR 47", "CTR 48", "CTR 49", "CTR 50", "CTR 51", "CTR 52", "CTR 53", "CTR 54",
-    "CTR 55", "CTR 56", "CTR 57", "CTR 58", "CTR 59", "CTR 60", "CTR 61", "CTR 62",
-    "CTR 63", "HLDPED", "PORTON", "SUSPED", "SFTPED", "LEGPED", "HLD2PD", "VARIAT",
-    "TIMBRE", "RELEAS", "ATTACK", "BRIGHT", " SND 6", " SND 7", " SND 8", " SND 9",
-    "SND 10", "GENP1H", "GENP2H", "GENP3H", "GENP4H", "CTR 84", "CTR 85", "CTR 86",
-    "CTR 87", "CTR 88", "CTR 89", "CTR 90", "EFFLEV", "TREMOL", "CHORUS", "CELEST",
-    "PHASER", "DATINC", "DATDEC", "NREGLO", "NREGHI", " REGLO", " REGHI", "CTR102",
-    "CTR103", "CTR104", "CTR105", "CTR106", "CTR107", "CTR108", "CTR109", "CTR110",
-    "CTR111", "CTR112", "CTR113", "CTR114", "CTR115", "CTR116", "CTR117", "CTR118",
-    "CTR119", "SNDOFF", "CTROFF", " LOCAL", "ALLOFF", "OMNOFF", "OMNION", "  MONO",
-    "  POLY", "CHPRES", "  BEND",
-};
-// LFO basic waves (FUN_004612e4)
-const char* const kLfoWaveNames[5] = {
-    "TRI", "SAW", "SQR", "NOI", "BIP",
-};
-// EXP/TAN shapes (FUN_00461928, LFO waves 75..82)
-const char* const kShapeNames[8] = {
-    "EXP ", "EXP2", "EXP3", "EXP4", "TAN ", "TAN2", "TAN3", "TAN4",
-};
-// pitch bend modes (FUN_004619d4)
-const char* const kBendModeNames[7] = {
-    "ALL", "HELD", "NEW", "NEWH", "HELD2", "NEW2", "NEWH2",
-};
-// LFO waves 5..74 -> oscillator wave (FUN_004613dc)
-const uint8_t kLfoWaveMap[70] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-    14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-    28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
-    42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
-    56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
-};
-
 const char kLcdChars[] = " \"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}~";
 const char kNumLcdChars[] = " 0123456789ABCDPU";
 

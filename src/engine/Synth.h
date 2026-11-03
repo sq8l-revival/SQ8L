@@ -122,8 +122,9 @@ public:
     std::string programName() const;                      // effGetProgramName (edit buffer name)
     std::string programNameIndexed(int32_t index) const;  // effGetProgramNameIndexed
     void setProgramName(const std::string& name);         // effSetProgramName
+    void copyChunk(EditBuffer::Chunk&); // same base/options owner, no allocation
     std::vector<uint8_t> getChunk();                      // effGetChunk (CSynth_v018)
-    int32_t setChunk(const uint8_t* data, size_t size);   // effSetChunk (CSynth_v019): 0 ok, -1 error
+    int32_t setChunk(const uint8_t* data, size_t size, bool notifyCompletion = true);   // effSetChunk (CSynth_v019): 0 ok, -1 error
 
     Master& master() { return *master_; }
     // (port) Playable voices. The program's (EMU -> VOICES, ofs::Polyphony) unless this

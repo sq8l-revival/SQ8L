@@ -74,6 +74,7 @@ EditorController::EditorController(EditorView& view, EditorHost& host, PlatformU
 
 EditorController::~EditorController()
 {
+    cancelSoundEdit();
     if (hideCursorEnabled())
     {
       showCursor();
@@ -320,6 +321,8 @@ void EditorController::show() {  // TplugEditForm_FormShow
     firstShow_ = false;
     // ---- FUN_00483d9c (the parts that are not view set-up, see EditorView)
     ctr_ = std::make_unique<LcdController>(view_.lcd(), &host_.editBuffer(), this);
+    ctr_->setHost(&host_);
+    soundGeneration_ = host_.soundGeneration();
     ctr_->buildPages();  // FUN_0047e340 (+ the port's VOICES control)
     ctr_->numKnobs = 10;
     ctr_->setRefreshDiv(1);             // FUN_0045a730(ctr, 1)
@@ -344,6 +347,20 @@ void EditorController::show() {  // TplugEditForm_FormShow
 }
 
 void EditorController::wireControls() {
+    auto guardSoundClick = [this](Control& control) {
+        auto click = control.onClick;
+        control.onMouseDown = [this](Control& c, MouseButton b, ShiftState, int, int) {
+            if (b == MouseButton::Left) {
+                soundPress_ = &c;
+                soundPressGeneration_ = host_.soundGeneration();
+            }
+        };
+        control.onClick = [this, click](Control& c) {
+            const bool valid = soundPress_ == &c && soundPressGeneration_ == host_.soundGeneration();
+            soundPress_ = nullptr;
+            if (valid && click) click(c);
+        };
+    };
     // (port) How the view moves the cursor while the pointer is locked, see hideCursor.
     // Reading it back lets the lock notice a platform that refuses to move it.
     view_.warpCursor = [this](int& x, int& y) {
@@ -357,10 +374,11 @@ void EditorController::wireControls() {
         Knob& k = view_.knob(i);
         // (port) The cursor goes away for the length of a turn (issue #25). Not on a knob the
         // page has no parameter for (an empty range): turning it does nothing.
-        k.onEditBegin = [this](Knob& kn) {
+        k.onEditBegin = [this, i](Knob& kn) {
+            ctr_->beginEdit(i);
             if (kn.maxValue() > kn.minValue()) hideCursor();
         };
-        k.onEditEnd = [this](Knob&) { showCursor(); };
+        k.onEditEnd = [this](Knob&) { ctr_->endEdit(); showCursor(); };
         k.onDblClick = [this, i](Control&) {  // 0x485148
             LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
             if (p) ctr_->cellDoubleClick(p->x, p->y);
@@ -505,12 +523,15 @@ void EditorController::wireControls() {
         else if (n == "pscrDownButton")
             b->onClick = [this](Control&) { ctr_->nextSubPage(); };
     }
+    for (const char* name : {"buttSync", "buttAm", "buttMono"})
+        guardSoundClick(view_.button(name));
     // (port, issue #43) the soft buttons of the two-state slots: they flip
     // their parameter and show its hint, like the knob they stand in for (the
     // loop above gave them the static one)
     for (int i = 0; i < kNumKnobs; i++) {
       GraphButton &t = view_.toggle(i);
       t.onClick = [this, i](Control &) { toggleKnobParam(i); };
+      guardSoundClick(t);
       t.onMouseMove = [this, i](Control &, ShiftState, int, int) {
         LcdParam *p =
             ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
@@ -572,7 +593,39 @@ int EditorController::pump(int limit) {
     return n;
 }
 
+void EditorController::lcdCancelEdit() {
+    soundPress_ = nullptr;
+    wheelAccum_ = 0.0;
+    wheelKnob_ = -1;
+    for (int i = 0; i < kNumKnobs; ++i) view_.knob(i).cancelDrag();
+    lcdDragKnob_ = lcdToggleParam_ = -1;
+    view_.cancelMouseMode();
+    showCursor();
+}
+void EditorController::cancelSoundEdit() {
+    if (ctr_) ctr_->cancelEdit();
+}
+void EditorController::prepareModalInput() {
+    if (ctr_) ctr_->endEdit();
+    lcdCancelEdit();
+}
+void EditorController::prepareSoundInput() {
+    if (host_.soundGeneration() != soundGeneration_) {
+        cancelSoundEdit();
+        soundGeneration_ = host_.soundGeneration();
+    }
+    // Resolve accepted modes before dispatching physical input, even before idle.
+    // A changed binding cancels the old capture through lcdCancelEdit.
+    ctr_->refresh(false);
+}
 void EditorController::idle(int ms) {
+    if (host_.soundGeneration() != soundGeneration_) {
+        cancelSoundEdit();
+        soundGeneration_ = host_.soundGeneration();
+    }
+    ctr_->advanceEdit(ms);
+    ctr_->refresh(true);
+    updateLeds(false);
     const int n = ms / 20 > 1 ? ms / 20 : 1;
     for (int i = 0; i < n; i++) {
         timerTick();
@@ -704,6 +757,7 @@ void EditorController::showCursor() {
 // ==================================================================== display refresh
 
 void EditorController::refreshAll() {  // FUN_004842d8
+    cancelSoundEdit();
     ctr_->refresh(false);
     ctr_->drawAll();
     refreshProgram();
@@ -721,11 +775,10 @@ void EditorController::refreshProgram() {  // FUN_00484304
 }
 
 void EditorController::updateLeds(bool redraw) {  // FUN_004843cc
-    const Program& p = host_.editBuffer().current();
-    view_.ledSync().setValue(p.s8(ofs::Sync) < 1 ? 0.0f : 1.0f);
-    const int am = p.s8(ofs::AmMod);
+    view_.ledSync().setValue(host_.soundValue(sound::parameterForField(324)->index) < 1 ? 0.0f : 1.0f);
+    const int am = host_.soundButtonValue(sound::parameterForField(325)->index);
     view_.ledAm().setValue(am == 1 ? 1.0f : 0.0f);
-    view_.ledMono().setValue(p.s8(ofs::Mono) < 1 ? 0.0f : 1.0f);
+    view_.ledMono().setValue(host_.soundValue(sound::parameterForField(326)->index) < 1 ? 0.0f : 1.0f);
     if (redraw) {
         ctr_->refresh(false);
         ctr_->drawAll();
@@ -1122,6 +1175,7 @@ int EditorController::knobAt(int x, int y) const {
 // platform's own, whatever its scale: what one notch of it is worth is learned rather than
 // assumed, since a device may report a whole detent at once or a trickle of small values.
 void EditorController::wheel(int x, int y, double delta, uint32_t keys) {
+  prepareSoundInput();
   if (delta == 0.0)
     return;
   int knob = knobAt(x, y);
@@ -1135,6 +1189,7 @@ void EditorController::wheel(int x, int y, double delta, uint32_t keys) {
       knob = p->knob;
   }
   if (knob < 0) { // nothing here answers the wheel
+    ctr_->endEdit();
     wheelAccum_ = 0.0;
     wheelKnob_ = -1;
     return;
@@ -1145,6 +1200,7 @@ void EditorController::wheel(int x, int y, double delta, uint32_t keys) {
   wheelStep_ = wheelStep_ == 0.0 ? mag : std::min(wheelStep_, mag);
   // Half a notch left on one knob must not carry into the next one the pointer meets.
   if (knob != wheelKnob_) {
+    ctr_->endEdit();
     wheelAccum_ = 0.0;
     wheelKnob_ = knob;
   }
@@ -1171,6 +1227,7 @@ void EditorController::stepKnobParam(int knob, int by) {
     v = p->max;
   if (v == was)
     return;
+  ctr_->beginEdit(knob, true);
   lcdKnobValue(knob, v);
   ctr_->knobChanged(knob, v);
   highlightParam(sp->knobParam(knob));
@@ -1195,8 +1252,8 @@ void EditorController::toggleKnobParam(int knob) { // (port, issue #43)
   // The knob behind the button is the value's home, as it is after a turn: set
   // it first, then take the same route a turn takes (knobChanged does not write
   // it back).
+  ctr_->setParam(p->index, v);
   lcdKnobValue(knob, v);
-  ctr_->knobChanged(knob, v);
   highlightParam(sp->knobParam(knob));
 }
 
@@ -1234,30 +1291,26 @@ void EditorController::writeButtonClick() {  // writeButtonClick
     showMessage("** Write aborted **");
 }
 
-void EditorController::syncClick() {  // buttSyncClick
-    Program& p = host_.editBuffer().current();
-    p.setS8(ofs::Sync, p.s8(ofs::Sync) < 1 ? 1 : 0);
-    host_.editBuffer().setModified(true);
+void EditorController::syncClick() {
+    cancelSoundEdit();
+    const unsigned id = sound::parameterForField(324)->index;
+    host_.soundBegin(id); host_.soundEdit(id, host_.soundValue(id) < 1 ? 1 : 0); host_.soundEnd(id);
     updateLeds(true);
 }
-
-void EditorController::amClick(int tag) {  // buttAmFmClick
-    Program& p = host_.editBuffer().current();
-    if (tag == 0) {
-        const int v = p.s8(ofs::AmMod);
-        if (v == 0 || v == 2)
-            p.setS8(ofs::AmMod, 1);
-        else if (v == 1)
-            p.setS8(ofs::AmMod, 0);
+void EditorController::amClick(int tag) {
+    cancelSoundEdit();
+    const unsigned id = sound::parameterForField(325)->index;
+    const int v = host_.soundButtonValue(id);
+    if (tag == 0 && (v == 0 || v == 1 || v == 2)) {
+        host_.soundBegin(id); host_.soundEdit(id, v == 1 ? 0 : 1); host_.soundEnd(id);
     }
     host_.editBuffer().setModified(true);
     updateLeds(true);
 }
-
-void EditorController::monoClick() {  // buttMonoClick
-    Program& p = host_.editBuffer().current();
-    p.setS8(ofs::Mono, p.s8(ofs::Mono) < 1 ? 1 : 0);
-    host_.editBuffer().setModified(true);
+void EditorController::monoClick() {
+    cancelSoundEdit();
+    const unsigned id = sound::parameterForField(326)->index;
+    host_.soundBegin(id); host_.soundEdit(id, host_.soundValue(id) < 1 ? 1 : 0); host_.soundEnd(id);
     updateLeds(true);
 }
 

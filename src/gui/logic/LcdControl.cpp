@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "EditBuffer.h"
+#include "EditorHost.h"
 #include "Program.h"     // (port) kSyncDivisions
 #include "VfdText.h"     // (port) the dotted second line of a message
 #include "VoiceSlots.h"  // (port) kOriginalPlayableVoices
@@ -423,6 +424,7 @@ void LcdController::buildPages() {  // FUN_0045a790(0x12) + FUN_0047e340
 void LcdController::selectPage(int n) {  // FUN_0045a84c
     LcdPage* p = page(n);
     if (!p) return;
+    cancelEdit();
     page_ = p;
     pageIndex_ = n;
     if (displayLock_ < 1) lcd_.clearCells();
@@ -456,6 +458,7 @@ void LcdController::selectSubPage(int n) {  // FUN_0045a8e0
         if (n < 0) n += count;
         n %= count;
     }
+    cancelEdit();
     page_->select(n);
     selectPage(pageIndex_);
 }
@@ -554,6 +557,7 @@ bool LcdController::linkSyncRanges() {
         LcdParam* f = sp.findParam(m.name);
         const int max = synced ? m.syncMax : m.freeMax;
         if (!f || f->max == max) continue;
+        cancelEdit();
         f->setFormatter(synced ? m.syncFmt : m.freeFmt);
         f->setRange(1, max);
         f->setWidth(synced ? m.syncWidth : m.freeWidth);  // T1-T4 grow into the gap after them
@@ -585,6 +589,10 @@ int LcdController::readParamIn(const LcdSubPage& sp, const LcdParam& p) const {
     if (!sp.editor) return 0;
     const int idx = sp.editBufferIndex(p);
     if (uint32_t(idx) >= uint32_t(kNumParams)) return 0;
+    if (host_) {
+        const int id = semanticIndex(sp, p);
+        if (id >= 0) return host_->soundValue(unsigned(id));
+    }
     const int v = eb_->param(idx);
     // (port) EMU -> VOICES: a program of the original has 0 there, which means its 8 voices.
     // Reading it as 8 puts the knob and the value popup where the display already says they
@@ -600,10 +608,65 @@ int LcdController::readParamIn(const LcdSubPage& sp, const LcdParam& p) const {
     return v;
 }
 
-void LcdController::writeParam(const LcdParam& p, int v) {  // FUN_0045b3a4
+int LcdController::semanticIndex(const LcdSubPage& sp, const LcdParam& p) const {
+    const auto* descriptor = sound::parameterForField(sp.editBufferIndex(p));
+    if (!descriptor) return -1;
+    if (descriptor->modeField >= 0) {
+        const auto* mode = sound::parameterForField(descriptor->modeField);
+        const bool synced = mode && (host_ ? host_->soundValue(mode->index)
+                                          : sound::read(*mode, eb_->current())) != 0;
+        descriptor = sound::parameterForField(descriptor->field, synced);
+    }
+    return descriptor ? int(descriptor->index) : -1;
+}
+
+void LcdController::beginEdit(int knob, bool wheel) {
+    auto* sp = currentSub();
+    auto* p = sp ? sp->paramForKnob(knob) : nullptr;
+    const int id = p ? semanticIndex(*sp, *p) : -1;
+    if (id != editIndex_ || (wheelRemaining_ > 0) != wheel) endEdit();
+    if (id < 0) return;
+    if (editIndex_ < 0) {
+        editIndex_ = id;
+        editGeneration_ = host_ ? host_->soundGeneration() : 0;
+        if (host_) host_->soundBegin(unsigned(id));
+    }
+    wheelRemaining_ = wheel ? 250 : 0;
+}
+void LcdController::endEdit() {
+    const int id = editIndex_;
+    editIndex_ = -1;
+    wheelRemaining_ = 0;
+    if (id >= 0 && host_) host_->soundEnd(unsigned(id));
+}
+void LcdController::cancelEdit() {
+    popup_.semantic = -1;
+    endEdit();
+    if (listener_) listener_->lcdCancelEdit();
+}
+void LcdController::advanceEdit(int ms) {
+    if (wheelRemaining_ > 0 && (wheelRemaining_ -= ms) <= 0) endEdit();
+}
+void LcdController::writeParam(const LcdParam& p, int v) {
     if (!page_ || !eb_) return;
     const LcdSubPage& sp = page_->sub();
     if (!sp.editor) return;
+    if (p.fmt == Fmt::TempoSync) cancelEdit();
+    const int id = semanticIndex(sp, p);
+    if (host_ && editIndex_ >= 0 &&
+        (id != editIndex_ || host_->soundGeneration() != editGeneration_)) {
+        // This value was computed by the outgoing physical drag. Do not turn it
+        // into a fresh one-shot edit of the rebound field or replacement sound.
+        cancelEdit();
+        return;
+    }
+    if (host_ && id >= 0) {
+        const bool oneShot = editIndex_ < 0;
+        if (oneShot) host_->soundBegin(unsigned(id));
+        host_->soundEdit(unsigned(editIndex_ >= 0 ? editIndex_ : id), v);
+        if (oneShot) host_->soundEnd(unsigned(id));
+        return;
+    }
     const int idx = sp.editBufferIndex(p);
     if (p.fmt == Fmt::EnvT4Division && v >= kSyncDivisions) v = (v - kSyncDivisions) | 0x40;
     if (uint32_t(idx) < uint32_t(kNumParams)) eb_->setParamValue(idx, v);
@@ -635,6 +698,7 @@ void LcdController::knobChanged(int knob, int value) {  // 0x45b63c
 }
 
 void LcdController::setParam(int param, int value) {  // FUN_0045b574
+    cancelEdit();
     if (!page_) return;
     LcdSubPage& sp = page_->sub();
     LcdParam* p = sp.param(param);
@@ -699,6 +763,7 @@ void LcdController::cellDoubleClick(int col, int row) {  // FUN_0045b2b0
 }
 
 void LcdController::popupValues(int col, LcdParam& p) {  // FUN_0045aca0
+    cancelEdit();
     if (listener_) listener_->lcdSaveMouse();  // FUN_0045b7a8
     const bool usePop = p.pop != PopText::None;
     const bool custom = usePop ? true : p.customFmt;
@@ -711,6 +776,8 @@ void LcdController::popupValues(int col, LcdParam& p) {  // FUN_0045aca0
     };
     popup_ = LcdPopup{};
     popup_.param = p.index;
+    popup_.semantic = semanticIndex(page_->sub(), p);
+    popup_.generation = host_ ? host_->soundGeneration() : 0;
     int lo = p.min, hi = p.max;
     if (hi < lo) std::swap(lo, hi);
     const int off = lo == -1 ? -1 : 0;
@@ -775,6 +842,8 @@ void LcdController::popupClicked(int itemId) {  // LAB_0045b18c
     if (!page_ || popup_.param < 0) return;
     LcdParam* p = page_->sub().param(popup_.param);
     if (!p) return;
+    if (host_ && (popup_.semantic != semanticIndex(page_->sub(), *p) ||
+                  popup_.generation != host_->soundGeneration())) return;
     const int v = itemId - kPopupIdBase;
     const int knob = p->knob;
     setParam(popup_.param, v);

@@ -51,31 +51,6 @@ std::string stringOfChar(char c, int n) { return n > 0 ? std::string(size_t(n), 
 
 using namespace delphi;
 
-namespace {
-
-int clamp127(int v) { return v <= 0 ? 0 : (v < 0x7f ? v : 0x7f); }  // FUN_00450d90
-
-// FUN_00461808 / FUN_00461898: Str(v and 63:2) with a leading '0' for values below 10 and a
-// suffix depending on bit 6 of the clamped value.
-void twoDigitsFlag(int value, const char* lo, const char* hi, std::string& s) {
-    const int v = clamp127(value);
-    const int n = v & 0x3f;
-    s = strWidth(n, 2);
-    if (n < 10) s[0] = '0';
-    s += v < 0x40 ? lo : hi;
-}
-
-// (port) kSyncQuarters[i] as the display shows it, right-aligned in 3 cells. X marks bars:
-// B is D plus one segment on the VFD, so 4B and 4D would look alike.
-const char* divisionName(int i) {
-    static const char* const k[kSyncDivisions] = {
-        "16X", "15X", "14X", "13X", "12X", "11X", "10X", " 9X", " 8X", " 7X", " 6X", " 5X",
-        " 4X", " 3X", " 2X", " 1D", "  1", " 2D", " 1T", "  2", " 4D", " 2T", "  4", " 8D",
-        " 4T", "  8", "16D", " 8T", " 16", "32D", "16T", " 32", "64D", "32T", " 64", "64T"};
-    return k[i < 0 ? 0 : (i < kSyncDivisions ? i : kSyncDivisions - 1)];
-}
-
-}  // namespace
 
 void formatValue(Fmt f, int width, int v, std::string& s) {
     switch (f) {
@@ -99,119 +74,11 @@ void formatValue(Fmt f, int width, int v, std::string& s) {
             s = "-" + s;
         }
         break;
-    case Fmt::Wave:  // 0x461114
-        if (v < 0) s = "*OFF*";
-        else if (v < 0x4b) s = data::kWaveNames[v];
-        else s = "WAV???";
-        break;
-    case Fmt::ModSource:  // 0x461184
-        s = (v >= 0 && v < 0x92) ? data::kModSourceNames[v + 1] : data::kModSourceNames[0];
-        break;
-    case Fmt::LfoReset:  // 0x4612a4
-        s = v < 0 ? std::string("OFF") : intToStrZ(v, 2);
-        break;
-    case Fmt::LfoWave:  // 0x4612e4
-        // (port) the field is 6 cells wide (the original's 4 only fitted a number), so the
-        // oscillator waves spell out the name that PopText::LfoWave already builds for the
-        // popup. Everything is right-aligned in 6, like kWaveNames itself.
-        if (v < 0) {
-            s = "   ?  ";
-        } else if (v < 5) {
-            s = std::string("   ") + data::kLfoWaveNames[v];  // ShortString[4] concatenation
-        } else if (v - 5 <= 0x45) {
-            s = data::kWaveNames[data::kLfoWaveMap[v - 5]];
-        } else if (v - 5 - 0x46 < 8) {
-            s = std::string("  ") + data::kShapeNames[v - 5 - 0x46];
-        } else {
-            s = "   ?  ";
+    default:
+        {
+            const auto text = sound::labels::format(static_cast<sound::LabelKind>(f), v, width);
+            if (!text.empty()) s = text; // LfoPlay preserves previous text for invalid storage.
         }
-        break;
-    case Fmt::LfoHuman: {  // 0x4614e4
-        static const char* const k[7] = {"OFF", " ON", " X1", " X2", " X4", " X8", "X16"};
-        s = (unsigned(v) <= 6) ? k[v] : " ? ";
-        break;
-    }
-    case Fmt::LfoPhase:  // 0x4615f0
-        s = v < 0x40 ? intToStrZ(v, 2) + " " : intToStrZ(v & 0x3f, 2) + "T";
-        break;
-    case Fmt::LfoDelayMode:  // 0x461698
-        s = v == 1 ? "SMTH" : "EMU ";
-        break;
-    case Fmt::LfoModMode:  // 0x4616e4
-        switch (v) {
-        case 0: s = "UNI"; break;
-        case 1: s = "BIP"; break;
-        case 2: s = "PHS"; break;
-        case 3: s = "SMT"; break;
-        default: s = " ? "; break;
-        }
-        break;
-    case Fmt::LfoPlay:  // 0x461784 (other values: s unchanged)
-        switch (v) {
-        case 0: s = "FWD"; break;
-        case 1: s = "REV"; break;
-        case 2: s = "1XF"; break;
-        case 3: s = "1XR"; break;
-        default: break;
-        }
-        break;
-    case Fmt::EnvVelLevel:  // 0x461808
-        twoDigitsFlag(v, "L", "X", s);
-        break;
-    case Fmt::EnvT4:  // 0x461898
-        twoDigitsFlag(v, " ", "R", s);
-        break;
-    case Fmt::EnvShape:  // 0x461928
-        if (v - 1 < 0) s = " OFF";
-        else if (v - 1 <= 7) s = data::kShapeNames[v - 1];
-        else s = " ? ";
-        break;
-    case Fmt::EnvT1VMode:  // 0x461990
-        s = v > 0 ? "SMT" : "T1 ";
-        break;
-    case Fmt::BendMode:  // 0x4619d4
-        s = unsigned(v) < 7 ? data::kBendModeNames[v] : "?";
-        break;
-    case Fmt::Saturation:  // 0x461a14
-        if (v == -1) s = "OFF";
-        else if (v == 0) s = "EMU";
-        else s = "+" + intToStrZ(v, 2);
-        break;
-    case Fmt::VoiceSteal:  // 0x461ac0
-        s = v == -1 ? "HARD" : "SOFT";
-        break;
-    case Fmt::Dca13Mode:  // 0x461b10
-        s = v == 1 ? "FAST" : "EMU ";
-        break;
-    case Fmt::Dca4Mode:  // 0x461b5c
-        s = v == 0 ? "EMU " : "HARD";
-        break;
-    case Fmt::DcBlock:  // 0x461bac
-        s = v == 0 ? "SMART" : (v == 1 ? "ON   " : "OFF  ");
-        break;
-    case Fmt::Polyphony:  // (port) EMU -> VOICES
-        // 0 is what every program of the original has: its 8 voices.
-        s = intToStr(v == 0 ? kOriginalPlayableVoices : v);
-        zeroPad(s, width);
-        break;
-    case Fmt::WaveDir:  // (port) wave playback direction
-        // Two cells of the 16-segment font: a centre bar and a chevron whose apex faces it.
-        // "-<" and ">-" would not read as arrows (the chevron sits at the far edge of its
-        // cell, pointing away), so the arrow always leads with the bar it closes on.
-        s = v != 0 ? "<-" : "->";
-        break;
-    case Fmt::TempoSync:  // (port) LFO or envelope tempo sync
-        s = v != 0 ? "SYNC" : "FREE";
-        break;
-    case Fmt::LfoDivision:  // (port) a synced LFO's FREQ
-        s = divisionName(v);
-        break;
-    case Fmt::EnvDivision:  // (port) a synced envelope time, shortest first
-        s = divisionName(kSyncDivisions - 1 - v);
-        break;
-    case Fmt::EnvT4Division:  // (port) a synced T4: the second half of the range is "R"
-        s = std::string(divisionName(kSyncDivisions - 1 - v % kSyncDivisions)) +
-            (v >= kSyncDivisions ? "R" : " ");
         break;
     }
 }

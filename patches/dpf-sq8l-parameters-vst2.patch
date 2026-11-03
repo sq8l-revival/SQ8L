@@ -1,0 +1,125 @@
+--- a/distrho/src/DistrhoPluginVST2.cpp
++++ b/distrho/src/DistrhoPluginVST2.cpp
+@@ -475,6 +475,9 @@
+             {
+             case VST_EFFECT_OPCODE_02: // set program
+                 hooks->vst2SetProgram(static_cast<int32_t>(value));
++               #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                refreshSQ8LParameters();
++               #endif
+                 return 0;
+             case VST_EFFECT_OPCODE_03: // get program
+                 return hooks->vst2GetProgram();
+@@ -496,6 +499,12 @@
+ 
+         switch (opcode)
+         {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        case VST_EFFECT_OPCODE_35: // editor-independent host idle (effIdle)
++            refreshSQ8LParameters();
++            // A zero result ends the host idle subscription (e.g. JUCE).
++            return 1;
++       #endif
+         case VST_EFFECT_OPCODE_03: // get program
+             return 0;
+ 
+@@ -693,8 +702,15 @@
+             break;
+ 
+         case VST_EFFECT_OPCODE_13: // window idle
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            refreshSQ8LParameters();
++           #endif
+             if (fVstUI != nullptr)
+                 fVstUI->idle();
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            // plugin_idle may itself complete an import/INIT/compare operation.
++            refreshSQ8LParameters();
++           #endif
+             break;
+ 
+         case VST_EFFECT_OPCODE_3B: // key down
+@@ -831,6 +847,9 @@
+                 }
+                 hex[2 * n] = '\0';
+                 setStateFromUI(DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY, hex);
++               #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                refreshSQ8LParameters();
++               #endif
+                #if DISTRHO_PLUGIN_HAS_UI
+                 if (fVstUI != nullptr)
+                     fVstUI->setStateFromPlugin(DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY, hex);
+@@ -1041,6 +1060,12 @@
+ 
+     void vst_setParameter(const uint32_t index, const float value)
+     {
++       #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++        // Reject invalid host numbers before boolean/integer coercion or cache writes.
++        if (!std::isfinite(value))
++            return;
++       #endif
++
+         const uint32_t hints = fPlugin.getParameterHints(index);
+         const ParameterRanges& ranges(fPlugin.getParameterRanges(index));
+ 
+@@ -1174,6 +1199,32 @@
+ private:
+     // Plugin
+     PluginExporter fPlugin;
++
++   #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++    uint64_t fSQ8LParameterGeneration = 0;
++
++    // Dispatcher/idle only: never from parameter callbacks or processReplacing.
++    // The hook releases engine ownership before we update mirrors or notify the
++    // host. updateDisplay invalidates controls without recording automation.
++    void refreshSQ8LParameters()
++    {
++        SQ8LParameterRefreshHooks* const hooks = dynamic_cast<SQ8LParameterRefreshHooks*>(
++            static_cast<Plugin*>(fPlugin.getInstancePointer()));
++        float values[SQ8LParameterRefreshHooks::kParameterCount];
++        if (hooks == nullptr || !hooks->sq8lCopyParameterRefresh(
++                fSQ8LParameterGeneration, values, fPlugin.getParameterCount()))
++            return;
++
++        for (uint32_t i = 0; i < fPlugin.getParameterCount(); ++i)
++        {
++            parameterValues[i] = values[i];
++           #if DISTRHO_PLUGIN_HAS_UI
++            parameterChecks[i] = true;
++           #endif
++        }
++        hostCallback(VST_HOST_OPCODE_2A);
++    }
++   #endif
+ 
+     // VST stuff
+     const vst_host_callback fAudioMaster;
+@@ -1423,7 +1474,14 @@
+         {
+             // some hosts call open/create twice
+             if (exteffect->pluginPtr != nullptr)
++            {
++               #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++                // The first effOpen may precede host callback association (JUCE).
++                // Re-request even if its earlier NeedIdle result was zero.
++                exteffect->audioMaster(effect, VST_HOST_OPCODE_0E /* needIdle */, 0, 0, nullptr, 0.0f);
++               #endif
+                 return 1;
++            }
+ 
+             const vst_host_callback audioMaster = exteffect->audioMaster;
+ 
+@@ -1438,6 +1496,12 @@
+                 d_nextSampleRate = 44100.0;
+ 
+             exteffect->pluginPtr = new PluginVst(audioMaster, effect);
++           #if DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
++            // Register only after construction and publication: a host may reenter
++            // getters/idle here. Some hosts (JUCE) schedule but still return zero.
++            // Keep effIdle alive until effClose; the host owns timer teardown.
++            audioMaster(effect, VST_HOST_OPCODE_0E /* needIdle */, 0, 0, nullptr, 0.0f);
++           #endif
+             return 1;
+         }
+         return 0;

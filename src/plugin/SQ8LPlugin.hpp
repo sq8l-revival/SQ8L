@@ -2,7 +2,9 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,11 +13,13 @@
 #include "SQ8LVersion.h"
 #include "SharedLibrary.h"
 #include "Synth.h"
+#include "SoundParameterState.h"
 
 START_NAMESPACE_DISTRHO
 
 class SQ8LPlugin : public Plugin,
                    public Vst2ProgramHooks,
+                   public SQ8LParameterRefreshHooks,
                    public sq8l::MasterNotify {
 public:
   SQ8LPlugin();
@@ -27,6 +31,14 @@ public:
   // releases it).
   std::recursive_mutex &engineMutex() { return mutex_; }
   sq8l::Synth &synth() { return synth_; }
+  // Already-owned editor helpers: caller holds engineMutex(). No host callbacks.
+  sq8l::sound::SoundParameterService& soundParameters() { return *parameters_; }
+  // Scope an explicit synchronous UI bridge echo on this thread only.
+  void dispatchPanelEcho(const sq8l::sound::EchoToken&, const std::function<void()>&);
+  bool sq8lReadAcceptedParameter(uint32_t, SQ8LAcceptedParameter&) override;
+  bool sq8lCopyParameterRefresh(uint64_t&, float*, uint32_t) override;
+  bool sq8lCapturePanelNotification(uint32_t, float, SQ8LPanelNotificationStamp&) override;
+  bool sq8lCurrentPanelNotification(const SQ8LPanelNotificationStamp&) override;
   sq8l::Settings &settings() { return *shared_.settings; }
   // (port) The connected MTS-ESP master's scale name, empty when there is none.
   const std::string &mtsScaleName() const { return mts_.scaleName(); }
@@ -68,6 +80,10 @@ protected:
   const char *getHomePage() const override { return "" /* "https://www.kvraudio.com/product/sq8l-by-siegfried-kullmann" */ ; }
   uint32_t getVersion() const override { return d_version(sq8l::kVersionMajor, sq8l::kVersionMinor, sq8l::kVersionPatch); }
 
+  void initParameter(uint32_t index, Parameter& parameter) override;
+  void initPortGroup(uint32_t groupId, PortGroup& group) override;
+  float getParameterValue(uint32_t index) const override;
+  void setParameterValue(uint32_t index, float value) override;
   void initProgramName(uint32_t index, String &name) override;
   void loadProgram(uint32_t index) override;
   void initState(uint32_t index, State &state) override;
@@ -94,6 +110,8 @@ private:
   sq8l::MtsEspTuning mts_;
   sq8l::Synth synth_;
   std::vector<sq8l::RawMidiEvent> events_;
+  std::unique_ptr<sq8l::sound::SoundParameterService> parameters_;
+  std::unique_ptr<sq8l::sound::SoundParameterLifecycle> parameterLifecycle_;
 
   // (port, issue #42) The song position for the LFOs' tempo sync, in quarter notes, NaN
   // when there is none. bbtStyle_ is how this binary's format wrapper built the bar, beat

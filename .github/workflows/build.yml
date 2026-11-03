@@ -19,6 +19,12 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
       - name: Build
         run: cmake --build build
+      - name: Python dependency for the real VST2 ABI checker
+        run: python3 -m venv build/abi-python && build/abi-python/bin/python -m pip install numpy
+      - name: Native automation callbacks and format ABIs (arm64)
+        run: |
+          cmake -S . -B build -DPython3_EXECUTABLE=$PWD/build/abi-python/bin/python
+          ctest --test-dir build --output-on-failure
       - name: Regression vs the original (arm64)
         run: ./build/sq8l_render_check --regression tests/regression
       - name: Regression vs the original (x86_64, Rosetta)
@@ -53,6 +59,26 @@ jobs:
           name: SQ8L-macOS-universal
           path: SQ8L-macOS-universal.zip
 
+  # Native Intel hardware is separate from the universal job's Rosetta check.
+  macos-intel:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - run: brew install ninja
+      - name: Configure native Intel
+        run: |
+          python3 -m venv build/abi-python
+          build/abi-python/bin/python -m pip install numpy
+          cmake --preset unix -DCMAKE_OSX_ARCHITECTURES=x86_64 -DPython3_EXECUTABLE=$PWD/build/abi-python/bin/python
+      - name: Build and exercise actual format ABIs
+        run: |
+          cmake --build --preset unix --parallel 4
+          ctest --preset unix
+          MallocScribble=1 ./build/unix/sq8l_au_check ./build/unix/bin/SQ8L.component
+
   windows-build:
     runs-on: ubuntu-24.04
     steps:
@@ -77,15 +103,42 @@ jobs:
           name: windows-render-check
           path: |
             build/sq8l_render_check.exe
+            build/sq8l_*parameter*check.exe
+            build/sq8l_*idle_refresh_check.exe
+            build/sq8l_sound_parameter_qualification.exe
             tests/regression
 
   windows-verify:
     needs: windows-build
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: SQ8L-Windows-x64
+      - name: Unpack actual MinGW plugins
+        run: Expand-Archive SQ8L-Windows-x64.zip -DestinationPath mingw-plugins
       - uses: actions/download-artifact@v8
         with:
           name: windows-render-check
+      - name: MinGW automation ABIs on real Windows
+        shell: pwsh
+        run: |
+          python -m pip install numpy
+          $env:SQ8L_DATA_DIRECTORY = "$pwd/build/mingw-abi-runtime"
+          New-Item -ItemType Directory -Force $env:SQ8L_DATA_DIRECTORY | Out-Null
+          foreach ($format in @('vst3', 'clap')) {
+            $plugin = (Get-ChildItem mingw-plugins -Recurse -File -Filter "SQ8L.$format" | Select-Object -First 1).FullName
+            if (!$plugin) { throw "Missing $format artifact" }
+            & "./build/sq8l_${format}_parameter_check.exe" --plugin $plugin
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $vst2 = (Get-ChildItem mingw-plugins -Recurse -File -Filter SQ8L.dll | Select-Object -First 1).FullName
+          if (!$vst2) { throw 'Missing VST2 artifact' }
+          python tests/test_plugin_vst2.py --automation-only --plugin $vst2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./build/sq8l_sound_parameter_qualification.exe --parity
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Regression vs the original on real Windows
         run: ./build/sq8l_render_check.exe --regression tests/regression
       - name: More polyphony on real Windows
@@ -94,6 +147,28 @@ jobs:
         run: ./build/sq8l_render_check.exe --output-gain tests/regression
       - name: LFO tempo sync on real Windows
         run: ./build/sq8l_render_check.exe --tempo-sync
+
+  windows-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [msvc, clang-cl]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Native x64 compiler build and automation ABI checks
+        shell: pwsh
+        run: |
+          python -m pip install numpy
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Visual Studio x64 tools unavailable' }
+          $devcmd = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          cmd /c "`"$devcmd`" -arch=x64 -host_arch=x64 && cmake --preset ${{ matrix.compiler }} && cmake --build --preset ${{ matrix.compiler }} --parallel 4 && ctest --preset ${{ matrix.compiler }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   linux:
     strategy:
@@ -112,12 +187,18 @@ jobs:
           fetch-depth: 0
       - run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libx11-dev libxext-dev libxcursor-dev libxrandr-dev libgl-dev \
+          sudo apt-get install -y ninja-build python3-venv libx11-dev libxext-dev libxcursor-dev libxrandr-dev libgl-dev \
             libdbus-1-dev xvfb xdotool imagemagick libgl1-mesa-dri
       - name: Configure
         run: cmake -S . -B build -G Ninja
       - name: Build
         run: cmake --build build
+      - name: Python dependency for the real VST2 ABI checker
+        run: python3 -m venv build/abi-python && build/abi-python/bin/python -m pip install numpy
+      - name: Native automation callbacks and format ABIs
+        run: |
+          cmake -S . -B build -DPython3_EXECUTABLE=$PWD/build/abi-python/bin/python
+          ctest --test-dir build --output-on-failure
       - name: Regression vs the original
         run: ./build/sq8l_render_check --regression tests/regression
       - name: More polyphony (port addition)
@@ -159,7 +240,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, windows-verify, linux]
+    needs: [macos, macos-intel, windows-verify, windows-native, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -199,7 +280,7 @@ jobs:
   # the rolling "nightly" pre-release. Numbered releases still come from v* tags, above.
   nightly:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [macos, windows-verify, linux]
+    needs: [macos, macos-intel, windows-verify, windows-native, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

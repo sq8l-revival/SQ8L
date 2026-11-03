@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -71,6 +72,28 @@ class PluginEditorHost final : public sq8l::gui::EditorHost {
 public:
     explicit PluginEditorHost(SQ8LPlugin& p) : p_(p) {}
     void setController(sq8l::gui::EditorController* c) { controller_ = c; }
+
+    using SoundEvent = sq8l::sound::PanelNotification;
+    sq8l::sound::PanelNotificationQueue soundEvents;
+    int soundValue(unsigned index) override {
+        int value = 0; p_.soundParameters().get(index, value); return value;
+    }
+    int soundButtonValue(unsigned index) override {
+        const auto* p = sq8l::sound::parameter(index);
+        if (p && p->field == 325 && p_.soundParameters().stamp(index).origin == sq8l::sound::Origin::Replacement &&
+            p_.synth().editBuffer().current().s8(sq8l::ofs::AmMod) == 2) return 2;
+        return soundValue(index);
+    }
+    uint64_t soundGeneration() override { return p_.soundParameters().generation(); }
+    void soundBegin(unsigned index) override { soundEvents.push({SoundEvent::Begin, index, {}}); }
+    void soundEnd(unsigned index) override { soundEvents.push({SoundEvent::End, index, {}}); }
+    void soundEdit(unsigned index, int value) override {
+        auto result = p_.soundParameters().accept(index, value, sq8l::sound::Origin::Panel);
+        if (result.status == sq8l::sound::Acceptance::Accepted) {
+            p_.synth().editBuffer().setModified(true);
+            soundEvents.push({SoundEvent::Value, index, result.token});
+        }
+    }
 
     sq8l::EditBuffer& editBuffer() override { return p_.synth().editBuffer(); }
     sq8l::SoundLibrary& library() override { return p_.synth().library(); }
@@ -183,6 +206,7 @@ public:
         view_->setTextRenderer(&text_);
 
         auto releaseHook = [this] {  // a native or drawn modal loop starts
+            if (controller_) controller_->prepareModalInput();
             ++modalLoops_;
             releaseEngine();
         };
@@ -295,7 +319,11 @@ public:
     }
 
 protected:
+    // The service already owns host delivery. Idle polls its current accepted view.
     void parameterChanged(uint32_t, float) override {}
+    void uiFocus(bool focus, DGL_NAMESPACE::CrossingMode) override {
+        if (!focus && controller_) { Engine lock(*this); controller_->cancelSoundEdit(); }
+    }
 
     void uiIdle() override {
         if (opening_ != Opening::open) {  // nothing resized us, or the request was dropped
@@ -547,6 +575,7 @@ protected:
         const uint time = ev.time;
         runEditor([this, x, y, b, keys, dbl, press, time] {
             Engine lock(*this);
+            controller_->prepareSoundInput();
             if (press) {
                 buttons_ |= bit(b);
                 // The program name box is an edit control: a left click focuses it.
@@ -595,6 +624,7 @@ protected:
         if (editorWaiting()) return true;  // (the file dialog is open)
         {
             Engine lock(*this);
+            controller_->prepareSoundInput();
             view_->mouseMove(x, y, keysOf(ev.mod) | buttons_);
             controller_->pump();
         }
@@ -841,8 +871,29 @@ private:
         explicit Engine(SQ8LUI& u) : ui(u) { ui.acquireEngine(); }
         ~Engine() { ui.releaseEngine(); }
     };
-    void acquireEngine() { plugin_.engineMutex().lock(); ++depth_; }
-    void releaseEngine() { --depth_; plugin_.engineMutex().unlock(); }
+    void acquireEngine() { plugin_.engineMutex().lock(); ++depth_; host_.soundEvents.engineEntered(); }
+    void releaseEngine() {
+        --depth_;
+        plugin_.engineMutex().unlock();
+        host_.soundEvents.engineLeft();
+        if (depth_ == 0) drainSoundEvents();
+    }
+    void drainSoundEvents() {
+        host_.soundEvents.drain([this](const PluginEditorHost::SoundEvent& event) {
+            if (event.kind == PluginEditorHost::SoundEvent::Value) {
+                bool current;
+                {
+                    std::lock_guard<std::recursive_mutex> lock(plugin_.engineMutex());
+                    current = plugin_.soundParameters().currentPanelEcho(event.token);
+                }
+                if (current) plugin_.dispatchPanelEcho(event.token, [this, &event] {
+                    setParameterValue(event.index, float(event.token.value));
+                });
+            } else {
+                editParameter(event.index, event.kind == PluginEditorHost::SoundEvent::Begin);
+            }
+        });
+    }
 
     void toForm(double px, double py, int& x, int& y) const {
         x = static_cast<int>(px * EditorView::kWidth / static_cast<double>(getWidth()));

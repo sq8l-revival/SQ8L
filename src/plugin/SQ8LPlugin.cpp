@@ -1,4 +1,5 @@
 #include "SQ8LPlugin.hpp"
+#include "SoundParameterInstrumentation.h"
 
 #include <cmath>
 #include <cstring>
@@ -44,7 +45,7 @@ void copyName(char* out, const std::string& s) {
 }  // namespace
 
 SQ8LPlugin::SQ8LPlugin()
-    : Plugin(0, sq8l::Synth::kNumPrograms, 1),
+    : Plugin(sq8l::sound::kParameterCount, sq8l::Synth::kNumPrograms, 1),
       shared_(sq8l::SharedLibrary::acquire()),
       synth_(static_cast<float>(getSampleRate() > 0 ? getSampleRate() : 44100.0), shared_.library, shared_.settings,
              this),
@@ -52,6 +53,11 @@ SQ8LPlugin::SQ8LPlugin()
     synth_.setSampleRate(static_cast<float>(getSampleRate()));
     // (port) MTS-ESP: the engine reads this snapshot, run() refreshes it per block.
     synth_.setTuning(&mts_.tuning());
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        parameters_ = std::make_unique<sq8l::sound::SoundParameterService>(synth_.editBuffer().current());
+        parameterLifecycle_ = std::make_unique<sq8l::sound::SoundParameterLifecycle>(synth_, *parameters_);
+    }
     const char* format = getPluginFormatName();
     if (std::strcmp(format, "VST2") == 0 || std::strcmp(format, "VST3") == 0)
         bbtStyle_ = BbtStyle::Vst;
@@ -84,7 +90,131 @@ double SQ8LPlugin::songQuarters(const TimePosition& position) const {
     return q;
 }
 
-SQ8LPlugin::~SQ8LPlugin() { sq8l::SharedLibrary::release(); }
+SQ8LPlugin::~SQ8LPlugin() {
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        parameterLifecycle_.reset();
+        parameters_.reset();
+    }
+    sq8l::SharedLibrary::release();
+}
+
+namespace {
+uint32_t parameterGroup(unsigned index) {
+    const auto& registry = sq8l::sound::parameters();
+    uint32_t group = 0;
+    // Groups are assigned by first occurrence, including noncontiguous aliases.
+    for (unsigned i = 0; i < registry.size(); ++i) {
+        bool first = true;
+        for (unsigned j = 0; j < i; ++j)
+            if (std::strcmp(registry[j].group, registry[i].group) == 0) { first = false; break; }
+        if (!first) continue;
+        if (std::strcmp(registry[i].group, registry[index].group) == 0) return group;
+        ++group;
+    }
+    return 0;
+}
+}
+
+void SQ8LPlugin::initParameter(uint32_t index, Parameter& out) {
+    const auto* p = sq8l::sound::parameter(index);
+    if (!p) return;
+    out.name = p->name;
+    out.symbol = p->symbol;
+    out.groupId = parameterGroup(index);
+    out.hints = kParameterIsAutomatable | kParameterIsInteger;
+    if (p->kind == sq8l::sound::Kind::Boolean) out.hints |= kParameterIsBoolean;
+    out.ranges = ParameterRanges(p->defaultValue, p->minimum, p->maximum);
+    if (p->kind != sq8l::sound::Kind::Integer) {
+        const unsigned count = p->maximum - p->minimum + 1;
+        out.enumValues.count = static_cast<uint8_t>(count);
+        out.enumValues.restrictedMode = true;
+        out.enumValues.values = new ParameterEnumerationValue[count];
+        for (unsigned n = 0; n < count; ++n) {
+            const int value = p->minimum + int(n);
+            out.enumValues.values[n].value = float(value);
+            out.enumValues.values[n].label = sq8l::sound::choiceLabel(*p, value).c_str();
+        }
+    }
+}
+
+void SQ8LPlugin::initPortGroup(uint32_t id, PortGroup& out) {
+    for (const auto& p : sq8l::sound::parameters()) if (parameterGroup(p.index) == id) {
+        out.name = p.group;
+        out.symbol = p.symbol; // first parameter gives a stable, valid group symbol
+        return;
+    }
+}
+
+float SQ8LPlugin::getParameterValue(uint32_t index) const {
+    SQ8L_MEASURE_LOCK(mutex_, Getter);
+    int value = 0;
+    parameters_->get(index, value);
+    return float(value);
+}
+
+bool SQ8LPlugin::sq8lReadAcceptedParameter(uint32_t index, SQ8LAcceptedParameter& out) {
+    SQ8L_MEASURE_LOCK(mutex_, Accepted);
+    int value = 0;
+    if (!parameters_->get(index, value)) return false;
+    const auto stamp = parameters_->stamp(index);
+    out = {stamp.generation, stamp.revision, float(value)};
+    return true;
+}
+
+bool SQ8LPlugin::sq8lCopyParameterRefresh(uint64_t& generation, float* values, uint32_t count) {
+    static_assert(SQ8LParameterRefreshHooks::kParameterCount == sq8l::sound::kParameterCount,
+                  "update the adapter snapshot capacity when appending parameters");
+    if (values == nullptr || count != sq8l::sound::kParameterCount) return false;
+    SQ8L_MEASURE_LOCK(mutex_, Refresh);
+    const uint64_t current = parameters_->generation();
+    if (generation == current) return false;
+    for (uint32_t i = 0; i < count; ++i) {
+        int value = 0;
+        parameters_->get(i, value);
+        values[i] = float(value);
+    }
+    generation = current;
+    return true;
+}
+
+namespace {
+thread_local const SQ8LPlugin* echoPlugin = nullptr;
+thread_local const sq8l::sound::EchoToken* echoToken = nullptr;
+}
+bool SQ8LPlugin::sq8lCapturePanelNotification(uint32_t index, float value,
+                                              SQ8LPanelNotificationStamp& stamp) {
+    if (echoPlugin != this || echoToken == nullptr || echoToken->index != index ||
+        echoToken->value != value) return false;
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (!parameters_->currentPanelEcho(*echoToken)) return false;
+    stamp = {echoToken->stamp.generation, echoToken->stamp.revision,
+             echoToken->index, echoToken->value, echoToken->source};
+    return true;
+}
+bool SQ8LPlugin::sq8lCurrentPanelNotification(const SQ8LPanelNotificationStamp& stamp) {
+    const sq8l::sound::EchoToken token{
+        {stamp.generation, stamp.revision, sq8l::sound::Origin::Panel},
+        stamp.index, stamp.value, stamp.source};
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return parameters_->currentPanelEcho(token);
+}
+void SQ8LPlugin::dispatchPanelEcho(const sq8l::sound::EchoToken& token,
+                                 const std::function<void()>& callback) {
+    struct Restore {
+        const SQ8LPlugin* plugin = echoPlugin;
+        const sq8l::sound::EchoToken* token = echoToken;
+        ~Restore() { echoPlugin = plugin; echoToken = token; }
+    } restore;
+    echoPlugin = this;
+    echoToken = &token;
+    callback();
+}
+void SQ8LPlugin::setParameterValue(uint32_t index, float value) {
+    SQ8L_MEASURE_LOCK(mutex_, Setter);
+    if (echoPlugin == this && echoToken) parameters_->acceptScopedPanelEcho(index, value, *echoToken);
+    else parameters_->accept(index, value);
+}
 
 void SQ8LPlugin::vst2SetProgram(int32_t index) {
     if (index < 0 || index >= sq8l::Synth::kNumPrograms) return;
@@ -136,16 +266,24 @@ void SQ8LPlugin::initState(uint32_t index, State& state) {
 // plugin needs: the VST2 chunk is this value verbatim (DISTRHO_PLUGIN_VST2_RAW_CHUNK_KEY).
 String SQ8LPlugin::getState(const char* key) const {
     if (std::strcmp(key, "editbuffer") != 0) return String();
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-    return toHex(const_cast<sq8l::Synth&>(synth_).getChunk());
+    sq8l::sound::SoundParameterProjectSnapshot snapshot;
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        snapshot = parameterLifecycle_->capture();
+    }
+    std::vector<uint8_t> bytes;
+    if (!sq8l::sound::encodeSoundParameterState(snapshot.base.data(), snapshot.base.size(), snapshot.pairs, bytes))
+        return String();
+    return toHex(bytes);
 }
 
 void SQ8LPlugin::setState(const char* key, const char* value) {
     if (std::strcmp(key, "editbuffer") != 0) return;
     const std::vector<uint8_t> bytes = fromHex(value);
-    if (bytes.empty()) return;
+    sq8l::sound::ValidatedSoundParameterState state;
+    if (!sq8l::sound::parseSoundParameterState(bytes.data(), bytes.size(), state)) return;
     std::lock_guard<std::recursive_mutex> lock(mutex_);
-    synth_.setChunk(bytes.data(), bytes.size());
+    parameterLifecycle_->restore(state);
 }
 
 void SQ8LPlugin::sampleRateChanged(double sr) {
@@ -154,7 +292,7 @@ void SQ8LPlugin::sampleRateChanged(double sr) {
 }
 
 void SQ8LPlugin::run(const float**, float** outputs, uint32_t frames, const MidiEvent* midi, uint32_t midiCount) {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    SQ8L_MEASURE_LOCK(mutex_, Render);
     // (port) MTS-ESP: one snapshot per block, before the events are dispatched, so the MIDI
     // and voice paths never call into the client.
     mts_.refresh(synth_.mtsEnabled(), synth_.mtsCorrectPitch());
@@ -170,6 +308,10 @@ void SQ8LPlugin::run(const float**, float** outputs, uint32_t frames, const Midi
         for (uint32_t j = 0; j < 3 && j < m.size; j++) e.data[j] = m.data[j];
         events_.push_back(e);
     }
+    // processEvents only parses/queues MIDI. Synth::process synchronizes this
+    // lifecycle once before Master begins sample-offset dispatch. This entire
+    // run owns mutex_, with no intervening release or early return, so no setter
+    // can accept work between render entry and that existing application hook.
     if (!events_.empty()) synth_.processEvents(events_.data(), static_cast<int32_t>(events_.size()));
     synth_.process(outputs[0], outputs[1], static_cast<int32_t>(frames), true);
 }

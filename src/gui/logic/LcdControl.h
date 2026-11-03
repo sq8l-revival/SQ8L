@@ -25,6 +25,8 @@ class EditBuffer;
 
 namespace sq8l::gui {
 
+class EditorHost;
+
 struct LcdParam {                // ClcdCtr_param (140 bytes)
     int knob = -1;               // +0x04 knob bound to this parameter
     int index = 0;               // +0x08 index inside the sub-page
@@ -97,6 +99,7 @@ struct LcdPage {                 // ClcdCtr_pageML depth 0 + depth 1
 class LcdListener {
 public:
     virtual ~LcdListener() = default;
+    virtual void lcdCancelEdit() {}
     virtual void lcdKnobValue(int knob, int value) = 0;          // +0x28 (LAB_004846c4)
     virtual void lcdKnobRange(int knob, int min, int max, bool faded) = 0;  // +0x30 (FUN_00484700)
     virtual void lcdDrawn() = 0;                                 // +0x38 (FUN_004847a4)
@@ -111,6 +114,8 @@ public:
 
 // A value popup menu built by FUN_0045aca0 (the TPopupMenu at ClcdCtr +0x80).
 struct LcdPopup {
+    int semantic = -1;
+    uint64_t generation = 0;
     int param = -1;              // TPopupMenu +0x0c: the parameter (index in the sub-page)
     std::vector<MenuItem> items; // ids: value + kPopupIdBase
     int x = 0, y = 0;            // form position (lcd client + lcd position)
@@ -121,6 +126,13 @@ public:
     static constexpr int kPopupIdBase = 0x10000;
 
     LcdController(LcdDisplay& lcd, EditBuffer* editBuffer, LcdListener* listener);
+
+    void setHost(EditorHost* host) { host_ = host; }
+    int semanticIndex(const LcdSubPage&, const LcdParam&) const;
+    void beginEdit(int knob, bool wheel = false);
+    void endEdit();
+    void advanceEdit(int ms);
+    void cancelEdit();
 
     // set up (FUN_0047e340): pages from the definition strings + the recorded set up, with
     // the port's additions (the VOICES control on the EMU page)
@@ -200,6 +212,9 @@ private:
     int pageIndex_ = 0;          // +0x14
     LcdPage* page_ = nullptr;    // +0x18
     int displayLock_ = 0;        // +0x24
+    EditorHost* host_ = nullptr;
+    int editIndex_ = -1, wheelRemaining_ = 0;
+    uint64_t editGeneration_ = 0;
     LcdPopup popup_;             // +0x80
 };
 

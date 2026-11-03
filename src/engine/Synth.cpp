@@ -113,6 +113,7 @@ void Synth::setSampleRate(float sr) {
 void Synth::processEvents(const RawMidiEvent* ev, int32_t n) { master_->processEvents(ev, n); }
 
 void Synth::process(float* outL, float* outR, int32_t n, bool replacing) {
+    edit_->synchronize();
     AudioFpuScope fpu;  // no FTZ/DAZ; the master sets round-toward-zero itself
     master_->process(outL, outR, n, replacing);
 }
@@ -137,8 +138,8 @@ void Synth::setProgramName(const std::string& name) {
     syncProgram();
 }
 
-std::vector<uint8_t> Synth::getChunk() {
-    std::vector<uint8_t> chunk = edit_->getChunk();
+void Synth::copyChunk(EditBuffer::Chunk& chunk) {
+    edit_->copyChunk(chunk);
     // (port) OPTIONS -> Polyphony belongs to this instance, so it travels in the host chunk,
     // which every plugin format saves (the VST2 chunk is these bytes verbatim). It goes in
     // two of the four spare header bytes that the original writes as 0 and never reads, and
@@ -159,11 +160,16 @@ std::vector<uint8_t> Synth::getChunk() {
     // one stays byte-identical to the original's.
     if (outputCut_ > 0 && chunk.size() == EditBuffer::kChunkSize)
         chunk[kChunkOutputCut] = static_cast<uint8_t>(outputCut_);
-    return chunk;
 }
 
-int32_t Synth::setChunk(const uint8_t* data, size_t size) {
-    const int n = edit_->setChunk(data, size);
+std::vector<uint8_t> Synth::getChunk() {
+    EditBuffer::Chunk chunk;
+    copyChunk(chunk);
+    return {chunk.begin(), chunk.end()};
+}
+
+int32_t Synth::setChunk(const uint8_t* data, size_t size, bool notifyCompletion) {
+    const int n = edit_->setChunk(data, size, false);
     syncProgram();
     if (n > 0) {
         chunkLoaded_ = true;
@@ -186,6 +192,7 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
         // not know, puts this instance back to no cut.
         const int cut = size == EditBuffer::kChunkSize ? data[kChunkOutputCut] : 0;
         setOutputCut(Settings::validOutputCut(cut) ? cut : 0);
+        if (notifyCompletion) edit_->completedReplacement();
         return 0;
     }
     return -1;

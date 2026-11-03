@@ -36,8 +36,41 @@
 // indexed names from the library (see patches/dpf-vst2-compat.patch).
 #define DISTRHO_PLUGIN_VST2_NUM_PROGRAMS 512
 #define DISTRHO_PLUGIN_VST2_PROGRAM_HOOKS 1
+#ifndef DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH
+#define DISTRHO_PLUGIN_SQ8L_PARAMETER_REFRESH 1
+#endif
 #ifdef __cplusplus
 #include <cstdint>
+// Optional wrapper bridge. No callback, allocation or format policy in this API.
+// Each wrapper owns a generation cursor (initially 0). The implementation locks
+// the existing engine mutex, copies the entire accepted view on replacement and
+// advances the cursor atomically with that copy. Values include pending edits.
+// Replacements advance generation; ordinary Host/Panel edits do not. A snapshot
+// is an observation, never an edit or an acknowledgement of pending work.
+// Call only with no engine ownership; host/UI delivery follows the return.
+// Fixed observation stamp for a deferred transport of an already accepted panel
+// edit. source is an opaque service identity, never dereferenced. Capture is legal
+// only inside dispatchPanelEcho; validation rechecks exact revision/origin under
+// the engine mutex. Neither operation accepts an edit or invokes a callback.
+struct SQ8LPanelNotificationStamp {
+    uint64_t generation = 0, revision = 0;
+    uint32_t index = 256;
+    int value = 0;
+    const void* source = nullptr;
+};
+// Coherent read-only accepted value and exact existing edit identity. No callback.
+struct SQ8LAcceptedParameter {
+    uint64_t generation = 0, revision = 0;
+    float value = 0.f;
+};
+struct SQ8LParameterRefreshHooks {
+    static constexpr uint32_t kParameterCount = 256;
+    virtual ~SQ8LParameterRefreshHooks() = default;
+    virtual bool sq8lReadAcceptedParameter(uint32_t, SQ8LAcceptedParameter&) = 0;
+    virtual bool sq8lCopyParameterRefresh(uint64_t& generation, float* values, uint32_t count) = 0;
+    virtual bool sq8lCapturePanelNotification(uint32_t, float, SQ8LPanelNotificationStamp&) = 0;
+    virtual bool sq8lCurrentPanelNotification(const SQ8LPanelNotificationStamp&) = 0;
+};
 struct Vst2ProgramHooks {
     virtual ~Vst2ProgramHooks() = default;
     virtual void vst2SetProgram(int32_t index) = 0;

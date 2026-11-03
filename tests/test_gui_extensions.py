@@ -266,10 +266,272 @@ def param_of(sub, name):
     raise AssertionError(f"the sub-page has no {name!r}: {[p['name'] for p in sub['params']]}")
 
 
+def semantic_checks(L):
+    print("Actual-service semantic editing:")
+    fixture = json.load(open(os.path.join(ROOT, "tests/fixtures/sound_parameter_registry.json")))
+    free = {p["field"]: p for p in fixture["parameters"] if p["codec"] not in ("Sync", "SyncT4")}
+    def trace(ed):
+        lines = ed.cstr(L.sq8l_gl_sound_trace).splitlines()
+        assert not any("BAD" in line for line in lines), lines
+        return [line.split() for line in lines]
+    def one(ed, id, value):
+        t = trace(ed)
+        return len(t) == 3 and [r[0] for r in t] == ["B", "V", "E"] and all(int(r[1]) == id for r in t) and int(t[1][2]) == value
+    ed = Editor(L)
+    check(L.sq8l_gl_sound_queue_check(ed.v) == 0,
+          "shared fixed staging: recursive unlock, modal release, reentrant drain and 15000-event overflow stay balanced")
+    wrong = []
+    # Exercise every audited appearance independently of actual widget layout aliases.
+    for a in fixture["appearances"]:
+        p = free[a["field"]]
+        if p["mode"] >= 0: L.sq8l_gl_sound_host(ed.v, free[p["mode"]]["index"], 0)
+        L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"])
+        trace(ed)
+        for value in (p["min"], p["max"]):
+            L.sq8l_gl_ctr(ed.v, 1, a["param"], value)
+            if not one(ed, p["index"], value) or L.sq8l_gl_sound_get(ed.v, p["index"]) != value:
+                wrong.append((a["page"], a["sub"], a["param"], p["index"], value))
+    check(not wrong, f"all260 LCD appearances accept native endpoints once with B/V/E and synchronous echo ({wrong[:3]})")
+    wrong = []
+    for p in fixture["parameters"]:
+        if p["codec"] not in ("Sync", "SyncT4"): continue
+        a = next(a for a in fixture["appearances"] if a["field"] == p["field"])
+        L.sq8l_gl_sound_host(ed.v, free[p["mode"]]["index"], 1)
+        L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"])
+        trace(ed)
+        L.sq8l_gl_ctr(ed.v, 1, a["param"], p["max"])
+        if not one(ed, p["index"], p["max"]): wrong.append(p["index"])
+    check(not wrong, f"all20 pending Sync bindings select permanent Sync identities, including packed T4 ({wrong})")
+    for op, field in enumerate((324, 325, 326)):
+        L.sq8l_gl_sound_host(ed.v, free[field]["index"], 0)
+        trace(ed); L.sq8l_gl_sound_action(ed.v, op)
+        check(one(ed, free[field]["index"], 1), f"panel button field{field} uses one semantic B/V/E")
+    L.sq8l_gl_sound_action(ed.v, 9); ed.idle(20); trace(ed)
+    leds = json.loads(ed.cstr(L.sq8l_gl_state))["leds"]
+    L.sq8l_gl_sound_action(ed.v, 1)
+    check(leds[1] == 0 and one(ed, free[325]["index"], 1), "legacy AM raw2 keeps LED off and its click selects1")
+    L.sq8l_gl_sound_action(ed.v, 9)
+    L.sq8l_gl_sound_host(ed.v, free[325]["index"], 1); trace(ed)
+    L.sq8l_gl_sound_action(ed.v, 1)
+    check(one(ed, free[325]["index"], 0), "pending explicit AM1 overrides the legacy raw2 button projection")
+    # A fresh stopped instance: a pending host value refreshes while Program remains untouched.
+    L.sq8l_gl_free(ed.v)
+    ed = Editor(L)
+    rate = next(p for p in fixture["parameters"] if p["symbol"] == "lfo1_freq_free")
+    a = next(a for a in fixture["appearances"] if a["field"] == rate["field"])
+    L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"])
+    k = ed.pages()[a["page"]]["subs"][a["sub"]]["params"][a["param"]]["knob"]
+    trace(ed); before = L.sq8l_gl_sound_raw(ed.v, rate["index"])
+    value = 30 if before != 30 else 31
+    L.sq8l_gl_sound_host(ed.v, rate["index"], value); ed.idle(20)
+    check(ed.knob(k) == value and L.sq8l_gl_sound_raw(ed.v, rate["index"]) == before and not trace(ed),
+          "pending host refresh changes text/knob without applying Program or recording gestures")
+    L.sq8l_gl_ctr(ed.v, 0, 0, 0)
+    L.sq8l_gl_sound_host(ed.v, rate["index"], 41); ed.idle(20)
+    check(json.loads(ed.cstr(L.sq8l_gl_state))["ctr"]["page"] == 0 and not trace(ed), "offscreen automation keeps selected page and emits no user edit")
+    L.sq8l_gl_sound_reopen(ed.v)
+    L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"]); ed.idle(20)
+    check(ed.knob(k) == 41 and not trace(ed), "reopen reads the complete accepted snapshot")
+    x, y = knob_xy(k)
+    L.sq8l_gl_wheel(ed.v, x, y, 1, 0)
+    L.sq8l_gl_wheel(ed.v, x, y, 1, 0)
+    t = trace(ed); ed.idle(249); t += trace(ed)
+    check([r[0] for r in t] == ["B", "V", "V"], "same-ID wheel edits share a gesture through249ms")
+    ed.idle(1); check([r[0] for r in trace(ed)] == ["E"], "wheel group ends at250ms")
+    L.sq8l_gl_sound_host(ed.v, rate["index"], 127); ed.idle(20); trace(ed)
+    L.sq8l_gl_wheel(ed.v, x, y, 1, 0)
+    check(not trace(ed), "clamped wheel no-op opens no gesture")
+    # Physical input methods must accept once per emitted value, even with sync echo.
+    def accepted(t, id, revision, count=1):
+        values = [r for r in t if r[0] == "V"]
+        return (all(int(r[1]) == id for r in t) and len(values) == count and
+                [int(r[3]) for r in values] == list(range(revision + 1, revision + count + 1)) and
+                L.sq8l_gl_sound_revision(ed.v) == revision + count)
+
+    def setup(p, value=20):
+        appearance = next(a for a in fixture["appearances"] if a["field"] == p["field"])
+        if p["mode"] >= 0: L.sq8l_gl_sound_host(ed.v, free[p["mode"]]["index"], 0)
+        L.sq8l_gl_ctr(ed.v, 0, appearance["page"], appearance["sub"])
+        L.sq8l_gl_sound_host(ed.v, p["index"], value)
+        ed.idle(20); trace(ed)
+        param = ed.pages()[appearance["page"]]["subs"][appearance["sub"]]["params"][appearance["param"]]
+        return appearance, param
+
+    a, param = setup(rate)
+    k = param["knob"]
+    # One physical display move, no synthetic duplicate source conversion.
+    xy = cell_xy(param["x"], param["y"])
+    revision = L.sq8l_gl_sound_revision(ed.v)
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, *xy, 0)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, *xy, MK_LBUTTON)
+    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, xy[0], xy[1] - 12, MK_LBUTTON)
+    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, xy[0], xy[1] - 12, 0)
+    t = trace(ed)
+    check([r[0] for r in t] == ["B", "V", "E"] and accepted(t, rate["index"], revision),
+          "completed display drag captures one ID and accepts once with B/V/E")
+
+    # Use VOICES for a value popup with a stable, known selected value.
+    voices = next(p for p in fixture["parameters"] if p["symbol"] == "mode_voices")
+    va, vp = setup(voices, 8)
+    for route in ("selected", "dismissed", "replacement", "navigation", "cancel"):
+        setup(voices, 8)
+        revision = L.sq8l_gl_sound_revision(ed.v)
+        ed.events(); ed.choose([3] if route != "dismissed" else [])
+        if route in ("replacement", "navigation", "cancel"):
+            L.sq8l_gl_sound_popup_action(ed.v, {"replacement":0,"navigation":1,"cancel":3}[route], 0)
+        ed.context_menu(knob_xy(vp["knob"]))
+        t = trace(ed)
+        opened = bool(ed.popups(ed.events()))
+        if route == "selected":
+            ok = [r[0] for r in t] == ["B", "V", "E"] and accepted(t, voices["index"], revision) and int(t[1][2]) == 2
+        else: ok = not t
+        check(ok and opened, f"value popup {route}: exact modal hook preserves selection or rejects stale input" + (f" trace={t} revision={revision}->{L.sq8l_gl_sound_revision(ed.v)}" if not ok else ""))
+    # Rebind Free->Sync during the unlocked popup loop; the stale selection stays inert.
+    a, param = setup(rate)
+    L.sq8l_gl_sound_host(ed.v, free[rate["mode"]]["index"], 1); ed.idle(20); trace(ed)
+    ed.events(); ed.choose([3])
+    L.sq8l_gl_sound_popup_action(ed.v, 2, free[rate["mode"]]["index"])
+    ed.context_menu(knob_xy(k)); check(not trace(ed) and bool(ed.popups(ed.events())), "value popup rejects identity rebinding during modal input")
+
+    toggle = next(p for p in fixture["parameters"] if p["min"] == 0 and p["max"] == 1 and
+                  any(a["field"] == p["field"] for a in fixture["appearances"]))
+    ta, tp = setup(toggle, 0)
+    revision = L.sq8l_gl_sound_revision(ed.v)
+    ed.click(knob_xy(tp["knob"]))
+    t = trace(ed)
+    check([r[0] for r in t] == ["B", "V", "E"] and accepted(t, toggle["index"], revision) and int(t[1][2]) == 1,
+          "soft toggle emits one B/V/E and one accepted revision")
+
+    for display in (False, True):
+        for route in ("init", "project"):
+            setup(toggle, 0)
+            point = cell_xy(tp["x"], tp["y"]) if display else knob_xy(tp["knob"])
+            L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, *point, 0)
+            L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, *point, MK_LBUTTON)
+            if route == "init": L.sq8l_gl_sound_action(ed.v, 3)
+            else: L.sq8l_gl_sound_project(ed.v)
+            trace(ed); revision = L.sq8l_gl_sound_revision(ed.v)
+            L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, *point, 0)
+            check(not trace(ed) and L.sq8l_gl_sound_revision(ed.v) == revision,
+                  f"{'display' if display else 'soft'} toggle drops old release after {route} before idle")
+            ed.click(point)
+            check(one(ed, toggle["index"], L.sq8l_gl_sound_get(ed.v, toggle["index"])),
+                  "a fresh toggle after replacement reads current accepted state")
+
+    a, param = setup(rate)
+    other_a = next(a2 for a2 in fixture["appearances"] if a2["page"] == a["page"] and
+                   a2["sub"] == a["sub"] and a2["field"] != rate["field"] and
+                   free[a2["field"]]["max"] - free[a2["field"]]["min"] > 1)
+    other = free[other_a["field"]]
+    op = ed.pages()[a["page"]]["subs"][a["sub"]]["params"][other_a["param"]]
+    for clamped in (False, True):
+        L.sq8l_gl_sound_cancel(ed.v)
+        L.sq8l_gl_sound_host(ed.v, rate["index"], 20)
+        L.sq8l_gl_sound_host(ed.v, other["index"], other["max"] if clamped else other["min"])
+        ed.idle(20); trace(ed)
+        revision = L.sq8l_gl_sound_revision(ed.v)
+        L.sq8l_gl_wheel(ed.v, *knob_xy(k), 1, 0)
+        L.sq8l_gl_wheel(ed.v, *knob_xy(op["knob"]), 1, 0)
+        t = trace(ed)
+        want = ["B", "V", "E"] if clamped else ["B", "V", "E", "B", "V"]
+        check([r[0] for r in t] == want and all(int(r[1]) == rate["index"] for r in t[:3]) and
+              (clamped or all(int(r[1]) == other["index"] for r in t[3:])) and
+              L.sq8l_gl_sound_revision(ed.v) == revision + (1 if clamped else 2),
+              f"wheel identity switch closes old ID before {'clamped no-op' if clamped else 'new B/V'}")
+        ed.idle(250); tail = trace(ed)
+        check(not tail if clamped else tail == [["E", str(other["index"])]], "switched wheel has exactly the required final end")
+
+    # Fractional physical residual must not cross cancellation, page/mode or modal boundaries.
+    for boundary in ("cancel", "page", "mode", "modal"):
+        a, param = setup(rate)
+        L.sq8l_gl_wheel(ed.v, *knob_xy(k), 1, 0)
+        L.sq8l_gl_wheel(ed.v, *knob_xy(k), 1.6, 0)  # leaves +0.6 physical remainder
+        if boundary == "cancel": L.sq8l_gl_sound_cancel(ed.v)
+        elif boundary == "page":
+            L.sq8l_gl_ctr(ed.v, 0, 0, 0); L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"])
+        elif boundary == "mode":
+            for mode in (1, 0):
+                L.sq8l_gl_sound_host(ed.v, free[rate["mode"]]["index"], mode); ed.idle(20)
+        else:
+            ed.choose([]); ed.context_menu(OPTIONS)
+        trace(ed); before = L.sq8l_gl_sound_get(ed.v, rate["index"])
+        L.sq8l_gl_wheel(ed.v, *knob_xy(k), -1, 0)
+        t = trace(ed)
+        check([r[0] for r in t] == ["B", "V"] and int(t[1][2]) == before - 1,
+              f"{boundary} clears fractional wheel accumulator before the next input")
+        L.sq8l_gl_sound_cancel(ed.v); trace(ed)
+
+    a, param = setup(rate)
+    L.sq8l_gl_wheel(ed.v, *knob_xy(k), 1, 0)
+    L.sq8l_gl_wheel(ed.v, *knob_xy(k), 1.6, 0)
+    before = L.sq8l_gl_sound_get(ed.v, rate["index"]); trace(ed)
+    ed.choose([]); L.sq8l_gl_sound_popup_action(ed.v, 4, k)
+    ed.context_menu(OPTIONS)
+    t = trace(ed)
+    check([r[0] for r in t] == ["E", "B", "V"] and int(t[-1][2]) == before - 1,
+          "unlocked modal reentrant wheel starts fresh without the outgoing fractional remainder")
+    L.sq8l_gl_sound_cancel(ed.v); trace(ed)
+
+    for boundary, op in (("focus hook", 0), ("capture loss", 1), ("destruction", 2)):
+        a, param = setup(rate)
+        revision = L.sq8l_gl_sound_revision(ed.v)
+        ed.drag_knob(k, dy=-10, release=False)
+        L.sq8l_gl_sound_boundary(ed.v, op)
+        t = trace(ed)
+        check([r[0] for r in t] == ["B", "V", "E"] and accepted(t, rate["index"], revision),
+              f"{boundary} closes captured gesture with one acceptance")
+        if op == 2: L.sq8l_gl_sound_reopen(ed.v)
+        L.sq8l_gl_cancel_mouse_mode(ed.v)
+    a, param = setup(rate)
+    ed.drag_knob(k, dy=-10, release=False); t = trace(ed)
+    size = L.sq8l_gl_sound_project(ed.v)
+    ed.idle(20); t += trace(ed)
+    check(size > 571 and [r[0] for r in t] == ["B", "V", "E"] and
+          all(int(r[1]) == rate["index"] for r in t),
+          "real project capture/encode/parse/restore closes gesture with explicit extension")
+    L.sq8l_gl_cancel_mouse_mode(ed.v)
+    # All cancellation/replacement boundaries retain a balanced captured identity.
+    for route in ("cancel", "page", "sub", "mode", "init", "select", "compare", "compare-off", "chunk", "sysex", "reopen"):
+        L.sq8l_gl_sound_host(ed.v, free[rate["mode"]]["index"], 0)
+        L.sq8l_gl_ctr(ed.v, 0, a["page"], a["sub"]); trace(ed)
+        ed.drag_knob(k, dy=-10, release=False)
+        t = trace(ed)
+        if route == "cancel": L.sq8l_gl_sound_cancel(ed.v)
+        elif route == "page": L.sq8l_gl_ctr(ed.v, 0, 0, 0)
+        elif route == "sub": L.sq8l_gl_ctr(ed.v, 0, a["page"], 1)
+        elif route == "mode": L.sq8l_gl_sound_host(ed.v, free[rate["mode"]]["index"], 1)
+        elif route == "reopen": L.sq8l_gl_sound_reopen(ed.v)
+        else: L.sq8l_gl_sound_action(ed.v, {"init":3,"select":4,"compare":5,"compare-off":6,"chunk":7,"sysex":8}[route])
+        # Deliver an already-captured move before idle can observe a replacement/rebind.
+        revision = L.sq8l_gl_sound_revision(ed.v)
+        if route in ("mode", "init", "select", "chunk", "sysex"):
+            L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y + 15, MK_LBUTTON)
+            check(L.sq8l_gl_sound_revision(ed.v) == revision,
+                  f"{route} rejects a stale physical move before idle")
+        ed.idle(20); t += trace(ed)
+        check(sum(r[0] == "B" for r in t) == 1 and sum(r[0] == "E" for r in t) == 1 and all(int(r[1]) == rate["index"] for r in t), f"captured drag closes on{route}")
+        L.sq8l_gl_cancel_mouse_mode(ed.v)
+    L.sq8l_gl_free(ed.v)
+
+
 def main():
     L = ctypes.CDLL(LIB_PATH)
     vp = ctypes.c_void_p
     for name, args, res in [
+        ("sq8l_gl_sound_boundary", [vp, ctypes.c_int], None),
+        ("sq8l_gl_sound_revision", [vp], ctypes.c_uint64),
+        ("sq8l_gl_sound_project", [vp], ctypes.c_int32),
+        ("sq8l_gl_sound_popup_action", [vp, ctypes.c_int, ctypes.c_uint], None),
+        ("sq8l_gl_sound_action", [vp, ctypes.c_int], None),
+        ("sq8l_gl_sound_raw", [vp, ctypes.c_uint], ctypes.c_int32),
+        ("sq8l_gl_sound_queue_check", [vp], ctypes.c_int32),
+        ("sq8l_gl_sound_sync", [vp, ctypes.c_int], None),
+        ("sq8l_gl_sound_trace", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_sound_get", [vp, ctypes.c_uint], ctypes.c_int32),
+        ("sq8l_gl_sound_host", [vp, ctypes.c_uint, ctypes.c_int], None),
+        ("sq8l_gl_sound_cancel", [vp], None),
+        ("sq8l_gl_sound_reopen", [vp], None),
+        ("sq8l_gl_free", [vp], None),
         ("sq8l_gl_new", [ctypes.c_int], vp),
         ("sq8l_gl_set_host", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_char_p], None),
         ("sq8l_gl_show", [vp], None), ("sq8l_gl_idle", [vp, ctypes.c_int32], None),
@@ -532,6 +794,9 @@ def main():
     # a free rate past the last division plays and reads as the last, and comes back intact
     L.sq8l_gl_ctr(ed.v, 1, LFO_SYNC, 0)
     L.sq8l_gl_ctr(ed.v, 1, LFO_FREQ, 100)
+    # This legacy projection case starts from applied raw100 with no remembered Sync edit.
+    # The new accepted service deliberately preserves explicit inactive values elsewhere.
+    L.sq8l_gl_sound_sync(ed.v, 1)
     L.sq8l_gl_ctr(ed.v, 1, LFO_SYNC, 1)
     ed.idle()
     check(ed.lcd_row(0)[10:13] == "64T" and ed.knob(0) == 35 and ed.program_byte(0xA2) == 100,
@@ -578,6 +843,8 @@ def main():
         L.sq8l_gl_ctr(ed.v, 1, idx, v)
     ed.idle()
     free_row = ed.lcd_row(1)
+    # Establish the original test's applied FREE baseline before its mode transition.
+    L.sq8l_gl_sound_sync(ed.v, 0)
     check(free_row[5:10] == "T1=13" and free_row[10] in " \0" and free_row[13:18] == "T2=50",
           f"FREE times as ever, two digits: {free_row[:44]!r}")
 
@@ -942,6 +1209,7 @@ def main():
           f"one decimal-point attribute per dot of {version!r} ({boot.lcd_attrs(1).count(2)})")
     check("." not in line, "the version's dots are attributes here too")
 
+    semantic_checks(L)
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0
 

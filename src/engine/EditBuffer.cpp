@@ -195,6 +195,7 @@ EditBuffer::EditBuffer(SoundLibrary* library) : lib_(library) {
 void EditBuffer::initProgram() {
     sq8l::initProgram(current());
     modified_ = true;
+    completedReplacement();
 }
 
 void EditBuffer::resetExtZone(int zone) {
@@ -264,11 +265,15 @@ void EditBuffer::captureExt(bool force) {
 bool EditBuffer::selectProgram(int prog, int bank) {
     advanceRing();
     const int idx = libraryIndex(prog, bank);
-    if (!lib_ || !lib_->readProgram(idx, current())) return false;  // ring already advanced
+    if (!lib_ || !lib_->readProgram(idx, current())) {
+        completedReplacement(Replacement::FailedSelection); // ring already advanced
+        return false;
+    }
     prog_ = prog;
     if (bank >= 0) bank_ = bank;
     modified_ = false;
     captureExt(false);
+    completedReplacement();
     emit(Event::ProgramLoaded);
     return true;
 }
@@ -281,6 +286,7 @@ bool EditBuffer::selectIndex(int index) {
 }
 
 bool EditBuffer::writeProgram(int prog, int bank) {
+    synchronize();
     applyExt();
     const bool ok = lib_ && lib_->writeProgram(libraryIndex(prog, bank), current());
     if (ok) {
@@ -293,7 +299,9 @@ bool EditBuffer::writeProgram(int prog, int bank) {
 }
 
 void EditBuffer::compare(int prog, int bank) {
+    synchronize();
     if (compare_ <= 0) {
+        if (lifecycle_) lifecycle_->backupCompare();
         slots_[kRingSize] = current();
         std::memcpy(extBackup_, ext_, ofs::ExtSize);
     }
@@ -301,8 +309,11 @@ void EditBuffer::compare(int prog, int bank) {
     if (lib_ && lib_->readProgram(libraryIndex(prog, bank), current())) {
         compare_ = 1;
         captureExt(false);
+        completedReplacement(Replacement::ComparePreview);
     } else {
+        const bool wasComparing = comparing();
         compareOff();
+        if (!wasComparing) completedReplacement(Replacement::FailedSelection);
     }
     emit(Event::CompareOn);
 }
@@ -313,12 +324,14 @@ void EditBuffer::compareOff() {
     current() = slots_[kRingSize];
     std::memcpy(ext_, extBackup_, ofs::ExtSize);
     compare_ = 0;
+    completedReplacement(Replacement::CompareRestore);
     emit(Event::CompareOff);
 }
 
-const std::vector<uint8_t>& EditBuffer::getChunk() {
-    chunk_.assign(kChunkSize, 0);
-    uint8_t* b = chunk_.data();
+void EditBuffer::copyChunk(Chunk& out) {
+    synchronize();
+    out.fill(0);
+    uint8_t* b = out.data();
     b[0] = 2;
     std::memcpy(b + 4, kEditMagic, sizeof kEditMagic);
     b[0x18] = static_cast<uint8_t>(prog_);
@@ -326,10 +339,16 @@ const std::vector<uint8_t>& EditBuffer::getChunk() {
     b[0x1a] = modified_ ? 1 : 0;
     applyExt();
     std::memcpy(b + kChunkHeaderSize, current().bytes, kProgramSize);
+}
+
+const std::vector<uint8_t>& EditBuffer::getChunk() {
+    Chunk out;
+    copyChunk(out);
+    chunk_.assign(out.begin(), out.end());
     return chunk_;
 }
 
-int EditBuffer::setChunk(const uint8_t* data, size_t size) {
+int EditBuffer::setChunk(const uint8_t* data, size_t size, bool notifyCompletion) {
     if (size == kChunkSize) {
         // FUN_00460a60
         if (!data || data[0] != 2 || data[1] || data[2] || data[3]) return 0;
@@ -339,6 +358,7 @@ int EditBuffer::setChunk(const uint8_t* data, size_t size) {
         captureExt(false);
         prog_ = static_cast<int16_t>(data[0x18] | (data[0x19] << 8));
         modified_ = true;
+        if (notifyCompletion) completedReplacement();
         emit(Event::ProgramLoaded);
         return static_cast<int>(kChunkSize);
     }
@@ -349,6 +369,7 @@ int EditBuffer::setChunk(const uint8_t* data, size_t size) {
         convertOldProgram(data, current());
         captureExt(false);
         modified_ = true;
+        if (notifyCompletion) completedReplacement();
         emit(Event::ProgramLoaded);
         return static_cast<int>(kOldChunkSize);
     }
@@ -366,11 +387,13 @@ bool EditBuffer::importSysex(const uint8_t* data, size_t size, bool checkHeader)
     advanceRing();
     sysex::programFromNybbles(data + sysex::kHeaderSize, current());
     modified_ = true;
+    completedReplacement();
     emit(Event::ProgramLoaded);
     return true;
 }
 
 std::vector<uint8_t> EditBuffer::exportSysex() const {
+    synchronize();
     return sysex::makeSingleDump(current());
 }
 

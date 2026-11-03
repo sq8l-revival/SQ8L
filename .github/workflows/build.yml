@@ -35,6 +35,8 @@ jobs:
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
       - name: HD graphics
         run: ./build/sq8l_hd_check
+      - name: The VST3 program list a host reads
+        run: ./build/sq8l_vst3_check build/bin/SQ8L.vst3/Contents/MacOS/SQ8L
       # Code signing and notarization (Developer ID) go here once certificates are set up
       # as repository secrets; until then package.sh signs the bundles ad hoc.
       - name: Package
@@ -132,6 +134,8 @@ jobs:
         run: ./build/sq8l_hd_check
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.so python3 tests/test_gui_extensions.py
+      - name: The VST3 program list a host reads
+        run: ./build/sq8l_vst3_check build/bin/SQ8L.vst3/Contents/*-linux/SQ8L.so
       - name: The version injected into the build
         run: python3 tests/test_version.py
       - name: Editor on an X server (Xvfb)

@@ -216,6 +216,11 @@ if(APPLE)
   target_link_libraries(sq8l_au_check PRIVATE "-framework AudioToolbox" "-framework CoreFoundation")
 endif()
 
+# The VST3 program list as a host reads it (tests/vst3_check.cpp).
+add_executable(sq8l_vst3_check tests/vst3_check.cpp)
+target_include_directories(sq8l_vst3_check PRIVATE third_party/DPF/distrho/src)
+target_link_libraries(sq8l_vst3_check PRIVATE sq8l_engine ${CMAKE_DL_LIBS})
+
 # Native full-render checker (tests/render_check.cpp), see tests/export_golden_raw.py.
 add_executable(sq8l_render_check tests/render_check.cpp)
 target_link_libraries(sq8l_render_check PRIVATE sq8l_engine)

@@ -162,6 +162,7 @@ public:
 
 private:
     void syncProgram();
+    bool restoreGuard();
 
     std::unique_ptr<SoundLibrary> ownLibrary_;
     SoundLibrary* library_;
@@ -169,7 +170,7 @@ private:
     std::unique_ptr<SynthModules> modules_;
     std::unique_ptr<EditBuffer> edit_;
     std::unique_ptr<Master> master_;
-    bool chunkLoaded_ = false;  // CSynth +0xb4: ignore the next setProgram after setChunk
+    bool chunkLoaded_ = false;  // CSynth +0xb4: ignore the next program selection after setChunk
     bool mtsEnabled_ = false;        // (port) OPTIONS -> MTS-ESP -> Enable
     bool mtsCorrectPitch_ = false;   // (port) ... -> Correct SQ-80 per-key pitch offsets
     int outputCut_ = 0;              // (port) OPTIONS -> Output gain, the cut in dB

@@ -14,6 +14,7 @@ import sys
 from harness import LIB_PATH
 
 CHUNK_SIZE = 0x23B
+CHUNK_HEADER_SIZE = 0x1F    # EditBuffer.h, the patch follows it
 CHUNK_FLAGS = 0x1D          # Synth.cpp kChunkFlags
 FLAG_PROGRAM_CHANGE = 4     # Synth.cpp kChunkProgramChange
 BANK_SIZE = 128
@@ -225,6 +226,35 @@ def main():
     set_chunk(L, s3, on)
     check("a chunk with the bit makes it respond again", L.sq8l_synth_program_change(s3) == 1)
     L.sq8l_synth_free(s3)
+    L.sq8l_synth_free(s)
+
+    # ---------------------------------------------------------------- restore
+    # A host pushes its own program selection as the project loads, after the chunk. It
+    # arrives through whichever door the format gives it, and none of them may overwrite
+    # the patch the chunk just restored.
+    print("restore")
+    src = L.sq8l_synth_new(44100.0)
+    L.sq8l_synth_set_program(src, 42)
+    saved = get_chunk(L, src)
+    patch = saved[CHUNK_HEADER_SIZE:]
+    L.sq8l_synth_free(src)
+
+    s = L.sq8l_synth_new(44100.0)
+    set_chunk(L, s, saved)
+    check("the chunk restores the patch", get_chunk(L, s)[CHUNK_HEADER_SIZE:] == patch)
+    L.sq8l_synth_set_program(s, 0)
+    check("setProgram straight after a chunk load leaves it alone",
+          get_chunk(L, s)[CHUNK_HEADER_SIZE:] == patch, detail=str(L.sq8l_synth_program(s)))
+    L.sq8l_synth_free(s)
+
+    s = L.sq8l_synth_new(44100.0)
+    set_chunk(L, s, saved)
+    send(L, s, (0, 0xC0, 0, 0))
+    check("a program change straight after a chunk load leaves it alone",
+          get_chunk(L, s)[CHUNK_HEADER_SIZE:] == patch, detail=str(L.sq8l_synth_program(s)))
+    send(L, s, (0, 0xC0, 7, 0))
+    check("the next one is the player's and loads", L.sq8l_synth_program(s) == 7,
+          detail=str(L.sq8l_synth_program(s)))
     L.sq8l_synth_free(s)
 
     print()

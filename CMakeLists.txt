@@ -102,6 +102,7 @@ if(SQ8L_BUILD_PLUGIN)
                 "dpf-swap-interval.patch=third_party/DPF" "dpf-au-preset-name.patch=third_party/DPF"
                 "dpf-vst3-program-change.patch=third_party/DPF"
                 "dpf-clap-preset-discovery.patch=third_party/DPF"
+                "dpf-clap-event-size.patch=third_party/DPF"
                 "pugl-x11-nested-update.patch=third_party/DPF/dgl/src/pugl-upstream")
     string(REPLACE "=" ";" entry "${entry}")
     list(GET entry 0 patch)

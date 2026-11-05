@@ -1,7 +1,8 @@
-// The CLAP preset list as a host sees it (issue #65): the preset discovery factory declares the
-// 512 library slots with their names, and clap.preset-load selects one by its load key. Loads the
-// built plug-in in this process and drives it like a host, the way tests/au_check.cpp does for the
-// Audio Unit, so it needs nothing installed.
+// The CLAP preset list and the host's events as a host sees them (issue #65): the preset
+// discovery factory declares the 512 library slots with their names, clap.preset-load selects one
+// by its load key, and process() is driven with note events the way the hosts in the wild send
+// them. Loads the built plug-in in this process and drives it like a host, the way
+// tests/au_check.cpp does for the Audio Unit, so it needs nothing installed.
 //
 //   sq8l_clap_check path/to/SQ8L.clap        (on macOS: .../SQ8L.clap/Contents/MacOS/SQ8L)
 //
@@ -9,6 +10,8 @@
 // library is the one a fresh install has - factory banks C and D, with A and B copies of them -
 // which is what makes the names predictable.
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,10 +26,12 @@
 
 #include "SoundLibrary.h"
 #include "clap/entry.h"
+#include "clap/events.h"
 #include "clap/ext/preset-load.h"
 #include "clap/ext/state.h"
 #include "clap/factory/preset-discovery.h"
 #include "clap/plugin-factory.h"
+#include "clap/process.h"
 
 namespace {
 
@@ -195,6 +200,105 @@ bool stateHas(const std::vector<char>& state, const std::string& needle) {
     return std::search(state.begin(), state.end(), needle.begin(), needle.end()) != state.end();
 }
 
+// ---- the events a host sends, and what the plug-in makes of them ------------------------------
+
+// Every event sits in a 64-byte slot: a host is free to hand over a record larger than the event
+// it holds, and Studio One does (see pushMidi).
+struct Events {
+    clap_input_events_t iface;
+    std::vector<std::array<uint8_t, 64>> list;
+
+    Events() {
+        iface.ctx = this;
+        iface.size = [](const clap_input_events_t* const self) -> uint32_t {
+            return static_cast<uint32_t>(static_cast<Events*>(self->ctx)->list.size());
+        };
+        iface.get = [](const clap_input_events_t* const self, const uint32_t index) -> const clap_event_header_t* {
+            const Events* const events = static_cast<const Events*>(self->ctx);
+            if (index >= events->list.size()) return nullptr;
+            return reinterpret_cast<const clap_event_header_t*>(events->list[index].data());
+        };
+    }
+
+    // headerSize is what the host puts in header.size, which is not always the event's own size:
+    // Studio One (PreSonus CLAP Host 4.3.1) stamps every event with the size of the largest event
+    // it knows, sizeof(clap_event_param_value_t).
+    void pushMidi(const size_t headerSize, const uint8_t status, const uint8_t d1, const uint8_t d2,
+                  const uint16_t spaceId = CLAP_CORE_EVENT_SPACE_ID) {
+        clap_event_midi_t event = {};
+        event.header.size = static_cast<uint32_t>(headerSize);
+        event.header.space_id = spaceId;
+        event.header.type = CLAP_EVENT_MIDI;
+        event.port_index = 0;
+        event.data[0] = status;
+        event.data[1] = d1;
+        event.data[2] = d2;
+        push(&event, sizeof(event));
+    }
+
+    void pushNote(const size_t headerSize, const uint16_t type, const int16_t key, const double velocity) {
+        clap_event_note_t event = {};
+        event.header.size = static_cast<uint32_t>(headerSize);
+        event.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+        event.header.type = type;
+        event.note_id = -1;
+        event.port_index = 0;
+        event.channel = 0;
+        event.key = key;
+        event.velocity = velocity;
+        push(&event, sizeof(event));
+    }
+
+private:
+    void push(const void* const event, const size_t size) {
+        std::array<uint8_t, 64> slot = {};
+        std::memcpy(slot.data(), event, size);
+        list.push_back(slot);
+    }
+};
+
+// Plays events into a fresh instance and returns the loudest sample it produced, so that one
+// case cannot hear the note of the one before it.
+float peakFor(const clap_plugin_factory_t* const plugins, clap_host_t* const host, Events& events,
+              const uint32_t blocks) {
+    const clap_plugin_t* const plugin = plugins->create_plugin(plugins, host, kPluginId);
+    if (plugin == nullptr || !plugin->init(plugin)) return -1.0f;
+
+    constexpr uint32_t kFrames = 128;
+    plugin->activate(plugin, 48000.0, kFrames, kFrames);
+    plugin->start_processing(plugin);
+
+    std::vector<float> left(kFrames), right(kFrames);
+    float* channels[2] = {left.data(), right.data()};
+    clap_audio_buffer_t outputs = {};
+    outputs.data32 = channels;
+    outputs.channel_count = 2;
+
+    const Events noEvents;
+    clap_output_events_t outEvents = {};
+    outEvents.try_push = [](const clap_output_events_t*, const clap_event_header_t*) -> bool { return true; };
+
+    float peak = 0.0f;
+    for (uint32_t block = 0; block < blocks; ++block) {
+        clap_process_t process = {};
+        process.steady_time = static_cast<int64_t>(block) * kFrames;
+        process.frames_count = kFrames;
+        process.audio_outputs = &outputs;
+        process.audio_outputs_count = 1;
+        process.in_events = block == 0 ? &events.iface : &noEvents.iface;
+        process.out_events = &outEvents;
+        plugin->process(plugin, &process);
+
+        for (uint32_t i = 0; i < kFrames; ++i)
+            peak = std::max(peak, std::max(std::fabs(left[i]), std::fabs(right[i])));
+    }
+
+    plugin->stop_processing(plugin);
+    plugin->deactivate(plugin);
+    plugin->destroy(plugin);
+    return peak;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -307,6 +411,55 @@ int main(int argc, char** argv) {
     }
 
     plugin->destroy(plugin);
+
+    std::printf("the host's note events\n");
+    {
+        constexpr uint32_t kBlocks = 96;  // ~0.26 s at 48 kHz, enough for any program's attack
+        constexpr float kAudible = 0.001f;
+
+        Events silence;
+        const float quiet = peakFor(plugins, &host.iface, silence, 8);
+        check(quiet >= 0.0f && quiet < 1.0e-6f, "with no events the output is silent");
+
+        Events midi;
+        midi.pushMidi(sizeof(clap_event_midi_t), 0x90, 62, 104);
+        check(peakFor(plugins, &host.iface, midi, kBlocks) > kAudible, "a MIDI note plays (Reaper, FL Studio)");
+
+        // Studio One's header.size is the size of its own event record, not the MIDI event's, and
+        // the wrapper used to require an exact match and drop every event
+        Events padded;
+        padded.pushMidi(sizeof(clap_event_param_value_t), 0x90, 62, 104);
+        check(peakFor(plugins, &host.iface, padded, kBlocks) > kAudible,
+              "a MIDI note in an oversized event record plays (Studio One)");
+
+        Events note;
+        note.pushNote(sizeof(clap_event_note_t), CLAP_EVENT_NOTE_ON, 62, 0.8);
+        check(peakFor(plugins, &host.iface, note, kBlocks) > kAudible, "a CLAP dialect note plays (Bitwig)");
+
+        Events paddedNote;
+        paddedNote.pushNote(sizeof(clap_event_param_value_t), CLAP_EVENT_NOTE_ON, 62, 0.8);
+        check(peakFor(plugins, &host.iface, paddedNote, kBlocks) > kAudible,
+              "a CLAP dialect note in an oversized event record plays");
+
+        // the other half of the size rule: a record too small to hold the event it claims to be
+        // would be read past its end, so it has to go - as does one from another event space,
+        // where the type ids are another vendor's
+        Events tooSmall;
+        tooSmall.pushMidi(sizeof(clap_event_midi_t) - 1, 0x90, 62, 104);
+        check(peakFor(plugins, &host.iface, tooSmall, kBlocks) < kAudible,
+              "a MIDI note in a record too small for the event is refused");
+
+        Events tooSmallNote;
+        tooSmallNote.pushNote(sizeof(clap_event_note_t) - 1, CLAP_EVENT_NOTE_ON, 62, 0.8);
+        check(peakFor(plugins, &host.iface, tooSmallNote, kBlocks) < kAudible,
+              "a CLAP dialect note in a record too small for the event is refused");
+
+        Events foreignSpace;
+        foreignSpace.pushMidi(sizeof(clap_event_midi_t), 0x90, 62, 104, 1);
+        check(peakFor(plugins, &host.iface, foreignSpace, kBlocks) < kAudible,
+              "an event outside the core event space is refused");
+    }
+
     entry->deinit();
 
     std::printf("%s\n", failures == 0 ? "all checks passed" : "FAILURES");

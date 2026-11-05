@@ -1,0 +1,108 @@
+CLAP: size the host's event records by what we read out of them.
+
+clap_event_header_t.size is the size of the record the host hands over, and a host
+is free to use one record for every event type. Studio One (PreSonus CLAP Host
+4.3.1) does: it stamps every event with the size of the largest it knows,
+sizeof(clap_event_param_value_t) = 56, so a note arrives as a 56-byte
+CLAP_EVENT_MIDI whose first 24 bytes are exactly the clap_event_midi_t it claims to
+be. DPF compared size against the struct for equality, so in Studio One every MIDI
+event was dropped and an instrument built with DPF never saw a note - while Reaper,
+Bitwig and FL Studio, which size each event by its own type, worked.
+
+The only size worth refusing is one too small to hold the event it claims to be,
+which the cast that follows would read past the end of. Anything larger is read as
+the prefix we know - which is also how an extended version of an event struct keeps
+working. An upper bound would bound nothing, since the read is bounded by the struct
+and size is used for nothing else here, and would re-create this bug for the next
+host whose records are larger than today's largest event. A length that does drive
+a read, the one in CLAP_EVENT_MIDI_SYSEX, needs its own bounds whenever that case is
+implemented.
+
+The note events had no size check at all, so a short record was read past its end;
+they get the same one. Written as a plain `if (size < sizeof) break;` rather than
+through DISTRHO_SAFE_ASSERT_UINT2_BREAK: the condition reads as what it refuses, and
+a host sending malformed events no longer writes to stderr from the audio thread on
+every one of them. In flushParameters() that macro's `break` left the for loop, so
+one short record discarded every event after it, while the two checks above it
+`continue`; it is a `continue` now.
+
+That leaves the field that really says not to trust an event: space_id. Anything
+other than CLAP_CORE_EVENT_SPACE_ID is another vendor's extension space, where the
+same type ids mean something else, and the note and MIDI cases took it on trust.
+Checking it once for the whole loop also subsumes the test inside
+CLAP_EVENT_PARAM_VALUE, and matches what flushParameters() already did.
+
+diff --git a/distrho/src/DistrhoPluginCLAP.cpp b/distrho/src/DistrhoPluginCLAP.cpp
+index 831ace2..8d0ecf4 100644
+--- a/distrho/src/DistrhoPluginCLAP.cpp
++++ b/distrho/src/DistrhoPluginCLAP.cpp
+@@ -989,18 +989,29 @@ public:
+                 for (uint32_t i=0; i<len; ++i)
+                 {
+                     const clap_event_header_t* const event = inputEvents->get(inputEvents, i);
+ 
++                    // another space is another vendor's extension, where the same type ids mean
++                    // something else entirely
++                    if (event->space_id != CLAP_CORE_EVENT_SPACE_ID)
++                        continue;
++
+                     switch (event->type)
+                     {
+                     case CLAP_EVENT_NOTE_ON:
+                        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
++                        // the record only has to hold the event it says it is; a larger one
++                        // (Studio One sizes every event like its largest) is read as its prefix
++                        if (event->size < sizeof(clap_event_note_t))
++                            break;
+                         // BUG: even though we only report CLAP_NOTE_DIALECT_MIDI as supported, Bitwig sends us this anyway
+                         addNoteEvent(reinterpret_cast<const clap_event_note_t*>(event), true);
+                        #endif
+                         break;
+                     case CLAP_EVENT_NOTE_OFF:
+                        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
++                        if (event->size < sizeof(clap_event_note_t))
++                            break;
+                         // BUG: even though we only report CLAP_NOTE_DIALECT_MIDI as supported, Bitwig sends us this anyway
+                         addNoteEvent(reinterpret_cast<const clap_event_note_t*>(event), false);
+                        #endif
+                         break;
+@@ -1008,21 +1019,20 @@ public:
+                     case CLAP_EVENT_NOTE_END:
+                     case CLAP_EVENT_NOTE_EXPRESSION:
+                         break;
+                     case CLAP_EVENT_PARAM_VALUE:
+-                        DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_param_value_t),
+-                                                        event->size, sizeof(clap_event_param_value_t));
+-                        if (event->space_id == 0)
+-                            setParameterValueFromEvent(reinterpret_cast<const clap_event_param_value_t*>(event));
++                        if (event->size < sizeof(clap_event_param_value_t))
++                            break;
++                        setParameterValueFromEvent(reinterpret_cast<const clap_event_param_value_t*>(event));
+                         break;
+                     case CLAP_EVENT_PARAM_MOD:
+                     case CLAP_EVENT_PARAM_GESTURE_BEGIN:
+                     case CLAP_EVENT_PARAM_GESTURE_END:
+                     case CLAP_EVENT_TRANSPORT:
+                         break;
+                     case CLAP_EVENT_MIDI:
+-                        DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_midi_t),
+-                                                        event->size, sizeof(clap_event_midi_t));
++                        if (event->size < sizeof(clap_event_midi_t))
++                            break;
+                        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+                         addMidiEvent(reinterpret_cast<const clap_event_midi_t*>(event));
+                        #endif
+                         break;
+@@ -1279,10 +1289,10 @@ public:
+                     continue;
+                 if (event->space_id != 0)
+                     continue;
+ 
+-                DISTRHO_SAFE_ASSERT_UINT2_BREAK(event->size == sizeof(clap_event_param_value_t),
+-                                                event->size, sizeof(clap_event_param_value_t));
++                if (event->size < sizeof(clap_event_param_value_t))
++                    continue;
+ 
+                 setParameterValueFromEvent(reinterpret_cast<const clap_event_param_value_t*>(event));
+             }
+         }

@@ -55,8 +55,20 @@ read it. The cost is that a block of over kMaxMidiEvents events now drops notes
 rather than controllers; at 512 per block that needs a pathological stream, and the
 alternative is worse in every ordinary one.
 
+
+The host's program selector is kept in step the other way as well. fCurrentProgram
+counts only what arrived through the wrapper, but loadProgram() is not the only way
+a program is selected: a MIDI program change, or a pick in the plugin's own editor,
+reaches the engine without passing through here. The host then keeps naming the
+entry before it, and saves that name into the project.
+
+- a plugin that defines DISTRHO_PLUGIN_PROGRAM_HOOKS answers which program it is
+  actually on; one that does not keeps DPF's own count, unchanged.
+- getState() writes that program, so a project names the slot its patch was saved on.
+- updateParametersFromProcessing() reports a program the wrapper did not select as
+  an output parameter change, which is the only realtime-safe way out of process().
 diff --git a/distrho/src/DistrhoPluginVST3.cpp b/distrho/src/DistrhoPluginVST3.cpp
-index 7295c892..b6f9d00c 100644
+index 7295c892..7d322c4a 100644
 --- a/distrho/src/DistrhoPluginVST3.cpp
 +++ b/distrho/src/DistrhoPluginVST3.cpp
 @@ -53,6 +53,7 @@
@@ -135,7 +147,30 @@ index 7295c892..b6f9d00c 100644
         #if DISTRHO_PLUGIN_HAS_UI
          // NOTE always runs first
          bool appendFromUI(const uint8_t midiData[3])
-@@ -1535,24 +1567,6 @@ public:
+@@ -613,6 +645,10 @@ public:
+        #if DISTRHO_PLUGIN_WANT_PROGRAMS
+         , fCurrentProgram(0)
+         , fProgramCountMinusOne(fPlugin.getProgramCount()-1)
++        #ifdef DISTRHO_PLUGIN_PROGRAM_HOOKS
++        // (SQ8L) resolved once: this is read once a block, and a dynamic_cast is not free
++        , fProgramHooks(dynamic_cast<ProgramHooks*>(static_cast<Plugin*>(fPlugin.getInstancePointer())))
++        #endif
+        #endif
+     {
+        #if !DPF_VST3_USES_SEPARATE_CONTROLLER
+@@ -1195,8 +1231,10 @@ public:
+ 
+        #if DISTRHO_PLUGIN_WANT_PROGRAMS
+         {
++            // (SQ8L) the engine's program, not just the one this wrapper last set, so a
++            // project reopens naming the slot its patch was saved on
+             String tmpStr("__dpf_program__\xff");
+-            tmpStr += String(fCurrentProgram);
++            tmpStr += String(pluginCurrentProgram());
+             tmpStr += "\xff";
+ 
+             state += tmpStr;
+@@ -1535,24 +1573,6 @@ public:
          }
         #endif
  
@@ -160,7 +195,7 @@ index 7295c892..b6f9d00c 100644
        #endif
  
          if (v3_param_changes** const inparamsptr = data->input_params)
-@@ -1607,7 +1621,88 @@ public:
+@@ -1607,7 +1627,88 @@ public:
              }
          }
  
@@ -249,11 +284,30 @@ index 7295c892..b6f9d00c 100644
          const uint32_t midiEventCount = inputEventList.convert(fMidiEvents);
          fPlugin.run(inputs, outputs, data->nframes, fMidiEvents, midiEventCount);
         #else
-@@ -1662,6 +1757,21 @@ public:
+@@ -1662,6 +1763,40 @@ public:
          return 0;
      }
  
 +   #if DISTRHO_PLUGIN_WANT_PROGRAMS
++    /* (SQ8L) The program the plug-in is actually on. fCurrentProgram counts only what came
++     * through this wrapper, and loadProgram() is not the only way a program is selected: a
++     * MIDI program change, or a pick in the plug-in's own editor, reaches the engine without
++     * passing through here, and leaves the host's program selector on the entry before it.
++     * A plug-in that implements no hook keeps DPF's own count, which is what it had.
++     */
++    uint32_t pluginCurrentProgram() noexcept
++    {
++       #ifdef DISTRHO_PLUGIN_PROGRAM_HOOKS
++        if (fProgramHooks != nullptr)
++        {
++            const int32_t program = fProgramHooks->currentProgram();
++            if (program >= 0 && static_cast<uint32_t>(program) <= fProgramCountMinusOne)
++                return static_cast<uint32_t>(program);
++        }
++       #endif
++        return fCurrentProgram;
++    }
++
 +    // ----------------------------------------------------------------------------------------------------------------
 +    // v3_unit_information interface calls (SQ8L)
 +
@@ -271,7 +325,7 @@ index 7295c892..b6f9d00c 100644
      // ----------------------------------------------------------------------------------------------------------------
      // v3_edit_controller interface calls
  
-@@ -1708,6 +1818,10 @@ public:
+@@ -1708,6 +1843,10 @@ public:
          case kVst3InternalParameterProgram:
              info->flags = V3_PARAM_CAN_AUTOMATE | V3_PARAM_IS_LIST | V3_PARAM_PROGRAM_CHANGE | V3_PARAM_IS_HIDDEN;
              info->step_count = fProgramCountMinusOne;
@@ -282,7 +336,47 @@ index 7295c892..b6f9d00c 100644
              strncpy_utf16(info->title, "Current Program", 128);
              strncpy_utf16(info->short_title, "Program", 128);
              return V3_OK;
-@@ -3434,6 +3548,171 @@ struct dpf_midi_mapping : v3_midi_mapping_cpp {
+@@ -2489,6 +2628,9 @@ private:
+    #if DISTRHO_PLUGIN_WANT_PROGRAMS
+     uint32_t fCurrentProgram;
+     const uint32_t fProgramCountMinusOne;
++    #ifdef DISTRHO_PLUGIN_PROGRAM_HOOKS
++    ProgramHooks* const fProgramHooks; // (SQ8L) see pluginCurrentProgram
++    #endif
+    #endif
+    #if DISTRHO_PLUGIN_WANT_STATE
+     StringMap fStateMap;
+@@ -2897,6 +3039,29 @@ private:
+         }
+        #endif
+ 
++      #if DISTRHO_PLUGIN_WANT_PROGRAMS
++        /* (SQ8L) A program the wrapper did not select itself - from MIDI, or from the
++         * plug-in's own editor - has to be reported, or the host's program selector keeps
++         * naming the one before it and saves that. Reported like an output parameter, from
++         * the block that noticed, which is the only realtime-safe way out of process().
++         */
++        {
++            const uint32_t program = pluginCurrentProgram();
++
++            if (program != fCurrentProgram)
++            {
++                fCurrentProgram = program;
++                fCachedParameterValues[kVst3InternalParameterProgram] = program;
++                addParameterDataToHostOutputEvents(outparamsptr, kVst3InternalParameterProgram,
++                                                   plainParameterToNormalized(kVst3InternalParameterProgram,
++                                                                              program));
++               #if DISTRHO_PLUGIN_HAS_UI
++                fParameterValueChangesForUI[kVst3InternalParameterProgram] = true;
++               #endif
++            }
++        }
++       #endif
++
+         for (uint32_t i=0; i<fParameterCount; ++i)
+         {
+             if (fPlugin.isParameterOutput(i))
+@@ -3434,6 +3599,171 @@ struct dpf_midi_mapping : v3_midi_mapping_cpp {
  };
  #endif // DISTRHO_PLUGIN_WANT_MIDI_INPUT
  
@@ -454,7 +548,7 @@ index 7295c892..b6f9d00c 100644
  // --------------------------------------------------------------------------------------------------------------------
  // dpf_edit_controller
  
-@@ -3442,6 +3721,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+@@ -3442,6 +3772,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
     #if DISTRHO_PLUGIN_HAS_UI
      ScopedPointer<dpf_ctrl2view_connection_point> connectionCtrl2View;
     #endif
@@ -464,7 +558,7 @@ index 7295c892..b6f9d00c 100644
     #if DPF_VST3_USES_SEPARATE_CONTROLLER
      ScopedPointer<dpf_comp2ctrl_connection_point> connectionComp2Ctrl;
      ScopedPointer<PluginVst3> vst3;
-@@ -3517,6 +3799,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+@@ -3517,6 +3850,9 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
         #if DISTRHO_PLUGIN_HAS_UI
          connectionCtrl2View = nullptr;
         #endif
@@ -474,7 +568,7 @@ index 7295c892..b6f9d00c 100644
         #if DPF_VST3_USES_SEPARATE_CONTROLLER
          connectionComp2Ctrl = nullptr;
          vst3 = nullptr;
-@@ -3562,6 +3847,27 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+@@ -3562,6 +3898,27 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
             #endif
          }
  
@@ -502,7 +596,7 @@ index 7295c892..b6f9d00c 100644
          if (v3_tuid_match(iid, v3_connection_point_iid))
          {
             #if DPF_VST3_USES_SEPARATE_CONTROLLER
-@@ -3623,6 +3929,18 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
+@@ -3623,6 +3980,18 @@ struct dpf_edit_controller : v3_edit_controller_cpp {
              }
          }
  
@@ -521,7 +615,7 @@ index 7295c892..b6f9d00c 100644
          if (unclean)
              return handleUncleanController(controllerptr);
  
-@@ -4155,6 +4473,9 @@ struct dpf_audio_processor : v3_audio_processor_cpp {
+@@ -4155,6 +4524,9 @@ struct dpf_audio_processor : v3_audio_processor_cpp {
  struct dpf_component : v3_component_cpp {
      std::atomic_int refcounter;
      ScopedPointer<dpf_audio_processor> processor;
@@ -531,7 +625,7 @@ index 7295c892..b6f9d00c 100644
     #if DPF_VST3_USES_SEPARATE_CONTROLLER
      ScopedPointer<dpf_comp2ctrl_connection_point> connectionComp2Ctrl;
     #else
-@@ -4200,6 +4521,9 @@ struct dpf_component : v3_component_cpp {
+@@ -4200,6 +4572,9 @@ struct dpf_component : v3_component_cpp {
      {
          d_debug("~dpf_component()");
          processor = nullptr;
@@ -541,7 +635,7 @@ index 7295c892..b6f9d00c 100644
         #if DPF_VST3_USES_SEPARATE_CONTROLLER
          connectionComp2Ctrl = nullptr;
         #else
-@@ -4243,6 +4567,26 @@ struct dpf_component : v3_component_cpp {
+@@ -4243,6 +4618,26 @@ struct dpf_component : v3_component_cpp {
             #endif
          }
  
@@ -568,7 +662,7 @@ index 7295c892..b6f9d00c 100644
          if (v3_tuid_match(iid, v3_audio_processor_iid))
          {
              d_debug("query_interface_component => %p %s %p | OK convert %p",
-@@ -4337,6 +4681,19 @@ struct dpf_component : v3_component_cpp {
+@@ -4337,6 +4732,19 @@ struct dpf_component : v3_component_cpp {
              }
          }
  
@@ -588,7 +682,7 @@ index 7295c892..b6f9d00c 100644
         #if DPF_VST3_USES_SEPARATE_CONTROLLER
          if (dpf_comp2ctrl_connection_point* const point = component->connectionComp2Ctrl)
          {
-@@ -4354,6 +4711,18 @@ struct dpf_component : v3_component_cpp {
+@@ -4354,6 +4762,18 @@ struct dpf_component : v3_component_cpp {
                  unclean = true;
                  d_stderr("DPF warning: asked to delete component while edit controller still active (refcount %d)", refcount);
              }

@@ -87,6 +87,7 @@ Synth::Synth(float sampleRate, SoundLibrary* library, const Settings* settings, 
     // editor's own program selection does, so the ring and the kill/release of the slot
     // being reused apply unchanged. Called from the parser dispatch, mid-block.
     master_->onProgramChange = [this](int program, int bankSelect) {
+        if (restoreGuard()) return;
         int bank = -1;  // until a CC0 arrives: the bank the edit buffer is on
         if (bankSelect >= 0) {
             if (bankSelect >= SoundLibrary::kNumBanks) return;  // a bank there is no library for
@@ -117,11 +118,18 @@ void Synth::process(float* outL, float* outR, int32_t n, bool replacing) {
     master_->process(outL, outR, n, replacing);
 }
 
+// (port) CSynth +0xb4. The original guarded effSetProgram, the one way a VST2 host pushed
+// its stored program selection back after setChunk. A VST3 host restores that selection onto
+// the program-change parameter, which arrives as a MIDI program change instead, so both ways
+// in have to consume the guard.
+bool Synth::restoreGuard() {
+    const bool armed = chunkLoaded_;
+    chunkLoaded_ = false;
+    return armed;
+}
+
 void Synth::setProgram(int32_t index) {
-    if (chunkLoaded_) {
-        chunkLoaded_ = false;
-        return;
-    }
+    if (restoreGuard()) return;
     edit_->selectIndex(index);
     syncProgram();
 }

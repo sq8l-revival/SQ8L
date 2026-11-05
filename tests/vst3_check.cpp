@@ -120,9 +120,12 @@ struct MemStream : v3_bstream_cpp {
     }
 };
 
+// Serves both directions: as input it is handed over holding one point, as output it starts
+// empty and records what the plug-in writes into it.
 struct ParamQueue : v3_param_value_queue_cpp {
     v3_param_id id = 0;
     double value = 0.0;
+    int32_t points = 0;
 
     ParamQueue() {
         query_interface = queryInterface;
@@ -148,18 +151,25 @@ struct ParamQueue : v3_param_value_queue_cpp {
     static uint32_t V3_API release(void*) { return 1; }
 
     static v3_param_id V3_API paramId(void* p) { return self(p)->id; }
-    static int32_t V3_API pointCount(void*) { return 1; }
+    static int32_t V3_API pointCount(void* p) { return self(p)->points; }
     static v3_result V3_API point(void* p, int32_t idx, int32_t* offset, double* value) {
         if (idx != 0) return V3_INVALID_ARG;
         *offset = 0;
         *value = self(p)->value;
         return V3_OK;
     }
-    static v3_result V3_API addPoint(void*, int32_t, double, int32_t*) { return V3_NOT_IMPLEMENTED; }
+    static v3_result V3_API addPoint(void* p, int32_t, double value, int32_t* idx) {
+        ParamQueue* const q = self(p);
+        q->value = value;
+        q->points++;
+        if (idx != nullptr) *idx = 0;
+        return V3_OK;
+    }
 };
 
 struct ParamChanges : v3_param_changes_cpp {
     v3_param_value_queue** one = nullptr;
+    ParamQueue* queue = nullptr;  // the same object `one` points at, for reading it back
 
     ParamChanges() {
         query_interface = queryInterface;
@@ -183,11 +193,22 @@ struct ParamChanges : v3_param_changes_cpp {
     static uint32_t V3_API addRef(void*) { return 1; }
     static uint32_t V3_API release(void*) { return 1; }
 
-    static int32_t V3_API paramCount(void*) { return 1; }
+    // As the output list it starts empty and hands its one queue to the first parameter the
+    // plug-in asks to report.
+    int32_t count = 1;
+
+    static int32_t V3_API paramCount(void* p) { return self(p)->count; }
     static v3_param_value_queue** V3_API paramData(void* p, int32_t idx) {
         return idx == 0 ? self(p)->one : nullptr;
     }
-    static v3_param_value_queue** V3_API addParamData(void*, const v3_param_id*, int32_t*) { return nullptr; }
+    static v3_param_value_queue** V3_API addParamData(void* p, const v3_param_id* id, int32_t* idx) {
+        ParamChanges* const c = self(p);
+        if (c->one == nullptr || c->queue == nullptr) return nullptr;
+        if (id != nullptr) c->queue->id = *id;
+        if (idx != nullptr) *idx = 0;
+        c->count = 1;
+        return c->one;
+    }
 };
 
 // The module has to be entered before its factory is asked for anything: that is where DPF
@@ -225,6 +246,7 @@ const void* loadFactory(const char* const path) {
 struct Instance {
     v3_component** component = nullptr;
     v3_audio_processor** processor = nullptr;
+    v3_edit_controller** controller = nullptr;
 
     bool open(v3_plugin_factory** factory, const v3_tuid cid) {
         void* ptr = nullptr;
@@ -233,6 +255,7 @@ struct Instance {
         component = static_cast<v3_component**>(ptr);
         if (v3_cpp_obj_initialize(component, nullptr) != V3_OK) return false;
         if (v3_cpp_obj_query_interface(component, v3_audio_processor_iid, &processor) != V3_OK) return false;
+        if (v3_cpp_obj_query_interface(component, v3_edit_controller_iid, &controller) != V3_OK) return false;
         v3_cpp_obj(component)->activate_bus(component, V3_AUDIO, V3_OUTPUT, 0, true);
         v3_cpp_obj(component)->activate_bus(component, V3_EVENT, V3_INPUT, 0, true);
         v3_process_setup setup = {V3_REALTIME, V3_SAMPLE_32, 64, 44100.0};
@@ -245,22 +268,41 @@ struct Instance {
         v3_cpp_obj(component)->set_active(component, false);
         v3_cpp_obj_terminate(component);
         if (processor != nullptr) v3_cpp_obj_unref(processor);
+        if (controller != nullptr) v3_cpp_obj_unref(controller);
         v3_cpp_obj_unref(component);
         component = nullptr;
         processor = nullptr;
+        controller = nullptr;
     }
 
-    // One block carrying a value for the program-change parameter, which is how VST3 delivers
-    // both a sequencer's program change and a host's own program selection.
-    void runBlock(v3_param_id programId, double normalized) {
-        ParamQueue queue;
-        queue.id = programId;
-        queue.value = normalized;
-        ParamQueue* queuePtr = &queue;
+    // A program picked from the list the host itself shows, which is the only way to reach a
+    // bank past A in one go: a MIDI program change carries 0..127 and needs a bank select.
+    void selectProgram(v3_param_id programId, double normalized) {
+        v3_cpp_obj(controller)->set_parameter_normalised(controller, programId, normalized);
+    }
 
-        ParamChanges changes;
-        changes.one = reinterpret_cast<v3_param_value_queue**>(&queuePtr);
-        ParamChanges* changesPtr = &changes;
+    // One block. `normalized` below zero sends no parameter change at all, which is the case
+    // of a program picked in the plug-in's own editor between blocks. Returns the program the
+    // plug-in reported back to the host in this block, or -1 if it reported none: VST3 has no
+    // output events beyond the parameter list, so that is the whole channel.
+    int runBlock(v3_param_id programId, double normalized, int32_t steps) {
+        ParamQueue inQueue;
+        inQueue.id = programId;
+        inQueue.value = normalized;
+        inQueue.points = 1;
+        ParamQueue* inQueuePtr = &inQueue;
+        ParamChanges inChanges;
+        inChanges.one = reinterpret_cast<v3_param_value_queue**>(&inQueuePtr);
+        inChanges.queue = &inQueue;
+        ParamChanges* inChangesPtr = &inChanges;
+
+        ParamQueue outQueue;
+        ParamQueue* outQueuePtr = &outQueue;
+        ParamChanges outChanges;
+        outChanges.one = reinterpret_cast<v3_param_value_queue**>(&outQueuePtr);
+        outChanges.queue = &outQueue;
+        outChanges.count = 0;
+        ParamChanges* outChangesPtr = &outChanges;
 
         float left[64] = {}, right[64] = {};
         float* channels[2] = {left, right};
@@ -274,8 +316,12 @@ struct Instance {
         data.nframes = 64;
         data.num_output_buses = 1;
         data.outputs = &out;
-        data.input_params = reinterpret_cast<v3_param_changes**>(&changesPtr);
+        if (normalized >= 0.0) data.input_params = reinterpret_cast<v3_param_changes**>(&inChangesPtr);
+        data.output_params = reinterpret_cast<v3_param_changes**>(&outChangesPtr);
         v3_cpp_obj(processor)->process(processor, &data);
+
+        if (outQueue.points == 0 || outQueue.id != programId) return -1;
+        return static_cast<int>(outQueue.value * steps + 0.5);
     }
 
     std::vector<uint8_t> save() {
@@ -296,6 +342,15 @@ struct Instance {
 // The patch a saved state carries: the edit-buffer chunk's hex, past the 0x1f header. The
 // header holds an "edited" byte that every setChunk raises, so it differs across a reload and
 // is not part of what identifies the patch.
+// The program a saved state names, from the key DPF writes it under, or -1.
+int programOf(const std::vector<uint8_t>& state) {
+    const char* const p = reinterpret_cast<const char*>(state.data());
+    const char key[] = "__dpf_program__";
+    for (size_t i = 0; i + sizeof(key) < state.size(); ++i)
+        if (std::memcmp(p + i, key, sizeof(key)) == 0) return std::atoi(p + i + sizeof(key));
+    return -1;
+}
+
 std::string patchOf(const std::vector<uint8_t>& state) {
     const char* const p = reinterpret_cast<const char*>(state.data());
     for (size_t i = 0; i + 11 < state.size(); ++i) {
@@ -416,25 +471,42 @@ int main(int argc, char** argv) {
         check(steps == sq8l::SoundLibrary::kNumPrograms - 1, "a program-change parameter over the 512 slots");
 
         const double toNormalized = steps > 0 ? 1.0 / steps : 0.0;
+
+        // A program change moves the engine without the wrapper selecting anything, so the
+        // host has to be told, or its selector keeps naming the entry before it - and saves
+        // that name into the project.
+        Instance moving;
+        check(moving.open(factory, cid), "an instance to save from");
+        check(moving.runBlock(programId, 7 * toNormalized, steps) == 7,
+              "a program change moves the host's own program selector");
+        check(programOf(moving.save()) == 7, "and the state names the program the engine is on");
+        moving.close();
+
+        // Bank C, picked from the host's list. The chunk carries only the program within a
+        // bank, so without the port's own bank bits this came back as the A-bank twin.
+        const int saved = 266;
         Instance saving;
-        check(saving.open(factory, cid), "an instance to save from");
-        saving.runBlock(programId, 42 * toNormalized);
+        check(saving.open(factory, cid), "an instance on a bank C program");
+        saving.selectProgram(programId, saved * toNormalized);
         const std::vector<uint8_t> project = saving.save();
         const std::string patch = patchOf(project);
         check(!patch.empty(), "the state carries the edit buffer");
+        check(programOf(project) == saved, "and names the bank C slot");
         saving.close();
 
         Instance reloading;
         check(reloading.open(factory, cid), "an instance to reload into");
         check(reloading.load(project), "the state loads");
-        check(patchOf(reloading.save()) == patch, "and brings the patch back");
+        const std::vector<uint8_t> resaved = reloading.save();
+        check(patchOf(resaved) == patch, "and brings the patch back");
+        check(programOf(resaved) == saved, "on the bank it was saved on, not its A-bank twin");
 
         // The host's stored selection, arriving after the state the way Cubase sends it.
-        reloading.runBlock(programId, 0.0);
+        reloading.runBlock(programId, 0.0, steps);
         check(patchOf(reloading.save()) == patch, "the selection the host restores leaves the patch alone");
 
         // Only that one. A program change the player sends still loads.
-        reloading.runBlock(programId, 7 * toNormalized);
+        reloading.runBlock(programId, 7 * toNormalized, steps);
         const std::string seven = patchOf(reloading.save());
         check(!seven.empty() && seven != patch, "a program change after it still loads");
         reloading.close();

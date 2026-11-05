@@ -36,8 +36,19 @@
 // indexed names from the library (see patches/dpf-vst2-compat.patch).
 #define DISTRHO_PLUGIN_VST2_NUM_PROGRAMS 512
 #define DISTRHO_PLUGIN_VST2_PROGRAM_HOOKS 1
+// The program the engine is actually on, 0..511. loadProgram() is not the only way it
+// changes -- a MIDI program change or a pick in the editor goes straight to the edit buffer --
+// so a format layer that keeps the host's own program selector in step has to ask
+// (see patches/dpf-vst3-program-change.patch).
+#define DISTRHO_PLUGIN_PROGRAM_HOOKS 1
+
 #ifdef __cplusplus
 #include <cstdint>
+struct ProgramHooks {
+    virtual ~ProgramHooks() = default;
+    virtual int32_t currentProgram() = 0;
+};
+
 struct Vst2ProgramHooks {
     virtual ~Vst2ProgramHooks() = default;
     virtual void vst2SetProgram(int32_t index) = 0;

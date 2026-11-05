@@ -16,6 +16,7 @@ START_NAMESPACE_DISTRHO
 
 class SQ8LPlugin : public Plugin,
                    public Vst2ProgramHooks,
+                   public ProgramHooks,
                    public sq8l::MasterNotify {
 public:
   SQ8LPlugin();
@@ -59,6 +60,13 @@ public:
   void vst2SetProgramName(const char *name) override;
   void vst2GetProgramName(char *out24) override;
   bool vst2GetProgramNameIndexed(int32_t index, char *out24) override;
+
+  // Asked once a block by the format layer, and from its own thread, so it takes
+  // the engine lock like every other call from outside run().
+  int32_t currentProgram() override {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return synth_.program();
+  }
 
 protected:
   const char *getLabel() const override { return "SQ8L"; }

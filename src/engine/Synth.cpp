@@ -24,6 +24,12 @@ constexpr uint8_t kChunkMtsEnabled = 1, kChunkMtsCorrectPitch = 2;
 // on, so only a chunk from the original or from an earlier port reads as off, which is the
 // point - an old project keeps ignoring the program changes in its MIDI.
 constexpr uint8_t kChunkProgramChange = 4;
+// (port) The bank the edit buffer's patch came from, in two more bits of the same byte. The
+// original's chunk stores only the program within a bank (EditBuffer 0x18), so without this a
+// patch from B, C or D came back as an A slot: the right sound under the wrong name. Absent
+// reads as bank A, which is both the original's chunk and a fresh instance.
+constexpr uint8_t kChunkBankMask = 0x18;
+constexpr int kChunkBankShift = 3;
 // (port, issue #52) OPTIONS -> Output gain, in the last spare header byte, as the cut in dB.
 // No marker is needed either: the original writes 0 there, and 0 dB means no cut.
 constexpr size_t kChunkOutputCut = 0x1e;
@@ -161,7 +167,8 @@ std::vector<uint8_t> Synth::getChunk() {
     // instance only ever ignored program changes stays byte-identical to the original's.
     const uint8_t flags = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
                                                (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0) |
-                                               (programChangeEnabled() ? kChunkProgramChange : 0));
+                                               (programChangeEnabled() ? kChunkProgramChange : 0) |
+                                               ((edit_->bank() << kChunkBankShift) & kChunkBankMask));
     if (flags != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkFlags] = flags;
     // (port) The output cut, for the same reason. No cut writes nothing, so a chunk without
     // one stays byte-identical to the original's.
@@ -190,6 +197,10 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
         mtsEnabled_ = (flags & kChunkMtsEnabled) != 0;
         mtsCorrectPitch_ = (flags & kChunkMtsCorrectPitch) != 0;
         setProgramChangeEnabled((flags & kChunkProgramChange) != 0);
+        // (port) The bank the patch came from, so the editor and the host name the slot the
+        // chunk was saved on rather than its A-bank twin. After edit_->setChunk, which is
+        // what put the program number in place.
+        edit_->setBank((flags & kChunkBankMask) >> kChunkBankShift);
         // (port) likewise the output cut: a chunk without one, or with a step this build does
         // not know, puts this instance back to no cut.
         const int cut = size == EditBuffer::kChunkSize ? data[kChunkOutputCut] : 0;

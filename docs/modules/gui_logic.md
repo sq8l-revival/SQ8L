@@ -136,6 +136,13 @@ identical to the original's objects field by field (tested).
   and a wheel notch take. The gesture is free because the popup has two other ways in, and
   the reset is the one thing a knob cannot otherwise do. A two-state slot is unaffected: its
   knob is hidden behind the soft button, where two clicks are two flips.
+* **The library is a ring** (port): `selectProgram` wraps 0..127 where the original clamped,
+  and `selectBank` wraps both ways where the original could only count up. Its BANK button
+  already wrapped there (4 mod 4 = 0); downwards it clamped, because Delphi's mod keeps the
+  sign of the dividend and `EditBuffer::setBank` turned the -1 into bank A. Nothing could
+  press that direction until the keys existed, so it never showed. A program wraps *inside*
+  its bank, which keeps Shift+Left/Right and Shift+Up/Down orthogonal. The on-screen UP/DOWN
+  arrows share `selectProgram` and wrap with it, so the mouse and the keys agree.
 * Import program: "try to load anyway" retries with the same header check (so it fails again).
 * Mouse jump: the first saved position is kept until restored. Popup menus are all it is
   used for now. A knob turn hides the cursor and locks the pointer instead (port, issue
@@ -194,8 +201,8 @@ always shows one parameter underlined, where the original only did after a click
 | Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
 | Alt+V | `nextSubPage()` |
 | Alt+L / E / M | the next page of the LFO / envelope / matrix group |
-| Shift+Left / Right | the previous / next program |
-| Shift+Up / Down | the previous / next bank |
+| Shift+Left / Right | the previous / next program, wrapping inside the bank |
+| Shift+Up / Down | the previous / next bank, wrapping |
 
 A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
 the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the

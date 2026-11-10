@@ -1289,6 +1289,29 @@ def main():
         check(ed.knob(knob) == held, f"and {name}+Home edits nothing")
     check(not ed.key(ord("V"), MOD_ALT | MOD_SUPER), "Cmd+Alt+V is not Alt+V")
 
+    # Both ends wrap: the library is a ring, not a line. A program wraps inside its bank, so
+    # the two chords stay orthogonal - Shift+Left/Right never changes the bank.
+    while prog() != 0:
+        ed.key(VK_LEFT, MOD_SHIFT)
+    check(ed.key(VK_LEFT, MOD_SHIFT), "Shift+Left at program 000 is taken")
+    check(prog() == 127, f"and wraps to the last program of the bank ({prog()})")
+    check(bank() == bank0, f"without changing bank ({bank()})")
+    ed.key(VK_RIGHT, MOD_SHIFT)
+    check(prog() == 0 and bank() == bank0, f"Shift+Right wraps back to 000 ({ed.program()})")
+    # The bank wraps the same way. Its button already did going up (4 mod 4 = 0); going down it
+    # did not, because Delphi's mod keeps the sign of the dividend and setBank clamped the -1.
+    while bank() != "A":
+        ed.key(VK_UP, MOD_SHIFT)
+    check(ed.key(VK_UP, MOD_SHIFT), "Shift+Up at bank A is taken")
+    check(bank() == "D", f"and wraps to bank D ({bank()})")
+    ed.key(VK_DOWN, MOD_SHIFT)
+    check(bank() == "A", f"Shift+Down wraps back to A ({bank()})")
+    # The on-screen arrows go through the same selectProgram, and wrap with it
+    check(prog() == 0, f"at program 000 for the arrow check ({prog()})")
+    ed.click(DOWN)
+    check(prog() == 127, f"the DOWN arrow wraps too ({prog()})")
+    ed.click(UP)
+    check(prog() == 0, f"and the UP arrow back ({prog()})")
 
     # 17. OPTIONS -> Keyboard -> Page memory (issue #45): per instance, on by default. With it
     # on, a sub-page you come back to focuses the parameter you last had focused there and a

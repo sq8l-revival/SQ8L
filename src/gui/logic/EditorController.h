@@ -188,6 +188,11 @@ private:
     int knobAt(int x, int y) const;
     // (port, issue #35) Move knob slot `knob`'s parameter by `by`, the way a turn moves it.
     void stepKnobParam(int knob, int by);
+    // (port, issue #45) Put knob slot `knob`'s parameter at `v`, clamped to its range.
+    void setKnobParamValue(int knob, int v);
+    // (port, issue #45) Put it back to what INIT would give it: what a double click on the
+    // knob does, and what the Del key will.
+    void resetKnobParam(int knob);
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();

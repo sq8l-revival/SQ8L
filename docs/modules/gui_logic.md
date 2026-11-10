@@ -122,11 +122,20 @@ identical to the original's objects field by field (tested).
   FUN_0045b2b0 already flips a range of two rather than showing a two-item menu of it; with
   the single click doing that, the double click must not, or clicking twice and double
   clicking would end the other way round from each other.
-* Value popups are opened by a double click on the VFD cell or on the knob, and (port) by
-  a right click on the knob: `contextMenu` routes a point inside a knob with a parameter
-  to `cellDoubleClick`, so both gestures land in the same place. A knob the page does not
-  use falls through to the page popup, like the background; so does a two-state slot, whose
-  knob is hidden under its soft button and which `contextMenu` therefore passes over.
+* Value popups are opened by a double click on the VFD cell and (port) by a right click on
+  the knob: `contextMenu` routes a point inside a knob with a parameter to `cellDoubleClick`,
+  so both gestures land in the same place. A knob the page does not use falls through to the
+  page popup, like the background; so does a two-state slot, whose knob is hidden under its
+  soft button and which `contextMenu` therefore passes over.
+* A double click on the **knob** no longer opens that popup (port, issue #45): it sets the
+  parameter to the value INIT would give it, which is also what the Del key gives.
+  `LcdController::defaultValue` reads an INIT program through the same adjustments
+  `readParamIn` applies to the edit buffer (`adjustRead`, so VOICES and the synced LFO and
+  envelope fields cannot read one way from the program and another from INIT), and
+  `EditorController::resetKnobParam` writes it through `setKnobParamValue`, the route a turn
+  and a wheel notch take. The gesture is free because the popup has two other ways in, and
+  the reset is the one thing a knob cannot otherwise do. A two-state slot is unaffected: its
+  knob is hidden behind the soft button, where two clicks are two flips.
 * Import program: "try to load anyway" retries with the same header check (so it fails again).
 * Mouse jump: the first saved position is kept until restored. Popup menus are all it is
   used for now. A knob turn hides the cursor and locks the pointer instead (port, issue

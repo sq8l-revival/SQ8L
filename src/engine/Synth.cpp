@@ -33,6 +33,26 @@ constexpr int kChunkBankShift = 3;
 // (port, issue #52) OPTIONS -> Output gain, in the last spare header byte, as the cut in dB.
 // No marker is needed either: the original writes 0 there, and 0 dB means no cut.
 constexpr size_t kChunkOutputCut = 0x1e;
+// (port, issue #45) OPTIONS -> Keyboard -> Page memory. The bit is **inverted**: set means the
+// switch is OFF. That is deliberate and must not be "tidied up" to match kChunkProgramChange
+// three bits along, which wants the opposite. Page memory is on for a new instance and should
+// be on for a project saved before it existed, so an absent bit has to read as on - and the
+// default then writes nothing, which is what keeps an untouched chunk the original's bytes.
+constexpr uint8_t kChunkNoPageMemory = 0x20;
+// (port, issue #45) Where the editor was left, in the spare header bytes 0x0e..0x17: ten bytes
+// the original writes as zero after its magic and never validates (see docs/modules/library.md).
+// Written only when page memory is on and there is a place to save, so a chunk from an instance
+// that never used it is byte for byte the original's. The per-sub-page focus table of
+// EditorPlace does not fit and is not carried: a project needs to open where it was left, not
+// to remember every page ever visited.
+constexpr size_t kChunkPlaceMarker = 0x0e;
+constexpr uint8_t kChunkPlaceMagic = 'K';
+constexpr size_t kChunkPlacePage = 0x0f;
+constexpr size_t kChunkPlaceSub = 0x10;
+constexpr size_t kChunkPlaceKnob = 0x11;
+constexpr size_t kChunkPlaceGroupPage = 0x12;  // three bytes: LFO, envelope, matrix
+constexpr size_t kChunkPlaceGroupSub = 0x15;   // two 2-bit views, LFO in bits 0-1
+constexpr uint8_t kChunkNone = 0xff;           // a field with nothing saved in it
 }  // namespace
 
 // The master's view of the Cdoc parameter block and of the LFO inputs alias the module
@@ -168,12 +188,24 @@ std::vector<uint8_t> Synth::getChunk() {
     const uint8_t flags = static_cast<uint8_t>((mtsEnabled_ ? kChunkMtsEnabled : 0) |
                                                (mtsCorrectPitch_ ? kChunkMtsCorrectPitch : 0) |
                                                (programChangeEnabled() ? kChunkProgramChange : 0) |
+                                               (pageMemory_ ? 0 : kChunkNoPageMemory) |
                                                ((edit_->bank() << kChunkBankShift) & kChunkBankMask));
     if (flags != 0 && chunk.size() == EditBuffer::kChunkSize) chunk[kChunkFlags] = flags;
     // (port) The output cut, for the same reason. No cut writes nothing, so a chunk without
     // one stays byte-identical to the original's.
     if (outputCut_ > 0 && chunk.size() == EditBuffer::kChunkSize)
         chunk[kChunkOutputCut] = static_cast<uint8_t>(outputCut_);
+    // (port, issue #45) Where the editor was left.
+    if (pageMemory_ && place_.valid() && chunk.size() == EditBuffer::kChunkSize) {
+        auto field = [](int8_t v) { return v < 0 ? kChunkNone : static_cast<uint8_t>(v); };
+        chunk[kChunkPlaceMarker] = kChunkPlaceMagic;
+        chunk[kChunkPlacePage] = field(place_.page);
+        chunk[kChunkPlaceSub] = field(place_.sub);
+        chunk[kChunkPlaceKnob] = field(place_.knob);
+        for (int i = 0; i < 3; i++) chunk[kChunkPlaceGroupPage + size_t(i)] = field(place_.groupPage[i]);
+        chunk[kChunkPlaceGroupSub] =
+            static_cast<uint8_t>((place_.groupSub[0] & 3) | ((place_.groupSub[1] & 3) << 2));
+    }
     return chunk;
 }
 
@@ -205,6 +237,24 @@ int32_t Synth::setChunk(const uint8_t* data, size_t size) {
         // not know, puts this instance back to no cut.
         const int cut = size == EditBuffer::kChunkSize ? data[kChunkOutputCut] : 0;
         setOutputCut(Settings::validOutputCut(cut) ? cut : 0);
+        // (port, issue #45) Page memory and the place. The bit is inverted (see above), so a
+        // chunk from the original or from an earlier port reads as on, which is this build's
+        // default; the place is restored only when the marker is there.
+        pageMemory_ = !(flags & kChunkNoPageMemory);
+        place_ = EditorPlace();
+        if (size == EditBuffer::kChunkSize && data[kChunkPlaceMarker] == kChunkPlaceMagic) {
+            auto field = [](uint8_t v) { return v == kChunkNone ? int8_t(-1) : int8_t(v); };
+            place_.page = field(data[kChunkPlacePage]);
+            place_.sub = field(data[kChunkPlaceSub]);
+            place_.knob = field(data[kChunkPlaceKnob]);
+            for (int i = 0; i < 3; i++) place_.groupPage[i] = field(data[kChunkPlaceGroupPage + size_t(i)]);
+            place_.groupSub[0] = int8_t(data[kChunkPlaceGroupSub] & 3);
+            place_.groupSub[1] = int8_t((data[kChunkPlaceGroupSub] >> 2) & 3);
+            // The table is not carried; seed it with the one entry the chunk does hold, so the
+            // page it opens on knows its parameter and the rest fills in again by browsing.
+            const int i = EditorPlace::index(place_.page, place_.sub);
+            if (i >= 0) place_.focusBySub[i] = place_.knob;
+        }
         return 0;
     }
     return -1;

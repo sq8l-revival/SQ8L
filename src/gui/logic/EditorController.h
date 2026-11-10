@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "EditorHost.h"
+#include "EditorPlace.h"
 #include "EditorView.h"
 #include "LcdControl.h"
 #include "MouseJump.h"
@@ -219,6 +220,10 @@ private:
     // (port, issue #45) Alt+L / Alt+E / Alt+M: the next page of a group of page buttons.
     void cycleGroup(const int* tags, int n);
     void rememberGroupSub();    // the view a group of pages shares, after a page change
+    static int groupIndex(const int* tags);
+    // (port, issue #45) OPTIONS -> Keyboard -> Page memory: where this instance was left.
+    void savePlace();
+    void restorePlace();
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();
@@ -250,6 +255,7 @@ private:
     void programChangeClick(MenuNode& item); // port addition (issue #40)
     void naturalScrollClick(MenuNode& item); // port addition (issue #35)
     void keyboardControlClick(MenuNode& item);  // port addition (issue #45)
+    void pageMemoryClick(MenuNode& item);       // port addition (issue #45)
     void polyphonyClick(MenuNode& item);     // port addition
     void outputCutClick(MenuNode& item);     // port addition (issue #52)
     void zoomClick(MenuNode& item);          // port addition
@@ -299,6 +305,9 @@ private:
     // (port, issue #45) The view the LFO pages share, and the one the envelope pages share.
     // Opening any page of a group puts it on the group's view instead of the page's own.
     int groupSub_[2] = {0, 0};
+    // (port, issue #45) Where this instance was left; the engine keeps it between editors
+    // and saves what fits of it in the host chunk.
+    EditorPlace place_;
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
     bool rmbScroll_ = false;         // +0x511
@@ -314,6 +323,7 @@ private:
     MenuNode* menuProgramChange_ = nullptr; // port addition (issue #40)
     MenuNode* menuNaturalScroll_ = nullptr; // port addition (issue #35)
     MenuNode* menuKeyboardControl_ = nullptr;  // port addition (issue #45)
+    MenuNode* menuPageMemory_ = nullptr;       // port addition (issue #45)
     MenuNode* menuOutputGain_ = nullptr;    // port addition (sub-menu, radio items tagged with the dB cut)
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
     MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)

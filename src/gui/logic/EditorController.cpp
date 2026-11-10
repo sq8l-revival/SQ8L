@@ -262,6 +262,11 @@ void EditorController::buildMenus() {
     size_t iKeyEnable = keyb.items.size();
     keyb.items.push_back(item("Enable keyboard control", 0,
                               [this](MenuNode& n) { keyboardControlClick(n); }));
+    // (port, issue #45) Per instance, unlike the switch above: a project should open each
+    // instance where it was left, and a global could not say that. Shown greyed rather than
+    // hidden while keyboard control is off - a submenu should show what it holds.
+    size_t iKeyMemory = keyb.items.size();
+    keyb.items.push_back(item("Page memory", 0, [this](MenuNode& n) { pageMemoryClick(n); }));
     iKeyboard = o.size();
     o.push_back(keyb);
     // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
@@ -328,6 +333,7 @@ void EditorController::buildMenus() {
     menuNaturalScroll_ = &mouse.items[iNatural];
     menuRmbScrDisp_ = &mouse.items[iRmbScr];
     menuKeyboardControl_ = &optionsMenu_.items[iKeyboard].items[iKeyEnable];
+    menuPageMemory_ = &optionsMenu_.items[iKeyboard].items[iKeyMemory];
     menuOutputGain_ = &optionsMenu_.items[iGain];
     menuPolyphony_ = &optionsMenu_.items[iPoly];
     menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
@@ -357,6 +363,7 @@ void EditorController::show() {  // TplugEditForm_FormShow
     settingsChanged();                  // FUN_00483b08
     refreshAll();                       // FUN_004842d8
     selectPage(0);                      // FUN_004849e0(form, 0)
+    restorePlace();                     // (port, issue #45) ...or where this instance was left
     if (firstInstance_) {
         // (port) This build's version (SQ8LVersion.h). Dotted path: '.' is a cell attribute here,
         // not a column. Uppercase: the VFD folds lowercase. Its '(' and ')' draw as chevrons.
@@ -677,6 +684,10 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     // nothing until the user clicked a knob - which is the friction the feature exists to
     // remove. Switching it off leaves the selection alone: it is the original's underline too,
     // and focusKnob() already reports nothing while the switch is off.
+    if (menuPageMemory_) {
+        menuPageMemory_->setChecked(host_.pageMemory());
+        menuPageMemory_->enabled = keyboardControl_;  // it serves nothing while the keys are off
+    }
     if (keyboardControl_ && focusKnob() < 0) focusFirstKnob();
     view_.setFocusKnob(focusKnob());  // switching it off takes the rectangle away
     if (menuMtsEnable_) {
@@ -841,6 +852,7 @@ void EditorController::highlightParam(int param) {  // SUB_00484800
     // (port, issue #45) The focus rectangle follows the underline, because they are the same
     // selection: this is the one place it moves, so it is the one place that has to say so.
     view_.setFocusKnob(focusKnob());
+    savePlace();
 }
 
 void EditorController::lcdHint(int param) {  // LAB_00484874
@@ -1332,7 +1344,42 @@ void EditorController::focusFirstKnob() {
   const std::vector<int> slots = focusSlots();
   if (!sp || slots.empty())
     return;
-  highlightParam(sp->knobParam(slots.front()));
+  // (port, issue #45) With page memory on, a sub-page visited before comes back to the
+  // parameter it was left on; one never visited, and every page with the switch off, starts
+  // at the first slot it uses.
+  int knob = slots.front();
+  if (host_.pageMemory()) {
+    const int i = EditorPlace::index(ctr_->pageIndex(), ctr_->subPage());
+    const int8_t was = i >= 0 ? place_.focusBySub[i] : int8_t(-1);
+    for (int s : slots)
+      if (s == was) knob = s;  // (a page can be rebuilt with fewer slots than it had)
+  }
+  highlightParam(sp->knobParam(knob));
+}
+
+// (port, issue #45) Hand the place to the engine, which keeps it and saves what fits of it in
+// the host chunk. Called after anything that moves the display or the focus, so that whenever
+// the host asks for the state it is current.
+void EditorController::savePlace() {
+  place_.page = int8_t(ctr_->pageIndex());
+  place_.sub = int8_t(ctr_->subPage());
+  place_.knob = int8_t(focusKnob());
+  place_.groupSub[0] = int8_t(groupSub_[0]);
+  place_.groupSub[1] = int8_t(groupSub_[1]);
+  const int i = EditorPlace::index(place_.page, place_.sub);
+  if (i >= 0 && place_.knob >= 0) place_.focusBySub[i] = place_.knob;
+  host_.setEditorPlace(place_);
+}
+
+// (port, issue #45) FormShow: open where this instance was left, if it was left anywhere and
+// page memory is on. The welcome message and the rest of show() follow, so a new instance is
+// unaffected - its place has nothing in it.
+void EditorController::restorePlace() {
+  place_ = host_.editorPlace();
+  if (!host_.pageMemory() || !place_.valid()) return;
+  groupSub_[0] = place_.groupSub[0] & 3;
+  groupSub_[1] = place_.groupSub[1] & 3;
+  selectPageSub(place_.page, place_.sub);
 }
 
 // (port, issue #45) Tab / Shift+Tab: the next or previous slot the page uses, wrapping.
@@ -1357,13 +1404,33 @@ void EditorController::focusStep(int dir) {
 // the views of a page are Alt+V's job - the two are separate axes once inside a group.
 void EditorController::cycleGroup(const int* tags, int n) {
   const int page = ctr_->pageIndex();
-  int next = 0;
+  int next = -1;
   for (int i = 0; i < n; i++)
     if ((tags[i] >> 4) == page) {
       next = (i + 1) % n;
       break;
     }
+  if (next < 0) {
+    // Entering the group from outside it. With page memory on that is the page of this group
+    // the instance was last on; otherwise the group's first, every time.
+    next = 0;
+    const int g = groupIndex(tags);
+    if (host_.pageMemory() && g >= 0 && place_.groupPage[g] >= 0)
+      for (int i = 0; i < n; i++)
+        if ((tags[i] >> 4) == place_.groupPage[g]) next = i;
+  }
   pageButton(tags[next], false);
+  const int g = groupIndex(tags);
+  if (g >= 0) place_.groupPage[g] = int8_t(ctr_->pageIndex());
+  savePlace();
+}
+
+// (port, issue #45) Which of the three groups a tag table is, for place_.groupPage.
+int EditorController::groupIndex(const int* tags) {
+  if (tags == kLfoTags) return 0;
+  if (tags == kEnvTags) return 1;
+  if (tags == kMatTags) return 2;
+  return -1;
 }
 
 bool EditorController::keyDown(int vk, uint32_t mods) {
@@ -1624,6 +1691,11 @@ void EditorController::naturalScrollClick(MenuNode& item) {
 void EditorController::keyboardControlClick(MenuNode& item) {  // (port, issue #45)
     item.setChecked(!item.checked);
     host_.setPortSetting(Settings::kPortKeyboardControl, item.checked ? 1 : 0);
+}
+
+void EditorController::pageMemoryClick(MenuNode& item) {  // (port, issue #45)
+    item.setChecked(!item.checked);
+    host_.setPageMemory(item.checked);
 }
 
 void EditorController::showModInfo() {  // FUN_0047c9c0

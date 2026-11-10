@@ -10,6 +10,7 @@
 #include "Amp.h"
 #include "Doc.h"
 #include "EditBuffer.h"
+#include "EditorPlace.h"
 #include "Env.h"
 #include "Lfo.h"
 #include "Master.h"
@@ -156,6 +157,13 @@ public:
     // (Settings::outputCutDb), which is the only part of it that is a user preference.
     int outputCut() const { return outputCut_; }
     void setOutputCut(int db);
+    // (port, issue #45) OPTIONS -> Keyboard -> Page memory, and what it remembers. Of this
+    // instance like the switches above: two instances in a project can be left on different
+    // pages, and each should open where it was. The place is opaque here - see EditorPlace.h.
+    bool pageMemory() const { return pageMemory_; }
+    void setPageMemory(bool on) { pageMemory_ = on; }
+    const EditorPlace& editorPlace() const { return place_; }
+    void setEditorPlace(const EditorPlace& p) { place_ = p; }
     EditBuffer& editBuffer() { return *edit_; }
     SoundLibrary& library() { return *library_; }
     SynthModules& modules() { return *modules_; }
@@ -174,6 +182,10 @@ private:
     bool mtsEnabled_ = false;        // (port) OPTIONS -> MTS-ESP -> Enable
     bool mtsCorrectPitch_ = false;   // (port) ... -> Correct SQ-80 per-key pitch offsets
     int outputCut_ = 0;              // (port) OPTIONS -> Output gain, the cut in dB
+    // (port, issue #45) OPTIONS -> Keyboard -> Page memory, on unless a chunk says
+    // otherwise, and what it remembers.
+    bool pageMemory_ = true;
+    EditorPlace place_;
 };
 
 }  // namespace sq8l

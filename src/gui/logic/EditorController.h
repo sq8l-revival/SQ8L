@@ -216,6 +216,8 @@ private:
     std::vector<int> focusSlots() const;
     void focusFirstKnob();      // a page change: focus the first slot the page uses
     void focusStep(int dir);    // Tab / Shift+Tab
+    // (port, issue #45) Alt+L / Alt+E / Alt+M: the next page of a group of page buttons.
+    void cycleGroup(const int* tags, int n);
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();

@@ -1312,9 +1312,58 @@ void EditorController::focusStep(int dir) {
   highlightParam(sp->knobParam(slots[i]));
 }
 
+// (port, issue #45) Alt+L / Alt+E / Alt+M walk their group of pages. No single button does
+// this, so unlike the other chords it is not one button's click: each press takes the next
+// page of the group, entering at the first from anywhere outside it. `cycle` is false because
+// the views of a page are Alt+V's job - the two are separate axes once inside a group.
+void EditorController::cycleGroup(const int* tags, int n) {
+  const int page = ctr_->pageIndex();
+  int next = 0;
+  for (int i = 0; i < n; i++)
+    if ((tags[i] >> 4) == page) {
+      next = (i + 1) % n;
+      break;
+    }
+  pageButton(tags[next], false);
+}
+
 bool EditorController::keyDown(int vk, uint32_t mods) {
   if (!keyboardControl_)
     return false;
+  // (port, issue #45) The chords. A chord that stands for a page button *is* that button,
+  // `cycle` and all: pressing Alt+1 twice cycles the page's views exactly as clicking buttOsc1
+  // twice does, so the keyboard and the mouse cannot grow different ideas of what a page is.
+  if (mods == kKeyModAlt) {
+    static const int kLfo[] = {111, 127, 143, 159};   // buttLfo1..4
+    static const int kEnv[] = {175, 191, 207, 223};   // buttEnv1..4
+    static const int kMat[] = {224, 240, 256};        // buttMat1..3
+    switch (vk) {
+    case '1': pageButton(16, true); return true;      // buttOsc1
+    case '2': pageButton(32, true); return true;      // buttOsc2
+    case '3': pageButton(48, true); return true;      // buttOsc3
+    case 'F': pageButton(64, true); return true;      // buttFilt
+    case 'A': pageButton(80, true); return true;      // buttDca4
+    case 'X': pageButton(15, true); return true;      // buttWav (OSC1-3 Mix)
+    case 'U': pageButton(287, true); return true;     // buttModes
+    case 'V': nextSubPage(); return true;             // the page's views, as the scroll arrow
+    case 'L': cycleGroup(kLfo, 4); return true;
+    case 'E': cycleGroup(kEnv, 4); return true;
+    case 'M': cycleGroup(kMat, 3); return true;
+    default: return false;
+    }
+  }
+  // (port, issue #45) Ctrl and the arrows move through the library. The on-screen UP/DOWN
+  // buttons have "Down arrow loads next program" to say which way they go, because a button
+  // with an arrow on it is ambiguous; an arrow key is not, so it ignores that setting.
+  if (mods == kKeyModCtrl) {
+    switch (vk) {
+    case kVkRight: selectProgram(prog() + 1); return true;
+    case kVkLeft: selectProgram(prog() - 1); return true;
+    case kVkDown: selectBank(bank() + 1); return true;
+    case kVkUp: selectBank(bank() - 1); return true;
+    default: return false;
+    }
+  }
   if (vk == kVkTab) {
     focusStep((mods & kKeyModShift) ? -1 : 1);
     return true;

@@ -216,6 +216,11 @@ class Editor:
         self.idle()
         return used
 
+    def page(self):
+        """(page, sub-page) the display is on."""
+        c = json.loads(self.cstr(self.L.sq8l_gl_state))["ctr"]
+        return c["page"], c["sub"]
+
     def focus_rect(self):
         """(left, top, right, bottom, pixel at the top-left corner of the drawn frame)."""
         buf = (ctypes.c_int32 * 5)()
@@ -1154,6 +1159,86 @@ def main():
     off.click(knob_xy(glide["knob"]))
     check(off.focus_rect()[:4] == (0, 0, 0, 0),
           f"no rectangle while the switch is off ({off.focus_rect()[:4]})")
+
+    # 16. the chords (issue #45). Each one that stands for a page button is asserted against
+    # that button rather than against a page number: the chord IS the button, repeats included.
+    print("Keyboard chords:")
+    ed = Editor(L)
+    enable_keys(ed)
+
+    # A fresh editor per measurement: a page remembers the view it was last left on, so a
+    # chord and a click compared inside one editor would start from different state and the
+    # comparison would depend on the order the two were run in.
+    def fresh():
+        e = Editor(L)
+        enable_keys(e)
+        L.sq8l_gl_ctr(e.v, 0, 0, 0)
+        e.idle()
+        return e
+
+    def by_chord(key, times=1):
+        """Where `times` presses of Alt+key leave the display, from the OSC1-3 Mix page."""
+        e = fresh()
+        for _ in range(times):
+            check(e.key(key, MOD_ALT), f"Alt+{chr(key)} is taken")
+        return e.page()
+
+    def by_button(xy, times=1):
+        """...and where the same number of clicks on a page button leaves it."""
+        e = fresh()
+        for _ in range(times):
+            e.click(xy)
+            e.idle()
+        return e.page()
+
+    BUTT_OSC1, BUTT_FILT, BUTT_DCA4 = (180, 121), (398, 149), (467, 149)
+    BUTT_MODES, BUTT_WAV = (574, 171), (50, 149)
+    for name, key, xy in (("1", ord("1"), BUTT_OSC1), ("F", ord("F"), BUTT_FILT),
+                          ("A", ord("A"), BUTT_DCA4), ("U", ord("U"), BUTT_MODES),
+                          ("X", ord("X"), BUTT_WAV)):
+        for times in (1, 2, 3):
+            got, want = by_chord(key, times), by_button(xy, times)
+            check(got == want, f"Alt+{name} x{times} goes where the button does ({got} vs {want})")
+
+    # Alt+V cycles the views of the page, like the scroll arrow under the display
+    L.sq8l_gl_ctr(ed.v, 0, 0, 0)
+    ed.idle()
+    views = [ed.page()]
+    for _ in range(3):
+        check(ed.key(ord("V"), MOD_ALT), "Alt+V is taken")
+        views.append(ed.page())
+    check(views[0][0] == views[1][0] and views[1] != views[0],
+          f"Alt+V stays on the page and changes the view ({views})")
+    check(views[3] == views[0], f"and comes round again ({views})")
+
+    # the group chords walk their own pages, which no single button does
+    for name, key, first in (("L", ord("L"), 6), ("E", ord("E"), 10), ("M", ord("M"), 14)):
+        L.sq8l_gl_ctr(ed.v, 0, 0, 0)
+        ed.idle()
+        seen = []
+        for _ in range(5):
+            check(ed.key(key, MOD_ALT), f"Alt+{name} is taken")
+            seen.append(ed.page()[0])
+        check(seen[0] == first, f"Alt+{name} enters its group at the first page ({seen})")
+        check(seen[1] == first + 1, f"and walks on from there ({seen})")
+        check(first in seen[1:], f"wrapping round the group ({seen})")
+
+    # Ctrl + the arrows move through the library (the program number reads "<bank><nnn>")
+    prog = lambda: int(ed.program()[1:])
+    bank = lambda: ed.program()[0]
+    start, bank0 = prog(), bank()
+    check(ed.key(VK_RIGHT, MOD_CTRL), "Ctrl+Right is taken")
+    check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
+    check(ed.key(VK_LEFT, MOD_CTRL), "Ctrl+Left is taken")
+    check(prog() == start, "and Ctrl+Left the previous one")
+    check(ed.key(VK_DOWN, MOD_CTRL), "Ctrl+Down is taken")
+    check(bank() != bank0, f"Ctrl+Down moves to another bank ({bank0} -> {bank()})")
+    check(ed.key(VK_UP, MOD_CTRL), "Ctrl+Up is taken")
+    check(bank() == bank0, "and Ctrl+Up comes back")
+    # ...and without Ctrl the same arrows edit the parameter, not the library
+    was = ed.program()
+    ed.key(VK_UP)
+    check(ed.program() == was, "a bare arrow leaves the program alone")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

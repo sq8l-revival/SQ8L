@@ -905,17 +905,17 @@ void EditorController::focusForm() { ui_.focusForm(); }  // FUN_00483a3c
 int EditorController::bank() const { return host_.editBuffer().bank(); }           // FUN_0048495c
 int EditorController::prog() const { return host_.editBuffer().programNumber(); }  // FUN_004849a0
 
+// (port) Both ends of the library wrap, where the original clamped the program and could not
+// reach a bank below A at all: its BANK button only ever counted up, and 4 mod 4 = 0 already
+// wrapped it there. The keys made the other direction reachable, and a ring is what the pair
+// of them reads as. Within the bank, so that the two chords stay orthogonal.
 void EditorController::selectProgram(int p) {  // FUN_004849b0
-    if (p < 0)
-        p = 0;
-    else if (p > 0x7f)
-        p = 0x7f;
+    p = ((p % 0x80) + 0x80) % 0x80;
     host_.editBuffer().selectProgram(p, -1);
 }
 
 void EditorController::selectBank(int b) {  // FUN_0048496c
-    int m = b % 4;  // Delphi mod: sign of the dividend
-    host_.editBuffer().setBank(m);
+    host_.editBuffer().setBank(((b % 4) + 4) % 4);
     host_.editBuffer().selectProgram(prog(), -1);
 }
 

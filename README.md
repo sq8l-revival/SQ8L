@@ -65,7 +65,8 @@ code and verified against the original plugin running inside an x86 emulator.
   **Alt+A**, **Alt+X** and **Alt+U** are the page buttons they stand for, pressed again to
   cycle that page's views as clicking the button does, **Alt+V** cycles the views on its own,
   and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Shift** with
-  the left and right arrows steps through the programs, and with up and down through the banks.
+  the left and right arrows steps through the programs, and with up and down through the banks;
+  both wrap round, as the on-screen UP/DOWN arrows now do too.
   Anything else is left to the host, so its own shortcuts keep working — though *which* keys
   reach a plugin at all is the host's decision, and REAPER for one keeps those bound to its own
   actions unless *Send all keyboard input to plug-in* is on for the instance. A click anywhere

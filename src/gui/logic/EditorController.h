@@ -218,6 +218,7 @@ private:
     void focusStep(int dir);    // Tab / Shift+Tab
     // (port, issue #45) Alt+L / Alt+E / Alt+M: the next page of a group of page buttons.
     void cycleGroup(const int* tags, int n);
+    void rememberGroupSub();    // the view a group of pages shares, after a page change
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();
@@ -295,6 +296,9 @@ private:
     // (port, issue #45) OPTIONS -> Keyboard -> Enable keyboard control. Off: keyDown answers
     // nothing, so the host keeps every key and the editor never asks for the focus.
     bool keyboardControl_ = false;
+    // (port, issue #45) The view the LFO pages share, and the one the envelope pages share.
+    // Opening any page of a group puts it on the group's view instead of the page's own.
+    int groupSub_[2] = {0, 0};
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
     bool rmbScroll_ = false;         // +0x511

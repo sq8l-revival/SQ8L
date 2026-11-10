@@ -89,6 +89,21 @@ public:
     // renderer, so both paths draw it the same way.
     void drawMtsLabel(Bitmap& out, const Rect& clip) const;
 
+    // (port, issue #45) Which knob slot has the keyboard focus, -1 for none. Marked with a
+    // 1-pixel rectangle around the widget in the slot - the knob, or the soft button of a
+    // two-state parameter (issue #43), which is wider than the knob it stands in for.
+    void setFocusKnob(int knob) { focusKnob_ = knob; }
+    int focusKnob() const { return focusKnob_; }
+    // The rectangle, in form coordinates, or an empty rect when nothing is focused. The HD
+    // renderer draws its own, so the geometry lives in one place for both.
+    Rect focusRect() const;
+    // Drawn over the finished frame, like the MTS label and for the same reason: the rectangle
+    // lies outside the focused control's own bounds, and the surfaces compose without overlap.
+    void drawFocusRect(Bitmap& out, const Rect& clip) const;
+    // The VFD's lit colour, which the rectangle is drawn in so that it reads as part of the
+    // display rather than as a new piece of furniture.
+    static constexpr Color kFocusColor = 0x1dfdc2;
+
     // ------------------------------------------------------------ input
     // Form client coordinates; keys = MK_* flags as in the Win32 message wParam.
     void mouseMove(int x, int y, uint32_t keys);
@@ -157,6 +172,7 @@ private:
     Control* capture_ = nullptr;      // VCL capture control (may be a graphic control)
     Control* focus_ = nullptr;
     TextRenderer* text_ = nullptr;
+    int focusKnob_ = -1;  // (port, issue #45)
 };
 
 }  // namespace sq8l::gui

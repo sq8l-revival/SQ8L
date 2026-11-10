@@ -13,6 +13,19 @@
 
 namespace sq8l::gui {
 
+// Virtual-key codes the editor logic and the drawn controls work in (Windows values). They
+// live here rather than with the drawn controls because the editor logic now needs them too:
+// the keys of issue #45 arrive as these from every platform.
+enum : int {
+    kVkBack = 0x08, kVkTab = 0x09, kVkReturn = 0x0d, kVkEscape = 0x1b, kVkPrior = 0x21,
+    kVkNext = 0x22, kVkEnd = 0x23, kVkHome = 0x24, kVkLeft = 0x25, kVkUp = 0x26,
+    kVkRight = 0x27, kVkDown = 0x28, kVkDelete = 0x2e,
+};
+
+// (port, issue #45) Modifiers held with a key. Not the view's MK_* mouse flags, which have no
+// Alt bit: Windows never reports Alt with a mouse message, and the chords need it.
+enum : uint32_t { kKeyModShift = 1, kKeyModCtrl = 2, kKeyModAlt = 4 };
+
 // One entry of a popup menu, in the shape the VCL creates for TrackPopupMenu (and the oracle
 // captures in oracle/gui.py menu_tree): caption (with '&' hotkey markers where the VCL adds them),
 // flags and sub-menu.

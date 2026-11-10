@@ -142,8 +142,8 @@ void EditorController::buildMenus() {
     // (port) The OPTIONS items are indexed as they go in, so the cached MenuNode pointers at
     // the end of this function survive reordering: hard-coded positions silently rewired the
     // wrong setting whenever the layout changed.
-    size_t iGain = 0, iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iSwap = 0, iConfirm = 0, iProgChg = 0,
-           iMts = 0, iZoom = 0;
+    size_t iGain = 0, iPoly = 0, iSteal = 0, iEmu = 0, iMouse = 0, iKeyboard = 0, iSwap = 0, iConfirm = 0,
+           iProgChg = 0, iMts = 0, iZoom = 0;
     // (port, issue #52) Output gain leads the menu: most soundbanks play far too loud, so a
     // cut is the first thing to reach for. Of this instance, like the polyphony below, but
     // the value last chosen is also where a newly created instance starts.
@@ -237,6 +237,15 @@ void EditorController::buildMenus() {
                               [this](MenuNode& n) { rmbScrDispClick(n); }));
     iMouse = o.size();
     o.push_back(rest);
+    // (port, issue #45) The keyboard sits with the mouse: the other way of working the
+    // editor's controls. Off by default - holding the keyboard takes the host's shortcuts
+    // away from the user, so it is asked for rather than assumed.
+    MenuNode keyb = item("Keyboard", 0, nullptr);
+    size_t iKeyEnable = keyb.items.size();
+    keyb.items.push_back(item("Enable keyboard control", 0,
+                              [this](MenuNode& n) { keyboardControlClick(n); }));
+    iKeyboard = o.size();
+    o.push_back(keyb);
     // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
     // and the window size. Polyphony leads the first group, above.
     iSwap = o.size();
@@ -300,6 +309,7 @@ void EditorController::buildMenus() {
     menuHideCursor_ = &mouse.items[iHideCur];
     menuNaturalScroll_ = &mouse.items[iNatural];
     menuRmbScrDisp_ = &mouse.items[iRmbScr];
+    menuKeyboardControl_ = &optionsMenu_.items[iKeyboard].items[iKeyEnable];
     menuOutputGain_ = &optionsMenu_.items[iGain];
     menuPolyphony_ = &optionsMenu_.items[iPoly];
     menuSwapProgUpDn_ = &optionsMenu_.items[iSwap];
@@ -328,7 +338,7 @@ void EditorController::show() {  // TplugEditForm_FormShow
     midiOut_ = -1;
     settingsChanged();                  // FUN_00483b08
     refreshAll();                       // FUN_004842d8
-    ctr_->selectPage(0);                // FUN_004849e0(form, 0)
+    selectPage(0);                      // FUN_004849e0(form, 0)
     if (firstInstance_) {
         // (port) This build's version (SQ8LVersion.h). Dotted path: '.' is a cell attribute here,
         // not a column. Uppercase: the VFD folds lowercase. Its '(' and ')' draw as chevrons.
@@ -361,6 +371,13 @@ void EditorController::wireControls() {
             if (kn.maxValue() > kn.minValue()) hideCursor();
         };
         k.onEditEnd = [this](Knob&) { showCursor(); };
+        // (port, issue #45) A click takes the focus, which the original only moved when a
+        // value changed: "each clicked knob should take keyboard focus". Before the drag
+        // starts, so a click that turns nothing still selects the parameter.
+        k.onMouseDown = [this, i](Control&, MouseButton b, ShiftState, int, int) {
+            LcdSubPage* sp = ctr_->currentSub();
+            if (b == MouseButton::Left && sp && sp->paramForKnob(i)) highlightParam(sp->knobParam(i));
+        };
         // (port, issue #45) The original opened the parameter's value menu here. That menu is
         // on the right click and on a double click on the parameter's field in the display,
         // so the gesture is better spent on the default value the Del key also gives.
@@ -501,9 +518,9 @@ void EditorController::wireControls() {
         else if (n == "BankButton")
             b->onClick = [this](Control&) { bankButtonClick(); };
         else if (n == "pscrUpButton")
-            b->onClick = [this](Control&) { ctr_->prevSubPage(); };
+            b->onClick = [this](Control&) { prevSubPage(); };
         else if (n == "pscrDownButton")
-            b->onClick = [this](Control&) { ctr_->nextSubPage(); };
+            b->onClick = [this](Control&) { nextSubPage(); };
     }
     // (port, issue #43) the soft buttons of the two-state slots: they flip
     // their parameter and show its hint, like the knob they stand in for (the
@@ -636,6 +653,14 @@ void EditorController::settingsChanged() {  // FUN_00483b08
     if (menuProgramChange_) menuProgramChange_->setChecked(host_.programChangeEnabled());
     naturalScroll_ = s.naturalScrolling();
     if (menuNaturalScroll_) menuNaturalScroll_->setChecked(naturalScroll_);
+    keyboardControl_ = s.keyboardControl();
+    if (menuKeyboardControl_) menuKeyboardControl_->setChecked(keyboardControl_);
+    // (port, issue #45) Switching it on has to land the focus somewhere, or the keys would do
+    // nothing until the user clicked a knob - which is the friction the feature exists to
+    // remove. Switching it off leaves the selection alone: it is the original's underline too,
+    // and focusKnob() already reports nothing while the switch is off.
+    if (keyboardControl_ && focusKnob() < 0) focusFirstKnob();
+    view_.setFocusKnob(focusKnob());  // switching it off takes the rectangle away
     if (menuMtsEnable_) {
         const bool on = host_.mtsEnabled();
         menuMtsEnable_->setChecked(on);
@@ -795,6 +820,9 @@ void EditorController::highlightParam(int param) {  // SUB_00484800
         p.highlight = p.index == param && p.knob >= 0;
         ctr_->drawParam(p);
     }
+    // (port, issue #45) The focus rectangle follows the underline, because they are the same
+    // selection: this is the one place it moves, so it is the one place that has to say so.
+    view_.setFocusKnob(focusKnob());
 }
 
 void EditorController::lcdHint(int param) {  // LAB_00484874
@@ -867,15 +895,44 @@ void EditorController::pageButton(int tag, bool cycle) {  // FUN_00484a10
     const int curSub = ctr_->subPage();
     if (curPage == pg) {
         if (sub == 0xf || curSub == sub) {
-            if (cycle) ctr_->nextSubPage();
+            if (cycle) nextSubPage();
         } else {
-            ctr_->selectSubPage(sub);
+            selectSubPage(sub);
         }
     } else if (sub == 0xf) {
-        ctr_->selectPage(pg);
+        selectPage(pg);
     } else {
-        ctr_->selectPageSub(pg, sub);
+        selectPageSub(pg, sub);
     }
+}
+
+// (port, issue #45) Every page change goes through these four, so that the focus lands on the
+// new page's first slot rather than being left on a parameter that is no longer shown.
+// LcdController clears the selection when it builds a page, so without this the keys and the
+// focus rectangle would have nothing to work on until the user clicked something.
+void EditorController::selectPage(int page) {
+    ctr_->selectPage(page);
+    focusFirstKnob();
+}
+
+void EditorController::selectPageSub(int page, int sub) {
+    ctr_->selectPageSub(page, sub);
+    focusFirstKnob();
+}
+
+void EditorController::selectSubPage(int sub) {
+    ctr_->selectSubPage(sub);
+    focusFirstKnob();
+}
+
+void EditorController::nextSubPage() {
+    ctr_->nextSubPage();
+    focusFirstKnob();
+}
+
+void EditorController::prevSubPage() {
+    ctr_->prevSubPage();
+    focusFirstKnob();
 }
 
 // ==================================================================== popups
@@ -967,7 +1024,7 @@ void EditorController::displayPanelContextPopup(int x, int y) {  // TplugEditFor
         y < lcd.top() + lcd.height())
         scroll = true;
     if (scroll) {
-        ctr_->nextSubPage();  // pscrDownButton.OnClick
+        nextSubPage();  // pscrDownButton.OnClick
     } else {
         saveMouse(nullptr);
         buildPagePopup();
@@ -1194,6 +1251,106 @@ void EditorController::resetKnobParam(int knob) {
   setKnobParamValue(knob, ctr_->defaultValue(*sp, *p));
 }
 
+// (port, issue #45) Focus is the selected parameter, the one the display underlines: there is
+// no second piece of state for it, so the underline and the keys cannot disagree.
+int EditorController::focusKnob() const {
+  if (!keyboardControl_)
+    return -1;
+  const LcdSubPage *sp = ctr_->currentSub();
+  if (!sp)
+    return -1;
+  for (const LcdParam &p : sp->params)
+    if (p.highlight && p.knob >= 0)
+      return p.knob;
+  return -1;
+}
+
+// (port, issue #45) The slots the current sub-page gives a parameter, in the order Tab walks
+// them. A slot the page does not use turns nothing and cannot be reached, the rule knobAt
+// already applies to the mouse.
+std::vector<int> EditorController::focusSlots() const {
+  std::vector<int> slots;
+  const LcdSubPage *sp = ctr_->currentSub();
+  if (!sp)
+    return slots;
+  for (int i = 0; i < kNumKnobs; i++)
+    for (const LcdParam &p : sp->params)
+      if (p.knob == i) {
+        slots.push_back(i);
+        break;
+      }
+  return slots;
+}
+
+// (port, issue #45) Put the focus on the first slot the page uses. A page change lands here,
+// so that with keyboard control on something is always focused: the rectangle is always on
+// screen, and the keys always have something to move.
+void EditorController::focusFirstKnob() {
+  view_.setFocusKnob(-1);  // a page with no slot to focus must not keep the old rectangle
+  if (!keyboardControl_)
+    return;
+  LcdSubPage *sp = ctr_->currentSub();
+  const std::vector<int> slots = focusSlots();
+  if (!sp || slots.empty())
+    return;
+  highlightParam(sp->knobParam(slots.front()));
+}
+
+// (port, issue #45) Tab / Shift+Tab: the next or previous slot the page uses, wrapping.
+void EditorController::focusStep(int dir) {
+  LcdSubPage *sp = ctr_->currentSub();
+  const std::vector<int> slots = focusSlots();
+  if (!sp || slots.empty())
+    return;
+  const int at = focusKnob();
+  size_t i = 0;
+  for (size_t k = 0; k < slots.size(); k++)
+    if (slots[k] == at) {
+      i = (k + size_t(dir) + slots.size()) % slots.size();
+      break;
+    }
+  highlightParam(sp->knobParam(slots[i]));
+}
+
+bool EditorController::keyDown(int vk, uint32_t mods) {
+  if (!keyboardControl_)
+    return false;
+  if (vk == kVkTab) {
+    focusStep((mods & kKeyModShift) ? -1 : 1);
+    return true;
+  }
+  const int knob = focusKnob();
+  LcdSubPage *sp = ctr_->currentSub();
+  LcdParam *p = (knob >= 0 && sp) ? sp->paramForKnob(knob) : nullptr;
+  if (!p)
+    return false;
+  switch (vk) {
+  case kVkUp:
+    stepKnobParam(knob, 1);
+    return true;
+  case kVkDown:
+    stepKnobParam(knob, -1);
+    return true;
+  case kVkPrior:
+    stepKnobParam(knob, kWheelCtrlStep);
+    return true;
+  case kVkNext:
+    stepKnobParam(knob, -kWheelCtrlStep);
+    return true;
+  case kVkHome:
+    setKnobParamValue(knob, p->min);
+    return true;
+  case kVkEnd:
+    setKnobParamValue(knob, p->max);
+    return true;
+  case kVkDelete:
+    resetKnobParam(knob);
+    return true;
+  default:
+    return false;  // the host's, like every key the editor has no use for
+  }
+}
+
 bool EditorController::knobIsTwoState(int knob) const { // (port, issue #43)
   if (knob < 0 || knob >= kNumKnobs)
     return false;
@@ -1377,6 +1534,11 @@ void EditorController::confirmLoadClick(MenuNode& item) {
 void EditorController::naturalScrollClick(MenuNode& item) {
     item.setChecked(!item.checked);
     host_.setPortSetting(1, item.checked ? 1 : 0);
+}
+
+void EditorController::keyboardControlClick(MenuNode& item) {  // (port, issue #45)
+    item.setChecked(!item.checked);
+    host_.setPortSetting(Settings::kPortKeyboardControl, item.checked ? 1 : 0);
 }
 
 void EditorController::showModInfo() {  // FUN_0047c9c0

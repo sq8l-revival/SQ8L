@@ -17,6 +17,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -322,6 +323,7 @@ protected:
             deliverNotifications();
             controller_->idle(ms > 200 ? 200 : ms);
         });
+        grabKeyboardIfWanted();
         repaintIfChanged();
     }
 
@@ -527,13 +529,15 @@ protected:
                               : ev.button == kMouseButtonMiddle ? MouseButton::Middle
                                                                 : MouseButton::Left;
         const uint32_t keys = keysOf(ev.mod);
-        if (std::getenv("SQ8L_UI_DEBUG"))
+        if (probeLevel() > 0)
             std::fprintf(stderr, "[sq8l-ui] mouse %s button %u at form %d,%d\n", ev.press ? "down" : "up", ev.button, x, y);
-        // THROWAWAY: stage B of the key-delivery probe (SQ8L_UI_DEBUG=2). Take the keyboard on
-        // a click, which is what CLAP will need - it has no keyboard channel, so a key only
-        // arrives when our own window holds the focus. The difference between stage A and this
-        // is exactly what the grab buys, which is the question the spec cannot answer on paper.
-        if (probeLevel() >= 2 && ev.press) getWindow().focus();
+        // (port, issue #45) A click in our window takes the keyboard back. Clicking a thing to
+        // work it is how every other control on the screen claims the keys, and without this
+        // the first click loses them for good: the grab at open (grabKeyboardIfWanted) fires
+        // once, and whatever the click hands the focus to keeps it. Only inside our own window,
+        // so the host's controls around us are never fought for it.
+        if (ev.press && controller_ != nullptr && controller_->keyboardControlEnabled())
+            getWindow().focus();
         // Windows double click: same button within 500 ms and a few pixels.
         const bool dbl = ev.press && b == lastButton_ && ev.time - lastTime_ <= 500 && std::abs(x - lastX_) <= 2 &&
                          std::abs(y - lastY_) <= 2;
@@ -629,7 +633,7 @@ protected:
 
     // Keyboard for the drawn menus, dialogs and name box (the native ones get it themselves).
     bool onKeyboard(const KeyboardEvent& ev) override {
-        if (std::getenv("SQ8L_UI_DEBUG"))
+        if (probeLevel() > 0)
             std::fprintf(stderr, "[sq8l-ui] key %s %#x (keycode %u) modal %d name %d\n", ev.press ? "down" : "up", ev.key,
                          ev.keycode, drawn_ && drawn_->modal(), drawn_ && drawn_->nameEditing());
         // THROWAWAY: the key-delivery probe of docs/superpowers/specs/2026-11-09-keyboard-control-design.md
@@ -640,7 +644,9 @@ protected:
         // name), so whatever lands there stays until the next key. Nothing is consumed here.
         if (probeLevel() > 0 && view_ != nullptr) {
             Engine lock(*this);
-            view_->setMtsText(probeKeyLabel(ev));
+            probeKey_ = probeKeyLabel(ev);
+            view_->setMtsText(probeKey_ + (controller_ && controller_->keyboardControlEnabled()
+                                               ? "  on" : "  OFF"));
         }
 #if SQ8L_NATIVE_UI
         // The native name box is a control of its own and the OS hands it its keys, except that
@@ -648,32 +654,25 @@ protected:
         // IPlugView::on_key_down) and REAPER takes Return through it rather than leaving it to
         // the focused box, so there it only arrives here. CLAP has no such channel.
         if (!drawn_) {
-            if (!ev.press || ev.key != kKeyEnter || controller_ == nullptr || !nameEditing()) return false;
-            Engine lock(*this);
-            controller_->nameEditKeyDown(0x0d);  // focusForm(): the name itself commits on focus loss
-            return true;
+            if (nameEditing()) {
+                if (!ev.press || ev.key != kKeyEnter || controller_ == nullptr) return false;
+                Engine lock(*this);
+                controller_->nameEditKeyDown(0x0d);  // the name itself commits on focus loss
+                return true;
+            }
+            return editorKey(ev);  // (port, issue #45)
         }
 #endif
-        if (!drawn_ || !drawn_->wantsKeyboard() || !ev.press) return false;
-        int vk = 0;
-        switch (ev.key) {
-        case kKeyBackspace: vk = sq8l::gui::kVkBack; break;
-        case kKeyEnter: vk = sq8l::gui::kVkReturn; break;
-        case kKeyEscape: vk = sq8l::gui::kVkEscape; break;
-        case kKeyDelete: vk = sq8l::gui::kVkDelete; break;
-        case kKeyLeft: vk = sq8l::gui::kVkLeft; break;
-        case kKeyRight: vk = sq8l::gui::kVkRight; break;
-        case kKeyUp: vk = sq8l::gui::kVkUp; break;
-        case kKeyDown: vk = sq8l::gui::kVkDown; break;
-        case kKeyPageUp: vk = sq8l::gui::kVkPrior; break;
-        case kKeyPageDown: vk = sq8l::gui::kVkNext; break;
-        case kKeyHome: vk = sq8l::gui::kVkHome; break;
-        case kKeyEnd: vk = sq8l::gui::kVkEnd; break;
-        default:
+        // (port, issue #45) With no menu, dialog or name box wanting them, the keys are the
+        // editor's: what it does not use is left to the host, which is how the host's own
+        // shortcuts keep working while our window holds the keyboard.
+        if (!drawn_->wantsKeyboard()) return editorKey(ev);
+        if (!ev.press) return false;
+        int vk = vkOf(ev.key);
+        if (vk == 0) {
             // printable keys: text for the name box (onCharacterInput), "any key" for dialogs
             if (!drawn_->modal()) return false;
             vk = ev.key >= 'a' && ev.key <= 'z' ? static_cast<int>(ev.key - 'a' + 'A') : static_cast<int>(ev.key);
-            break;
         }
         if (drawn_->modal()) {
             drawn_->keyDown(vk);
@@ -715,6 +714,20 @@ private:
         const double scale = getScaleFactor();
         setSize(static_cast<uint>(EditorView::kWidth * scale * zoom_ / 100.0 + 0.5),
                 static_cast<uint>(EditorView::kHeight * scale * zoom_ / 100.0 + 0.5));
+    }
+
+    // (port, issue #45) Take the keyboard once, when keyboard control is on. Nothing gives a
+    // child window the platform's keyboard focus on its own, and the host sends its key channel
+    // where that focus is - so without this the keys only arrive after a click in the editor,
+    // which is the friction the feature exists to remove. Only on the transition: grabbing it
+    // on every tick would fight the host's own controls around our window for it, and once the
+    // user clicks those, the keyboard is theirs until they click back into the editor.
+    void grabKeyboardIfWanted() {
+        if (controller_ == nullptr) return;
+        const bool want = controller_->keyboardControlEnabled();
+        if (want == keysGrabbed_) return;
+        keysGrabbed_ = want;
+        if (want) getWindow().focus();
     }
 
     // Ask for a redraw only when the editor's picture changed, and only from the idle tick
@@ -859,7 +872,7 @@ private:
     // Post the master's queued notifications to the editor (engine lock held).
     void deliverNotifications() {
         for (const auto& m : plugin_.takeEditorMessages()) {
-            if (std::getenv("SQ8L_UI_DEBUG")) std::fprintf(stderr, "[sq8l-ui] notify %#x %d\n", m.wParam, m.lParam);
+            if (probeLevel() > 0) std::fprintf(stderr, "[sq8l-ui] notify %#x %d\n", m.wParam, m.lParam);
             controller_->post(sq8l::gui::kMsgNotify, m.wParam, m.lParam);
         }
     }
@@ -883,13 +896,69 @@ private:
                : b == MouseButton::Right ? sq8l::gui::MK_RBUTTON_ : sq8l::gui::MK_MBUTTON_;
     }
 
+    // (port, issue #45) The virtual key of a DPF key event, or 0 for one the editor logic has
+    // no code for (a printable key, a function key, a modifier on its own).
+    static int vkOf(uint key) {
+        switch (key) {
+        case kKeyBackspace: return sq8l::gui::kVkBack;
+        case kKeyTab: return sq8l::gui::kVkTab;
+        case kKeyEnter: return sq8l::gui::kVkReturn;
+        case kKeyEscape: return sq8l::gui::kVkEscape;
+        case kKeyDelete: return sq8l::gui::kVkDelete;
+        case kKeyLeft: return sq8l::gui::kVkLeft;
+        case kKeyRight: return sq8l::gui::kVkRight;
+        case kKeyUp: return sq8l::gui::kVkUp;
+        case kKeyDown: return sq8l::gui::kVkDown;
+        case kKeyPageUp: return sq8l::gui::kVkPrior;
+        case kKeyPageDown: return sq8l::gui::kVkNext;
+        case kKeyHome: return sq8l::gui::kVkHome;
+        case kKeyEnd: return sq8l::gui::kVkEnd;
+        default: return 0;
+        }
+    }
+
+    static uint32_t keyModsOf(uint mod) {
+        uint32_t m = 0;
+        if (mod & kModifierShift) m |= sq8l::gui::kKeyModShift;
+        if (mod & kModifierControl) m |= sq8l::gui::kKeyModCtrl;
+        if (mod & kModifierAlt) m |= sq8l::gui::kKeyModAlt;
+        return m;
+    }
+
+    // (port, issue #45) Hand a key to the editor. True if it used it; false leaves it to the
+    // host. FL Studio delivers Tab's release without its press, so a release for a key whose
+    // press never arrived is taken for the press, and a release whose press was used is
+    // dropped. That quirk belongs here and not in EditorController, which knows about keys
+    // and not about hosts.
+    bool editorKey(const KeyboardEvent& ev) {
+        if (controller_ == nullptr || editorWaiting()) return false;
+        const int vk = vkOf(ev.key);
+        if (vk == 0) return false;
+        if (!ev.press && usedPress_.erase(vk) != 0) return true;
+        bool used;
+        {
+            Engine lock(*this);
+            used = controller_->keyDown(vk, keyModsOf(ev.mod));
+            controller_->pump();
+            // THROWAWAY (the probe): say what the editor did with it, not only that it came.
+            if (probeLevel() > 0 && view_ != nullptr)
+                view_->setMtsText(probeKey_ + (used ? "  USED" : "  not used") + "  vk " +
+                                  std::to_string(vk));
+        }
+        if (used && ev.press) usedPress_.insert(vk);
+        return used;
+    }
+
     // THROWAWAY, with the probe in onKeyboard and onMouse: SQ8L_UI_DEBUG in the host's
     // environment (Windows: setx SQ8L_UI_DEBUG 1, then restart the host). 1 = report what
     // arrives, 2 = also take the keyboard on a click (stage B).
+    // An empty value counts as off: `setx SQ8L_UI_DEBUG ""` does not remove a Windows
+    // variable, it leaves an empty one behind, and a bare presence test then stays on for
+    // good. Read once - the environment does not change under a running host.
     static int probeLevel() {
         static const int level = [] {
             const char* v = std::getenv("SQ8L_UI_DEBUG");
-            return v == nullptr ? 0 : std::atoi(v) >= 2 ? 2 : 1;
+            return v == nullptr || v[0] == '\0' ? 0 : std::atoi(v) >= 2 ? 2 : 1;
         }();
         return level;
     }
@@ -952,6 +1021,12 @@ private:
     sq8l::gui::Bitmap frame_;
     sq8l::gui::Bitmap probe_{EditorView::kWidth, EditorView::kHeight};  // see repaintIfChanged
     bool overlayShown_ = false;  // the last redraw had a drawn menu or dialog over the editor
+    // (port, issue #45) The keys whose press the editor used, so that a host which sends only
+    // the release (FL's Tab) is answered once and not twice. And whether we have taken the
+    // keyboard for the current state of the switch.
+    std::set<int> usedPress_;
+    bool keysGrabbed_ = false;
+    std::string probeKey_;  // THROWAWAY (the probe): the key event being reported
     long redraws_ = 0;
     sq8l::gui::Bitmap overlay_;
     std::vector<uint8_t> shown_;   // the frame in the texture (skip uploads when unchanged)

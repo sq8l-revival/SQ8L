@@ -43,16 +43,22 @@ struct Settings {
     // NOTE: outputCut below is the exception, and only half of one: the cut itself belongs
     // to the instance and travels in the chunk like the two above, but the value last chosen
     // is a preference of the user (issue #52), so a newly created instance starts at it.
-    static constexpr int kNumPort = 3;
-    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "naturalScroll", "outputCut"};
-    static constexpr int kPortDefaults[kNumPort] = {1, 0, 0};
-    static constexpr int kPortOutputCut = 2;  // index of "outputCut" in port[]
-    int port[kNumPort] = {1, 0, 0};
+    static constexpr int kNumPort = 4;
+    static constexpr const char* kPortKeys[kNumPort] = {"confirmLoad", "naturalScroll", "outputCut",
+                                                        "keyboardControl"};
+    static constexpr int kPortDefaults[kNumPort] = {1, 0, 0, 0};
+    static constexpr int kPortOutputCut = 2;       // index of "outputCut" in port[]
+    static constexpr int kPortKeyboardControl = 3; // index of "keyboardControl" in port[]
+    int port[kNumPort] = {1, 0, 0, 0};
     // Ask before loading a library, a bank or a SysEx bank over existing programs.
     bool confirmLoading() const { return port[0] > 0; }
     // (port, issue #35) Invert the mouse wheel over a knob or a display field, which is what a
     // touchpad wants. Off, so that an ini written before this existed keeps the wheel as it was.
     bool naturalScrolling() const { return port[1] > 0; }
+    // (port, issue #45) OPTIONS -> Keyboard -> Enable keyboard control: the editor answers the
+    // keys and takes the keyboard focus to get them. Off, because a plugin that holds the
+    // keyboard is a plugin that has taken the host's shortcuts away from the user.
+    bool keyboardControl() const { return port[kPortKeyboardControl] > 0; }
     // (port, issue #52) OPTIONS -> Output gain: the steps the menu offers, as a cut in dB.
     // Every gain is a whole power of two, so a cut changes nothing but the exponent of each
     // sample; 6 dB is read as the usual factor of two (-6.02 dB) rather than exactly -6.

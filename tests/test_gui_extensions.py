@@ -1223,6 +1223,43 @@ def main():
         check(seen[1] == first + 1, f"and walks on from there ({seen})")
         check(first in seen[1:], f"wrapping round the group ({seen})")
 
+    # The four LFOs share one view, and so do the four envelopes: moving between them keeps
+    # the view you are reading rather than restoring each page's own. The point is that LFO2's
+    # second view answers the same question as LFO1's, so going "to the next LFO" should not
+    # also change the subject.
+    BUTT_LFO1, BUTT_LFO3 = (71, 381), (163, 381)
+    BUTT_ENV1, BUTT_ENV2 = (265, 381), (311, 381)
+    e = fresh()
+    check(e.key(ord("L"), MOD_ALT), "Alt+L is taken")
+    lfo1 = e.page()
+    check(e.key(ord("V"), MOD_ALT), "Alt+V is taken")
+    view = e.page()
+    check(view[0] == lfo1[0] and view[1] != lfo1[1], f"on LFO1's other view ({view})")
+    check(e.key(ord("L"), MOD_ALT), "Alt+L is taken")
+    check(e.page() == (lfo1[0] + 1, view[1]), f"Alt+L keeps the view on LFO2 ({e.page()})")
+    e.click(BUTT_LFO3)
+    e.idle()
+    check(e.page() == (lfo1[0] + 2, view[1]), f"and the LFO buttons agree ({e.page()})")
+    # leaving the group and coming back keeps the group's view, not each page's own
+    e.click(BUTT_FILT)
+    e.idle()
+    e.click(BUTT_LFO1)
+    e.idle()
+    check(e.page() == (lfo1[0], view[1]), f"and it survives leaving the group ({e.page()})")
+    # the envelopes have their own shared view, which the LFOs' does not disturb
+    e.click(BUTT_ENV1)
+    e.idle()
+    env1 = e.page()
+    check(e.key(ord("V"), MOD_ALT), "Alt+V is taken")
+    envView = e.page()
+    check(envView[1] != env1[1], f"on ENV1's other view ({envView})")
+    e.click(BUTT_ENV2)
+    e.idle()
+    check(e.page() == (env1[0] + 1, envView[1]), f"ENV2 keeps the envelopes' view ({e.page()})")
+    e.click(BUTT_LFO1)
+    e.idle()
+    check(e.page() == (lfo1[0], view[1]), f"and the LFOs kept their own ({e.page()})")
+
     # Ctrl + the arrows move through the library (the program number reads "<bank><nnn>")
     prog = lambda: int(ed.program()[1:])
     bank = lambda: ed.program()[0]

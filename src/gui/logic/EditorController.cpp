@@ -19,6 +19,24 @@ namespace {
 // FUN_004602f4: bank letter
 char bankLetter(int bank) { return (bank >= 0 && bank < 4) ? char('A' + bank) : '?'; }
 
+// (port, issue #45) The page buttons that form a group: four LFOs, four envelopes, three
+// matrix modulators. Tags as wireControls installs them (page << 4 | sub).
+const int kLfoTags[] = {111, 127, 143, 159};  // buttLfo1..4
+const int kEnvTags[] = {175, 191, 207, 223};  // buttEnv1..4
+const int kMatTags[] = {224, 240, 256};       // buttMat1..3
+
+// (port, issue #45) Which group a page belongs to, or -1. The LFOs share one view between
+// them and the envelopes another (`groupSub_`): LFO2's second view answers the same question
+// as LFO1's, so moving to the next LFO should not also change the subject. The matrix pages
+// have a single view each and so need no entry here.
+int pageGroup(int page) {
+    for (int t : kLfoTags)
+        if ((t >> 4) == page) return 0;
+    for (int t : kEnvTags)
+        if ((t >> 4) == page) return 1;
+    return -1;
+}
+
 // FUN_00460304: "A   (user)" ...
 std::string bankName(int bank) {
     if (bank < 0 || bank > 3) return "?";
@@ -900,10 +918,26 @@ void EditorController::pageButton(int tag, bool cycle) {  // FUN_00484a10
             selectSubPage(sub);
         }
     } else if (sub == 0xf) {
-        selectPage(pg);
+        // (port, issue #45) A page of a group opens on the group's shared view rather than on
+        // the one it was last left on: the LFOs read as one page with four sources behind it,
+        // and the envelopes likewise. A button that names its own view (buttDca1 and the rest)
+        // is unaffected - it goes where it says.
+        const int g = pageGroup(pg);
+        if (g >= 0)
+            selectPageSub(pg, groupSub_[g]);
+        else
+            selectPage(pg);
     } else {
         selectPageSub(pg, sub);
     }
+}
+
+// (port, issue #45) After any page change: if the display is on a page of a group, that is
+// the group's view from now on. One place, so every route - the buttons, the chords, the
+// scroll arrows, the page popup - keeps it true.
+void EditorController::rememberGroupSub() {
+    const int g = pageGroup(ctr_->pageIndex());
+    if (g >= 0) groupSub_[g] = ctr_->subPage();
 }
 
 // (port, issue #45) Every page change goes through these four, so that the focus lands on the
@@ -912,26 +946,31 @@ void EditorController::pageButton(int tag, bool cycle) {  // FUN_00484a10
 // focus rectangle would have nothing to work on until the user clicked something.
 void EditorController::selectPage(int page) {
     ctr_->selectPage(page);
+    rememberGroupSub();
     focusFirstKnob();
 }
 
 void EditorController::selectPageSub(int page, int sub) {
     ctr_->selectPageSub(page, sub);
+    rememberGroupSub();
     focusFirstKnob();
 }
 
 void EditorController::selectSubPage(int sub) {
     ctr_->selectSubPage(sub);
+    rememberGroupSub();
     focusFirstKnob();
 }
 
 void EditorController::nextSubPage() {
     ctr_->nextSubPage();
+    rememberGroupSub();
     focusFirstKnob();
 }
 
 void EditorController::prevSubPage() {
     ctr_->prevSubPage();
+    rememberGroupSub();
     focusFirstKnob();
 }
 
@@ -1334,9 +1373,6 @@ bool EditorController::keyDown(int vk, uint32_t mods) {
   // `cycle` and all: pressing Alt+1 twice cycles the page's views exactly as clicking buttOsc1
   // twice does, so the keyboard and the mouse cannot grow different ideas of what a page is.
   if (mods == kKeyModAlt) {
-    static const int kLfo[] = {111, 127, 143, 159};   // buttLfo1..4
-    static const int kEnv[] = {175, 191, 207, 223};   // buttEnv1..4
-    static const int kMat[] = {224, 240, 256};        // buttMat1..3
     switch (vk) {
     case '1': pageButton(16, true); return true;      // buttOsc1
     case '2': pageButton(32, true); return true;      // buttOsc2
@@ -1346,9 +1382,9 @@ bool EditorController::keyDown(int vk, uint32_t mods) {
     case 'X': pageButton(15, true); return true;      // buttWav (OSC1-3 Mix)
     case 'U': pageButton(287, true); return true;     // buttModes
     case 'V': nextSubPage(); return true;             // the page's views, as the scroll arrow
-    case 'L': cycleGroup(kLfo, 4); return true;
-    case 'E': cycleGroup(kEnv, 4); return true;
-    case 'M': cycleGroup(kMat, 3); return true;
+    case 'L': cycleGroup(kLfoTags, 4); return true;
+    case 'E': cycleGroup(kEnvTags, 4); return true;
+    case 'M': cycleGroup(kMatTags, 3); return true;
     default: return false;
     }
   }

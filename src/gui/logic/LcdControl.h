@@ -152,6 +152,8 @@ public:
     // editing
     int readParam(const LcdParam& p) const;                      // FUN_0045b378
     int readParamIn(const LcdSubPage& sp, const LcdParam& p) const;  // (port) any sub-page's
+    // (port, issue #45) The value INIT would give the parameter, read like readParamIn.
+    int defaultValue(const LcdSubPage& sp, const LcdParam& p) const;
     void writeParam(const LcdParam& p, int v);                   // FUN_0045b3a4
     int currentValue(int param) const;                           // FUN_0045b538
     void knobChanged(int knob, int value);                       // 0x45b63c
@@ -192,6 +194,9 @@ public:
 private:
     void scrollArrows();
     bool linkSyncRanges();  // (port, issue #42)
+    // (port) The adjustments a raw parameter byte gets on the way to the display, shared by
+    // readParamIn and defaultValue so that the two cannot drift apart.
+    int adjustRead(const LcdParam& p, int v) const;
 
     LcdDisplay& lcd_;            // +0x08
     EditBuffer* eb_;             // parameter editor of the pages (+0x20 of every page)

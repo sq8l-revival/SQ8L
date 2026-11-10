@@ -361,10 +361,10 @@ void EditorController::wireControls() {
             if (kn.maxValue() > kn.minValue()) hideCursor();
         };
         k.onEditEnd = [this](Knob&) { showCursor(); };
-        k.onDblClick = [this, i](Control&) {  // 0x485148
-            LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
-            if (p) ctr_->cellDoubleClick(p->x, p->y);
-        };
+        // (port, issue #45) The original opened the parameter's value menu here. That menu is
+        // on the right click and on a double click on the parameter's field in the display,
+        // so the gesture is better spent on the default value the Del key also gives.
+        k.onDblClick = [this, i](Control&) { resetKnobParam(i); };  // 0x485148
         k.onMouseMove = [this, i](Control&, ShiftState, int, int) {  // FUN_00485170
             LcdParam* p = ctr_->currentSub() ? ctr_->currentSub()->paramForKnob(i) : nullptr;
             if (p) ctr_->cellMouseMove(p->x, p->y);
@@ -1163,17 +1163,35 @@ void EditorController::stepKnobParam(int knob, int by) {
   LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
   if (!p)
     return;
-  const int was = ctr_->currentValue(p->index);
-  int v = was + by;
+  setKnobParamValue(knob, ctr_->currentValue(p->index) + by);
+}
+
+// (port, issue #45) Put the parameter of a knob slot at `v`, clamped, the way a turn leaves
+// it: the knob is the value's home, then knobChanged takes the same route a turn takes.
+void EditorController::setKnobParamValue(int knob, int v) {
+  LcdSubPage *sp = ctr_->currentSub();
+  LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
+  if (!p)
+    return;
   if (v < p->min)
     v = p->min;
   if (v > p->max)
     v = p->max;
-  if (v == was)
+  if (v == ctr_->currentValue(p->index))
     return;
   lcdKnobValue(knob, v);
   ctr_->knobChanged(knob, v);
   highlightParam(sp->knobParam(knob));
+}
+
+// (port, issue #45) Put the parameter of a knob slot back to what INIT would give it. A slot
+// the page has no parameter for has nothing to reset.
+void EditorController::resetKnobParam(int knob) {
+  LcdSubPage *sp = ctr_->currentSub();
+  LcdParam *p = sp ? sp->paramForKnob(knob) : nullptr;
+  if (!p)
+    return;
+  setKnobParamValue(knob, ctr_->defaultValue(*sp, *p));
 }
 
 bool EditorController::knobIsTwoState(int knob) const { // (port, issue #43)

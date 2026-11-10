@@ -585,7 +585,20 @@ int LcdController::readParamIn(const LcdSubPage& sp, const LcdParam& p) const {
     if (!sp.editor) return 0;
     const int idx = sp.editBufferIndex(p);
     if (uint32_t(idx) >= uint32_t(kNumParams)) return 0;
-    const int v = eb_->param(idx);
+    return adjustRead(p, eb_->param(idx));
+}
+
+// (port, issue #45) What INIT would give this parameter: the same read, from an INIT program
+// instead of the edit buffer. The Del key and a double click on the knob both land here.
+int LcdController::defaultValue(const LcdSubPage& sp, const LcdParam& p) const {
+    if (!sp.editor) return 0;
+    const int idx = sp.editBufferIndex(p);
+    if (uint32_t(idx) >= uint32_t(kNumParams)) return 0;
+    static const Program init = makeInitProgram();
+    return adjustRead(p, getParam(init, idx));
+}
+
+int LcdController::adjustRead(const LcdParam& p, int v) const {
     // (port) EMU -> VOICES: a program of the original has 0 there, which means its 8 voices.
     // Reading it as 8 puts the knob and the value popup where the display already says they
     // are, so turning the knob goes to 7 or 9 instead of jumping to the bottom of the range.

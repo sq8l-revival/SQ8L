@@ -20,7 +20,8 @@ what it adds:
   * the knobs a display page has no parameter for are marked inactive (drawn faded);
   * OPTIONS "Mouse" -> "Hide cursor when editing": the cursor is hidden and pinned for the
     length of a knob turn, so the turn has no bounds, and comes back where it started;
-  * a right click on a knob opens its value menu (the original: only a double click);
+  * a right click on a knob opens its value menu (the original: only a double click), and a
+    double click on the knob sets the parameter to what INIT would give it instead (issue #45);
   * a parameter with only two values gets a soft button in place of its knob, and a click
     on the button or on its field in the display flips it (issue #43);
   * the mouse wheel over a knob or its display field steps the parameter, one notch at a time
@@ -61,6 +62,7 @@ def cell_xy(col, row):
 NUM_LCD = (40, 52)
 UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
+INIT = (454, 63)  # initButton (432, 52, 44 x 22)
 HIDE_CURSOR, NATURAL_SCROLL = "Hide cursor when editing", "Natural scrolling"
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
@@ -673,13 +675,14 @@ def main():
     check(inactive >= 0, f"page 0.0 has an inactive knob ({inactive})")
     ed.drag_knob(inactive)
     check(ed.cursor_events(ed.events()) == [], "turning a faded knob leaves the cursor alone")
-    # A double click opens the value menu, and the host then cancels the capture, which is
-    # all the editor hears of it: the drag the second press started must still end, or the
-    # cursor would stay hidden until the next mouse move. VOICES on the EMU page has a menu
-    # (a two-value parameter would just toggle).
+    # A double click on a parameter's field in the display opens its value menu, and the host
+    # then cancels the capture, which is all the editor hears of it: the drag the first press
+    # started must still end, or the cursor would stay hidden until the next mouse move.
+    # VOICES on the EMU page has a menu (a two-value parameter would just toggle).
     L.sq8l_gl_ctr(ed.v, 0, EMU_PAGE, EMU_SUB)
     ed.idle()
-    x, y = knob_xy(9)
+    voices = param_of(ed.pages()[EMU_PAGE]["subs"][EMU_SUB], "VOICES")
+    x, y = cell_xy(voices["x"] + len(voices["label"]), voices["y"])
     L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
     L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
     L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
@@ -692,6 +695,12 @@ def main():
     check(ed.popups(evs) and ed.cursor_events(evs)[-1:] == [True],
           f"a double click that opens the value menu leaves the cursor visible "
           f"({ed.cursor_events(evs)})")
+    # The knob's own double click opens no menu any more (section 13): it sets the default, and
+    # the drag its second press starts ends with the button, so the cursor comes back there too.
+    ed.events()
+    ed.double_click(knob_xy(voices["knob"]))
+    check(ed.cursor_events(ed.events())[-1:] == [True],
+          "a double click on the knob leaves the cursor visible as well")
     # switched off in OPTIONS
     ed.choose([OPT_MOUSE, MOUSE_HIDE_CURSOR])
     ed.click(OPTIONS)
@@ -754,17 +763,11 @@ def main():
     values = [i for i in items if i.isdigit()]
     check(values[:1] == ["08"] and values[1:] == ["%02d" % v for v in range(1, 65)],
           f"the value menu of VOICES: the current value, then 1..64 ({len(values)} items)")
-    # the same menu a double click opens
-    ed.choose([])
-    x, y = knob_xy(voices)
-    L.sq8l_gl_mouse(ed.v, WM_MOUSEMOVE, x, y, 0)
-    L.sq8l_gl_mouse(ed.v, WM_LBUTTONDOWN, x, y, MK_LBUTTON)
-    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
-    L.sq8l_gl_mouse(ed.v, 0x203, x, y, MK_LBUTTON)  # WM_LBUTTONDBLCLK
-    L.sq8l_gl_mouse(ed.v, WM_LBUTTONUP, x, y, 0)
-    ed.idle()
-    dbl = ed.popups(ed.events())
-    check(bool(dbl) and [text(i) for i in dbl[-1]] == items, "a double click still opens it")
+    # the menu a double click on the knob used to open: that gesture sets the default now
+    # (issue #45, section 13), so the right click is what is left to open it with
+    ed.events()
+    ed.double_click(knob_xy(voices))
+    check(not ed.popups(ed.events()), "a double click on the knob no longer opens it")
     # choosing a value writes the parameter
     ed.choose([items.index("24")])
     ed.context_menu(knob_xy(voices))
@@ -941,6 +944,47 @@ def main():
     check(boot.lcd_attrs(1).count(2) == version.count("."),
           f"one decimal-point attribute per dot of {version!r} ({boot.lcd_attrs(1).count(2)})")
     check("." not in line, "the version's dots are attributes here too")
+
+    # 13. a double click on a knob sets the parameter to what INIT would give it (issue #45):
+    # the value menu it used to open is on the right click (section 9) and on a double click
+    # on the parameter's field in the display, both of which keep working.
+    print("Double click on a knob:")
+    ed = Editor(L)
+    L.sq8l_gl_ctr(ed.v, 0, MODE_PAGE, MODE_SUB)
+    ed.idle(2000)
+    sub = ed.pages()[MODE_PAGE]["subs"][MODE_SUB]
+    glide = param_of(sub, "GLIDE")
+    knob = knob_xy(glide["knob"])
+    field = cell_xy(glide["x"] + len(glide["label"]), glide["y"])
+    # what INIT gives it, taken from the editor's own INIT button rather than hardcoded
+    ed.click(INIT)
+    ed.idle()
+    default = ed.knob(glide["knob"])
+
+    ed = Editor(L)
+    L.sq8l_gl_ctr(ed.v, 0, MODE_PAGE, MODE_SUB)
+    ed.idle(2000)
+    ed.wheel(knob, 5.0)
+    moved = ed.knob(glide["knob"])
+    check(moved != default, f"the parameter is away from its default ({moved} vs {default})")
+    ed.events()
+    ed.double_click(knob)
+    check(ed.knob(glide["knob"]) == default,
+          f"a double click sets the default ({moved} -> {ed.knob(glide['knob'])}, want {default})")
+    check(not ed.popups(ed.events()), "and opens no value menu")
+    # the display field still opens the menu, so the list of values stays one gesture away
+    ed.wheel(knob, 5.0)
+    before = ed.knob(glide["knob"])
+    check(before != default, f"moved away from the default again ({before})")
+    ed.events()
+    ed.double_click(field)
+    check(bool(ed.popups(ed.events())), "a double click on its field in the display still opens it")
+    check(ed.knob(glide["knob"]) == before, "and leaves the value alone")
+    # a slot the page does not use has no parameter to reset
+    faded = next(i for i in range(10) if not ed.knob_active(i))
+    ed.events()
+    ed.double_click(knob_xy(faded))
+    check(ed.knob(glide["knob"]) == before, f"a double click on a faded slot ({faded}) changes nothing")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

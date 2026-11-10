@@ -44,7 +44,9 @@ code and verified against the original plugin running inside an x86 emulator.
   *Mouse → Hide cursor when editing*, on by default and shared with the original's
   `restMouseKnob` setting.
 - A few small additions to the editor: a right click on a knob opens the list of its values
-  (the original has that on a double click, which still works), a knob the display page has
+  (the original has that on a double click; on the knob that gesture now sets the parameter
+  back to its initialized value instead, and a double click on the parameter's field in the
+  display still opens the list), a knob the display page has
   no parameter for is drawn half faded instead of looking like every other knob, a left click
   on the program number opens the program list (the original needs a right or double click),
   the **VOICES** parameter on the EMU page (see below), and these OPTIONS items: *Output gain*

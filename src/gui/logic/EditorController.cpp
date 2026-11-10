@@ -1455,22 +1455,28 @@ bool EditorController::keyDown(int vk, uint32_t mods) {
     default: return false;
     }
   }
-  // (port, issue #45) Ctrl and the arrows move through the library. The on-screen UP/DOWN
+  // (port, issue #45) Shift and the arrows move through the library. The on-screen UP/DOWN
   // buttons have "Down arrow loads next program" to say which way they go, because a button
   // with an arrow on it is ambiguous; an arrow key is not, so it ignores that setting.
-  if (mods == kKeyModCtrl) {
+  // Shift, not Ctrl: macOS spends all four Ctrl+arrows on Mission Control and Spaces, so no
+  // application sees them there. Not Alt either - the right Alt of many layouts is AltGr.
+  if (mods == kKeyModShift) {
     switch (vk) {
     case kVkRight: selectProgram(prog() + 1); return true;
     case kVkLeft: selectProgram(prog() - 1); return true;
     case kVkDown: selectBank(bank() + 1); return true;
     case kVkUp: selectBank(bank() - 1); return true;
-    default: return false;
+    default: break;  // Shift+Tab is below
     }
   }
-  if (vk == kVkTab) {
+  if (vk == kVkTab && (mods & ~kKeyModShift) == 0) {
     focusStep((mods & kKeyModShift) ? -1 : 1);
     return true;
   }
+  // The keys below are the bare ones. A modifier we have no chord for does not make one of
+  // them: Cmd+Up is the Mac user reaching for the bank, and it must not nudge a knob instead.
+  if (mods != 0)
+    return false;
   const int knob = focusKnob();
   LcdSubPage *sp = ctr_->currentSub();
   LcdParam *p = (knob >= 0 && sp) ? sp->paramForKnob(knob) : nullptr;

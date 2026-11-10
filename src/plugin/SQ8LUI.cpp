@@ -671,11 +671,16 @@ protected:
         // editor's: what it does not use is left to the host, which is how the host's own
         // shortcuts keep working while our window holds the keyboard.
         if (!drawn_->wantsKeyboard()) return editorKey(ev);
-        if (!ev.press) return false;
+        // A menu, a dialog or the name box owns the keyboard outright, releases included: what
+        // we answer here is "is this keystroke ours", not "did this call do something with it".
+        // On macOS the answer decides whether the key is passed up to the host
+        // (patches/pugl-mac-key-next-responder.patch), and a name being typed is ours even
+        // where the work is done by onCharacterInput below rather than here.
+        if (!ev.press) return true;
         int vk = vkOf(ev.key);
         if (vk == 0) {
             // printable keys: text for the name box (onCharacterInput), "any key" for dialogs
-            if (!drawn_->modal()) return false;
+            if (!drawn_->modal()) return true;
             vk = ev.key >= 'a' && ev.key <= 'z' ? static_cast<int>(ev.key - 'a' + 'A') : static_cast<int>(ev.key);
         }
         if (drawn_->modal()) {
@@ -939,6 +944,10 @@ private:
         if (mod & kModifierShift) m |= sq8l::gui::kKeyModShift;
         if (mod & kModifierControl) m |= sq8l::gui::kKeyModCtrl;
         if (mod & kModifierAlt) m |= sq8l::gui::kKeyModAlt;
+        // Command on macOS. Translated so the editor can refuse it: untranslated it would read
+        // as no modifier at all, and Cmd+Up would step the parameter under a Mac user reaching
+        // for the next bank.
+        if (mod & kModifierSuper) m |= sq8l::gui::kKeyModSuper;
         return m;
     }
 

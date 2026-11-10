@@ -103,7 +103,9 @@ if(SQ8L_BUILD_PLUGIN)
                 "dpf-vst3-program-change.patch=third_party/DPF"
                 "dpf-clap-preset-discovery.patch=third_party/DPF"
                 "dpf-clap-event-size.patch=third_party/DPF"
-                "pugl-x11-nested-update.patch=third_party/DPF/dgl/src/pugl-upstream")
+                "dpf-mac-key-passthrough.patch=third_party/DPF"
+                "pugl-x11-nested-update.patch=third_party/DPF/dgl/src/pugl-upstream"
+                "pugl-mac-key-next-responder.patch=third_party/DPF/dgl/src/pugl-upstream")
     string(REPLACE "=" ";" entry "${entry}")
     list(GET entry 0 patch)
     list(GET entry 1 dir)

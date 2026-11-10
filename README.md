@@ -64,7 +64,7 @@ code and verified against the original plugin running inside an x86 emulator.
   **Tab** and **Shift+Tab** move between the knobs the page uses. **Alt+1/2/3**, **Alt+F**,
   **Alt+A**, **Alt+X** and **Alt+U** are the page buttons they stand for, pressed again to
   cycle that page's views as clicking the button does, **Alt+V** cycles the views on its own,
-  and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Ctrl** with
+  and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Shift** with
   the left and right arrows steps through the programs, and with up and down through the banks.
   Anything else is left to the host, so its own shortcuts keep working — though *which* keys
   reach a plugin at all is the host's decision, and REAPER for one keeps those bound to its own

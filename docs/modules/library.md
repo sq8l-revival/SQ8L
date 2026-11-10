@@ -170,7 +170,8 @@ FUN_00461fb8(0,0) + FUN_00461fd8(2,1,0)), 1 -> FUN_00461fb8(0,0), 2/3 -> FUN_004
 | offset | content |
 |---|---|
 | 0x00 | int32 2 |
-| 0x04 | ShortString "\x09SQ8L.EDIT" (10 bytes), then zeros |
+| 0x04 | ShortString "\x09SQ8L.EDIT" (10 bytes) |
+| 0x0e..0x17 | 0 (the port uses seven of these ten, below) |
 | 0x18 | int16 current program number (+0xb74) |
 | 0x1a | modified flag (0/1) |
 | 0x1b..0x1e | 0 (the port uses all four, below) |
@@ -188,10 +189,35 @@ project in all of them.
 
 The two remaining spare bytes carry the instance's other per-project settings the same way, and
 need no magic because 0 is their default: `0x1d` a bit per switch (bit 0 MTS-ESP enable, bit 1
-correct-pitch, see `tuning.md`; bit 2 respond to MIDI program changes, issue #40) and `0x1e`
-the output cut in dB (OPTIONS → Output gain, issue #52, see `settings.md`). Each is written
-only when set, so an untouched chunk stays the original's bytes, and a chunk without them puts
-the instance back to off / no cut.
+correct-pitch, see `tuning.md`; bit 2 respond to MIDI program changes, issue #40; bit 5 page
+memory, issue #45) and `0x1e` the output cut in dB (OPTIONS → Output gain, issue #52, see
+`settings.md`). Each is written only when set, so an untouched chunk stays the original's
+bytes, and a chunk without them puts the instance back to off / no cut.
+
+**Bit 5 is inverted: set means page memory is OFF.** That is deliberate and must not be
+"tidied up" to match bit 2 three places along, which wants the opposite. Page memory is on for
+a new instance and should be on for a project saved before it existed, so an absent bit has to
+read as on — and the default then writes nothing, which is what keeps an untouched chunk the
+original's bytes. The two bits differ because their defaults do.
+
+**Where the editor was left** (OPTIONS → Keyboard → Page memory, issue #45) rides in the ten
+bytes between the magic and the program number, which the original also writes as zero and
+never validates:
+
+| offset | content |
+|---|---|
+| 0x0e | mark `'K'`, written only when page memory is on and there is a place to save |
+| 0x0f | page |
+| 0x10 | view (sub-page) |
+| 0x11 | the focused knob slot, 0xff = none |
+| 0x12..0x14 | the LFO / envelope / matrix page last used |
+| 0x15 | the views the LFO and envelope pages share, two bits each |
+| 0x16..0x17 | reserved, 0 |
+
+`EditorPlace`'s focused-slot-per-sub-page table is **not** carried — it does not fit, and a
+project needs to open where it was left rather than remember every page ever visited; a loaded
+chunk seeds it with the one entry it holds. After this, three bytes (`0x15..0x17`) and two bits
+(6-7 of `0x1d`) are all that is left of the spare header.
 
 Bit 2 is the one whose clear state is **not** the instance's default: a new instance responds
 to program changes, and the bit is written whenever it is on. So the only chunks that read as

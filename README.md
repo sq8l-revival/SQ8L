@@ -50,10 +50,27 @@ code and verified against the original plugin running inside an x86 emulator.
   the **VOICES** parameter on the EMU page (see below), and these OPTIONS items: *Output gain*
   (see below), *Polyphony* (see below), *Down arrow -> next program* (the original's hidden
   `swapProgUpDn` setting), *Ask before loading banks/libraries* (on by default, like the
-  original), *Support MIDI Program Change* (see below), *MTS-ESP* (see below) and *Zoom*
+  original), *Support MIDI Program Change* (see below), *Keyboard* (see below), *MTS-ESP*
+  (see below) and *Zoom*
   (see below). OPTIONS is also regrouped: *Output
   gain* leads, then *Polyphony*, and the original's mouse-restore submenu and its separate
   *Right click on display -> scroll page* item are now one *Mouse* submenu.
+- **The keyboard:** OPTIONS → *Keyboard → Enable keyboard control* (off by default) lets the
+  editor be driven from the keys. The parameter under the focus — marked with a rectangle
+  around its knob, and the one the display underlines — takes **Up/Down** (one step),
+  **Page Up/Page Down** (ten), **Home/End** (its ends) and **Del** (what INIT would give it);
+  **Tab** and **Shift+Tab** move between the knobs the page uses. **Alt+1/2/3**, **Alt+F**,
+  **Alt+A**, **Alt+X** and **Alt+U** are the page buttons they stand for, pressed again to
+  cycle that page's views as clicking the button does, **Alt+V** cycles the views on its own,
+  and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Ctrl** with
+  the left and right arrows steps through the programs, and with up and down through the banks.
+  Anything else is left to the host, so its own shortcuts keep working — though *which* keys
+  reach a plugin at all is the host's decision, and REAPER for one keeps those bound to its own
+  actions unless *Send all keyboard input to plug-in* is on for the instance. A click anywhere
+  in the editor takes the keyboard back. *Keyboard → Page memory* (on) remembers where each
+  instance was left — its page, view and parameter — in the project, so it opens there again.
+  The four LFOs share one view and the four envelopes another, by mouse as well as by key:
+  moving to the next LFO keeps the view you were reading.
 - **Window size:** the editor can be enlarged from 100% to 300% with OPTIONS → *Zoom* (or
   the window's corner, where the host allows it). It is drawn at the window's resolution
   rather than enlarged: the panel (labels, signal lines, frames, logo) as vector shapes

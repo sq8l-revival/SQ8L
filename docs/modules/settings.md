@@ -64,16 +64,22 @@ master fields.
 
 A section the original does not read or write, so an ini shared with it round-trips: the
 original leaves these keys alone. Everything that belongs to a *project* rather than to the
-user is deliberately not here — the polyphony override, the MTS-ESP switches and the program
-change switch (issue #40) travel in the plugin's own state (`Synth::getChunk`) so that two
-instances can differ and a project recalls them.
+user is deliberately not here — the polyphony override, the MTS-ESP switches, the program
+change switch (issue #40) and the editor's page memory (issue #45) travel in the plugin's own
+state (`Synth::getChunk`) so that two instances can differ and a project recalls them.
 
 | ini key | default | meaning |
 |---|---|---|
 | confirmLoad | 1 | ask before loading a library, a bank or a SysEx bank over existing programs |
 | naturalScroll | 0 | invert the mouse wheel over a knob or a display field, for a touchpad (issue #35) |
+| keyboardControl | 0 | the editor answers the keys and takes the keyboard focus to get them (issue #45) |
 | outputCut | 0 | the cut last chosen in OPTIONS -> Output gain, in dB (issue #52) |
 | zoom | 100 | editor size in percent, 100 (the original's 626x430) to 300 |
+
+`keyboardControl` is the user's own preference — whether a plugin window may take the keyboard
+away from the host is about the hands at the keyboard, not about a project — while what page
+memory *remembers* belongs to the instance and rides in the chunk, as does the switch that
+turns it on. The two therefore sit in the same OPTIONS submenu and in different places.
 
 `outputCut` is the half-exception to the paragraph above. The cut in force belongs to the
 instance and travels in the chunk like the polyphony override, so a project recalls it and two

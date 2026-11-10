@@ -160,11 +160,71 @@ setting (-1 = off) is passed along. This is platform work: the controller expose
 `keyboardCaptured()` (true in those periods when the mode is >= 0) and `keyCaptMode()`; the
 platform grabs the keyboard accordingly.
 
+## Keyboard control (port, issue #45)
+
+The editor can be worked from the keyboard, behind OPTIONS -> Keyboard -> *Enable keyboard
+control* (`[port] keyboardControl`, off). With the switch off `keyDown` answers nothing, no
+rectangle is drawn and the platform layer never asks for the keyboard focus, so a host that
+knows nothing about the feature is affected by it in no way at all.
+
+**Focus is the selected parameter.** Not a second piece of state beside it: `focusKnob()` is
+the knob slot of the parameter whose `highlight` is set, which is the parameter the display
+underlines. So a knob click (new - the original only selected when a value *changed*), a turn,
+a wheel notch, a toggle flip, a click on a field and Tab all move one thing, and the underline
+and the rectangle cannot disagree. A page change lands the focus on the page's first usable
+slot (`focusFirstKnob`), so with the switch on something is always focused; the VFD therefore
+always shows one parameter underlined, where the original only did after a click.
+
+| Key | What |
+|---|---|
+| Up / Down | the parameter one step, `stepKnobParam` - the route a turn and a wheel notch take |
+| Page Up / Page Down | ten steps, the same `kWheelCtrlStep` a Ctrl+notch moves |
+| Home / End | its minimum / maximum |
+| Del | what INIT would give it (`LcdController::defaultValue`), as a double click on the knob does |
+| Tab / Shift+Tab | the next / previous slot the page uses, wrapping, skipping slots it does not |
+| Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
+| Alt+V | `nextSubPage()` |
+| Alt+L / E / M | the next page of the LFO / envelope / matrix group |
+| Ctrl+Left / Right | the previous / next program |
+| Ctrl+Up / Down | the previous / next bank |
+
+A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
+the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the
+chord against the click, not against a page number. The group chords are the exception, since
+no single button walks a group; `cycle` is false there, so Alt+V stays the way to the views.
+Ctrl+arrows ignore *Down arrow loads next program*: that setting exists because a button with
+an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
+
+**A key the editor does not use is not consumed**, and the host keeps it. For VST2 and VST3
+that is the whole of the pass-through, since "not handled" is the return value of the host's own
+key channel. CLAP has no such channel in DPF, so there a key arrives only while our window holds
+the platform focus and anything unconsumed dies in it; see the spec for the forwarding that
+needs. Which keys reach a plugin at all is the host's decision either way - REAPER keeps the
+ones bound to its own actions unless *Send all keyboard input to plug-in* is on for that FX.
+
+**The LFO pages share one view and the envelope pages another** (`groupSub_`, `pageGroup`):
+opening any page of a group puts it on the group's view rather than the page's own, because
+LFO2's second view answers the same question as LFO1's and moving to the next LFO should not
+also change the subject. A button that names its own view (buttDca1 and the rest) is
+unaffected. This is the mouse's behaviour too, not only the keyboard's.
+
+**Page memory** (OPTIONS -> Keyboard -> *Page memory*, on) is per instance and travels in the
+plugin's state, not in `SQ8L.ini`: a project opens each instance where it was left, and two
+instances in it can differ. `EditorPlace` (`src/engine/EditorPlace.h`) holds the page, view and
+focused slot, the page each group was last on, the two shared group views and the focused slot
+of every sub-page visited; `savePlace` hands it to the engine after anything that moves the
+display or the focus, and `restorePlace` reads it in `show()`. With the switch off a sub-page
+always opens on its first slot and a group chord always enters at the group's first page. What
+of it the host chunk carries is in `library.md`.
+
 ## Verification
 
 `tests/test_gui_extensions.py` (through `tests/capi_gui_logic.cpp`), in CI. The OPTIONS
 layout is not asserted there: the test locates the items it clicks by caption, and the
-grouping is left to inspection.
+grouping is left to inspection. The chunk half of page memory is `sq8l_render_check
+--editor-place`, also in CI; the platform half of the keyboard (which keys arrive, and the
+focus grab) is not covered by either - the C API drives the controller, which never sees a
+window.
 
 ## OPTIONS layout (port)
 
@@ -176,6 +236,7 @@ Voice stealing mode                 >
 Emulation preferences               >
 ------------------------------------
 Mouse                               >   restore after popup menus / knob turning, - , display scroll
+Keyboard                            >   Enable keyboard control, Page memory (issue #45)
 Down arrow loads next program
 ------------------------------------
 Ask before loading banks/libraries
@@ -195,8 +256,11 @@ because the originals only read correctly under the old parent's phrasing. `MTS-
 checkmark of its own `Enable` child, so the state shows without opening the submenu.
 `Support MIDI Program Change` sits with the load prompt rather than in a group of its own,
 both deciding what may replace the edit buffer without being asked; which controller picks the
-bank is in `library.md`, not in the menu. Everything except Voice stealing mode, Emulation
-preferences and Mouse is a port addition.
+bank is in `library.md`, not in the menu. `Keyboard` sits under `Mouse` as the other way of
+working the same controls; its two children have different scope on purpose (the switch is a
+preference in `SQ8L.ini`, the memory belongs to the instance, see below), and `Page memory` is
+greyed rather than hidden while the switch is off, because a submenu should show what it holds.
+Everything except Voice stealing mode, Emulation preferences and Mouse is a port addition.
 
 **Indices are recorded as the items go in.** `buildMenus` keeps a `size_t` per cached
 `MenuNode*` and resolves the pointers once the vector is final, because hard-coded positions

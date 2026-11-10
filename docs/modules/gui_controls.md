@@ -154,6 +154,22 @@ the mouse has travelled, and the cursor itself is put back to the start after ea
 (`warpCursor`) so it cannot reach the edge of the screen. The capture keeps routing the
 moves to the knob however far outside the window the travelled point lands.
 
+**Keyboard focus rectangle** (port, issue #45): `setFocusKnob(i)` marks the slot the keys act
+on, `focusRect()` gives the rectangle in form coordinates and `drawFocusRect` paints it over
+the finished frame - like the MTS label and for the same reason, the rectangle lying outside
+the focused control's own bounds while the window surfaces compose without overlap. The HD
+renderer draws its own from the same `focusRect()`, which is also why the geometry lives here:
+HD's repaint is driven by diffing the classic frame, so the two must agree. One *window* pixel
+wide at any zoom, in the VFD's `kFocusColor`, rounded to whole pixels - it marks where the keys
+will land rather than belonging to the artwork, and a scaled line would thicken into a border.
+
+The two widgets of a slot need different rectangles. A knob fills little of its 40 x 40 slot:
+it turns about (20.17, 22.10) and its outermost ink is the ring of nine rays, which reach
+17.8 + 0.62 and, spanning only -135 to +135 degrees, reach furthest straight up. Its rectangle
+is square (a knob is round; an oblong around it reads as a mistake), 37 a side, 3 below the
+slot's top and filling it to the bottom. The soft button of a two-state slot does fill its
+44 x 22, so it takes its own bounds, moved a pixel up because its artwork sits high in the cell.
+
 ## Verification
 
 `sq8l_hd_check`, `sq8l_drawn_check` and `tests/test_gui_extensions.py` (through

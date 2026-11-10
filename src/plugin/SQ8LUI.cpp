@@ -8,6 +8,7 @@
 // on macOS and Windows, drawn in the window on Linux (src/gui/drawn, nested event loops;
 // SQ8L_DRAWN_UI=1 selects them on macOS too, for testing).
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -16,6 +17,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -527,6 +529,11 @@ protected:
         const uint32_t keys = keysOf(ev.mod);
         if (std::getenv("SQ8L_UI_DEBUG"))
             std::fprintf(stderr, "[sq8l-ui] mouse %s button %u at form %d,%d\n", ev.press ? "down" : "up", ev.button, x, y);
+        // THROWAWAY: stage B of the key-delivery probe (SQ8L_UI_DEBUG=2). Take the keyboard on
+        // a click, which is what CLAP will need - it has no keyboard channel, so a key only
+        // arrives when our own window holds the focus. The difference between stage A and this
+        // is exactly what the grab buys, which is the question the spec cannot answer on paper.
+        if (probeLevel() >= 2 && ev.press) getWindow().focus();
         // Windows double click: same button within 500 ms and a few pixels.
         const bool dbl = ev.press && b == lastButton_ && ev.time - lastTime_ <= 500 && std::abs(x - lastX_) <= 2 &&
                          std::abs(y - lastY_) <= 2;
@@ -625,6 +632,16 @@ protected:
         if (std::getenv("SQ8L_UI_DEBUG"))
             std::fprintf(stderr, "[sq8l-ui] key %s %#x (keycode %u) modal %d name %d\n", ev.press ? "down" : "up", ev.key,
                          ev.keycode, drawn_ && drawn_->modal(), drawn_ && drawn_->nameEditing());
+        // THROWAWAY: the key-delivery probe of docs/superpowers/specs/2026-11-09-keyboard-control-design.md
+        // §8, to be dropped before the feature is built. It answers the one question the code
+        // cannot: which keys each host and each format actually hand the plugin. The MTS-ESP
+        // label is the report, because a plugin's stderr is lost inside a host; with MTS-ESP
+        // off nothing else ever writes that label (updateMtsScale pushes only a changed scale
+        // name), so whatever lands there stays until the next key. Nothing is consumed here.
+        if (probeLevel() > 0 && view_ != nullptr) {
+            Engine lock(*this);
+            view_->setMtsText(probeKeyLabel(ev));
+        }
 #if SQ8L_NATIVE_UI
         // The native name box is a control of its own and the OS hands it its keys, except that
         // VST2 and VST3 give the host a keyboard channel of their own (effEditKeyDown,
@@ -864,6 +881,56 @@ private:
     static uint32_t bit(MouseButton b) {
         return b == MouseButton::Left ? sq8l::gui::MK_LBUTTON_
                : b == MouseButton::Right ? sq8l::gui::MK_RBUTTON_ : sq8l::gui::MK_MBUTTON_;
+    }
+
+    // THROWAWAY, with the probe in onKeyboard and onMouse: SQ8L_UI_DEBUG in the host's
+    // environment (Windows: setx SQ8L_UI_DEBUG 1, then restart the host). 1 = report what
+    // arrives, 2 = also take the keyboard on a click (stage B).
+    static int probeLevel() {
+        static const int level = [] {
+            const char* v = std::getenv("SQ8L_UI_DEBUG");
+            return v == nullptr ? 0 : std::atoi(v) >= 2 ? 2 : 1;
+        }();
+        return level;
+    }
+
+    // THROWAWAY: "dn alt+1 (0x31/49)" - one key event, short enough for the label's 309 px.
+    static std::string probeKeyLabel(const KeyboardEvent& ev) {
+        const char* name = nullptr;
+        switch (ev.key) {
+        case kKeyTab: name = "TAB"; break;
+        case kKeyUp: name = "UP"; break;
+        case kKeyDown: name = "DOWN"; break;
+        case kKeyLeft: name = "LEFT"; break;
+        case kKeyRight: name = "RIGHT"; break;
+        case kKeyPageUp: name = "PGUP"; break;
+        case kKeyPageDown: name = "PGDN"; break;
+        case kKeyHome: name = "HOME"; break;
+        case kKeyEnd: name = "END"; break;
+        case kKeyDelete: name = "DEL"; break;
+        case kKeyBackspace: name = "BKSP"; break;
+        case kKeyEnter: name = "ENTER"; break;
+        case kKeyEscape: name = "ESC"; break;
+        case kKeySpace: name = "SPACE"; break;
+        case kKeyShiftL: case kKeyShiftR: name = "SHIFT"; break;
+        case kKeyControlL: case kKeyControlR: name = "CTRL"; break;
+        case kKeyAltL: case kKeyAltR: name = "ALT"; break;
+        case kKeySuperL: case kKeySuperR: name = "SUPER"; break;
+        default: break;
+        }
+        std::string key;
+        if (name != nullptr)
+            key = name;
+        else if (ev.key > kKeySpace && ev.key < 0x7f)
+            key = std::string(1, static_cast<char>(std::toupper(static_cast<int>(ev.key))));
+        char mods[32] = {0};
+        std::snprintf(mods, sizeof mods, "%s%s%s%s", (ev.mod & kModifierShift) ? "shift+" : "",
+                      (ev.mod & kModifierControl) ? "ctrl+" : "", (ev.mod & kModifierAlt) ? "alt+" : "",
+                      (ev.mod & kModifierSuper) ? "super+" : "");
+        char buf[128];
+        std::snprintf(buf, sizeof buf, "%s %s%s (%#x/%u)", ev.press ? "dn" : "up", mods, key.c_str(),
+                      static_cast<unsigned>(ev.key), ev.keycode);
+        return buf;
     }
 
     static uint32_t keysOf(uint mod) {

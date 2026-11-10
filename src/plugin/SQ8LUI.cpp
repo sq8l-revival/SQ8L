@@ -917,6 +917,19 @@ private:
         }
     }
 
+    // (port, issue #45) The same, plus the letters and digits the chords use, whose virtual
+    // keys are their uppercase ASCII. Only the editor's own path wants these: the drawn name
+    // box takes its characters through onCharacterInput, and handing it letters here as well
+    // would type each one twice.
+    static int editorVkOf(uint key) {
+        const int vk = vkOf(key);
+        if (vk != 0) return vk;
+        if (key >= '0' && key <= '9') return int(key);
+        if (key >= 'a' && key <= 'z') return int(key - 'a' + 'A');
+        if (key >= 'A' && key <= 'Z') return int(key);
+        return 0;
+    }
+
     static uint32_t keyModsOf(uint mod) {
         uint32_t m = 0;
         if (mod & kModifierShift) m |= sq8l::gui::kKeyModShift;
@@ -932,7 +945,7 @@ private:
     // and not about hosts.
     bool editorKey(const KeyboardEvent& ev) {
         if (controller_ == nullptr || editorWaiting()) return false;
-        const int vk = vkOf(ev.key);
+        const int vk = editorVkOf(ev.key);
         if (vk == 0) return false;
         if (!ev.press && usedPress_.erase(vk) != 0) return true;
         bool used;

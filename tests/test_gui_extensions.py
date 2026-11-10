@@ -64,7 +64,7 @@ UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
 INIT = (454, 63)  # initButton (432, 52, 44 x 22)
 HIDE_CURSOR, NATURAL_SCROLL = "Hide cursor when editing", "Natural scrolling"
-ENABLE_KEYS = "Enable keyboard control"
+ENABLE_KEYS, PAGE_MEMORY = "Enable keyboard control", "Page memory"
 PORT_KEYBOARD = 3  # Settings::kPortKeys index of "keyboardControl"
 # Virtual keys and modifiers of EditorController::keyDown (Windows values, issue #45)
 VK_TAB, VK_PRIOR, VK_NEXT, VK_END, VK_HOME = 0x09, 0x21, 0x22, 0x23, 0x24
@@ -1276,6 +1276,63 @@ def main():
     was = ed.program()
     ed.key(VK_UP)
     check(ed.program() == was, "a bare arrow leaves the program alone")
+
+    # 17. OPTIONS -> Keyboard -> Page memory (issue #45): per instance, on by default. With it
+    # on, a sub-page you come back to focuses the parameter you last had focused there and a
+    # group chord returns to the page of that group you were last on; with it off, both always
+    # start at the first.
+    print("Page memory:")
+    ed = Editor(L)
+    opts = ed.menu(OPTIONS)
+    OPT_KEYB = opt_index(opts, "Keyboard")
+    KEYB_MEMORY = sub_index(opts[OPT_KEYB], PAGE_MEMORY)
+    check(opts[OPT_KEYB]["sub"][KEYB_MEMORY]["checked"], "on by default")
+    check(opts[OPT_KEYB]["sub"][KEYB_MEMORY]["disabled"],
+          "but greyed out until keyboard control is on, which is what it serves")
+    enable_keys(ed)
+    check(not ed.menu(OPTIONS)[OPT_KEYB]["sub"][KEYB_MEMORY]["disabled"], "and live once it is")
+
+    # a revisited sub-page comes back to the parameter you left focused there
+    ed.key(ord("U"), MOD_ALT)          # the MODES page, by the chord so the real path runs
+    ed.key(VK_TAB)
+    ed.key(VK_TAB)
+    was, where = ed.focus_knob(), ed.page()
+    check(was > 0, f"focused something other than the first slot ({was})")
+    ed.key(ord("F"), MOD_ALT)          # away to the filter page
+    check(ed.page()[0] != where[0], "away to another page")
+    ed.key(ord("U"), MOD_ALT)
+    check(ed.page() == where, f"back to the same view ({ed.page()})")
+    check(ed.focus_knob() == was, f"and to the same parameter ({ed.focus_knob()})")
+
+    # a group chord returns to the page of the group it was last on
+    ed.key(ord("L"), MOD_ALT)
+    ed.key(ord("L"), MOD_ALT)
+    lfo = ed.page()[0]
+    ed.key(ord("F"), MOD_ALT)
+    ed.key(ord("L"), MOD_ALT)
+    check(ed.page()[0] == lfo, f"Alt+L comes back to the LFO it left ({ed.page()[0]} vs {lfo})")
+
+    # switched off, both go back to always starting at the first
+    ed.choose([OPT_KEYB, KEYB_MEMORY])
+    ed.click(OPTIONS)
+    ed.events()
+    check(not ed.menu(OPTIONS)[OPT_KEYB]["sub"][KEYB_MEMORY]["checked"], "switching it off")
+    ed.key(ord("F"), MOD_ALT)
+    ed.key(ord("L"), MOD_ALT)
+    first = ed.page()[0]
+    ed.key(ord("L"), MOD_ALT)
+    ed.key(ord("F"), MOD_ALT)
+    ed.key(ord("L"), MOD_ALT)
+    check(ed.page()[0] == first, f"Alt+L always enters the group at its first page ({first})")
+    ed.key(ord("U"), MOD_ALT)
+    ed.key(VK_TAB)
+    ed.key(VK_TAB)
+    ed.key(ord("F"), MOD_ALT)
+    ed.key(ord("U"), MOD_ALT)
+    page, sub = ed.page()
+    slots0 = sorted({p["knob"] for p in ed.pages()[page]["subs"][sub]["params"] if p["knob"] >= 0})
+    check(ed.focus_knob() == slots0[0],
+          f"and a revisited page focuses its first slot again ({ed.focus_knob()} vs {slots0[0]})")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

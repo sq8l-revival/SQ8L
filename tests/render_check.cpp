@@ -617,6 +617,68 @@ struct SyncRun {
 // tempo, FREQ above the last division plays the last, FM steps through the divisions, the
 // rate stops at the free LFO's top, and with RESET=OFF the phase follows the song position,
 // the host's or, with the transport stopped, the one the engine runs on. Needs no files.
+// (port, issue #45) OPTIONS -> Keyboard -> Page memory and the place it remembers, in the host
+// chunk. Of the instance, so a project opens each one where it was left. The place rides in the
+// spare header bytes the original writes as zero (0x0e..0x17) and the switch in a bit of 0x1d;
+// a chunk from an instance that never used it must stay exactly the original's bytes.
+int editorPlace() {
+    int bad = 0;
+    sq8l::Synth a(44100.0f);
+    const std::vector<uint8_t> plain = a.getChunk();
+
+    sq8l::EditorPlace p;
+    p.page = 7;
+    p.sub = 1;
+    p.knob = 4;
+    p.groupPage[0] = 7;
+    p.groupPage[1] = 11;
+    p.groupPage[2] = 15;
+    p.groupSub[0] = 1;
+    p.groupSub[1] = 2;
+    a.setEditorPlace(p);
+    const std::vector<uint8_t> with = a.getChunk();
+
+    sq8l::Synth b(44100.0f);
+    b.setChunk(with.data(), with.size());
+    const sq8l::EditorPlace& r = b.editorPlace();
+    const bool restored = r.page == 7 && r.sub == 1 && r.knob == 4 && r.groupPage[0] == 7 &&
+                          r.groupPage[1] == 11 && r.groupPage[2] == 15 && r.groupSub[0] == 1 &&
+                          r.groupSub[1] == 2;
+    // The table is not carried, but the page the chunk opens on knows its parameter.
+    const int seeded = r.focusBySub[sq8l::EditorPlace::index(7, 1)];
+    // A chunk from the original or an earlier port: no place, and page memory ON - the bit is
+    // inverted precisely so that an absent bit reads as the default (Synth.cpp).
+    b.setChunk(plain.data(), plain.size());
+    const bool cleared = !b.editorPlace().valid();
+    const bool memoryOn = b.pageMemory();
+    // Switching it off writes the bit, and nothing of the place.
+    sq8l::Synth c(44100.0f);
+    c.setEditorPlace(p);
+    c.setPageMemory(false);
+    const std::vector<uint8_t> off = c.getChunk();
+    sq8l::Synth d(44100.0f);
+    d.setChunk(off.data(), off.size());
+    const bool offRestored = !d.pageMemory() && !d.editorPlace().valid();
+    // An instance that never used any of this writes the original's bytes.
+    size_t diff = 0;
+    for (size_t i = 0; i < plain.size(); i++)
+        if (plain[i] != sq8l::Synth(44100.0f).getChunk()[i]) diff++;
+    bool spare = true;
+    for (size_t i = 0x0e; i <= 0x17; i++)
+        if (plain[i] != 0) spare = false;
+    if (!restored || seeded != 4 || !cleared || !memoryOn || !offRestored || diff || !spare) {
+        bad++;
+        std::printf("BAD place: restored %d, seeded %d, cleared %d, memory on %d, off %d, "
+                    "diff %zu, spare clear %d\n",
+                    restored, seeded, cleared, memoryOn, offRestored, diff, spare);
+    }
+    std::printf("editor place: the page, view, focused knob, group pages and shared views come "
+                "back from the chunk; an untouched chunk keeps the original's zeros; a chunk "
+                "without the mark reads as page memory on and no place (%s)\n",
+                bad ? "FAILED" : "ok");
+    return bad ? 1 : 0;
+}
+
 int tempoSync() {
     // An LFO tick: two control updates of Round(sr / 83.592575 * 512) / 1024 samples each.
     const double tick = 2 * std::nearbyint(double(float(44100.0 / double(83.592575f) * 512.0))) / 1024 / 44100;
@@ -779,5 +841,6 @@ int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--direction") return direction();
     if (argc > 2 && std::string(argv[1]) == "--output-gain") return outputGain(argv[2]);
     if (argc > 1 && std::string(argv[1]) == "--tempo-sync") return tempoSync();
+    if (argc > 1 && std::string(argv[1]) == "--editor-place") return editorPlace();
     return golden(argc > 1 ? argv[1] : "tests/golden_raw");
 }

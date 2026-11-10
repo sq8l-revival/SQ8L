@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "EditBuffer.h"
+#include "EditorPlace.h"
 #include "Settings.h"
 #include "SoundLibrary.h"
 
@@ -84,6 +85,17 @@ public:
     // The connected master's scale name, empty when none is connected. Polled with the voices
     // counter, since a master may change its scale at any time.
     virtual std::string mtsScaleName() { return {}; }
+    // OPTIONS -> Keyboard -> Page memory (issue #45), and what it remembers. Of this instance
+    // and saved with the plugin's state, like the switches above: a project opens each
+    // instance on the page it was left on. The engine only stores the place; what its fields
+    // mean is this layer's business (EditorPlace.h).
+    virtual bool pageMemory() { return false; }
+    virtual void setPageMemory(bool on) { (void)on; }
+    virtual const EditorPlace& editorPlace() {
+        static const EditorPlace none;
+        return none;
+    }
+    virtual void setEditorPlace(const EditorPlace& p) { (void)p; }
 };
 
 }  // namespace sq8l::gui

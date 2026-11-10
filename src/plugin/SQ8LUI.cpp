@@ -122,6 +122,10 @@ public:
     // like the MTS-ESP switches above.
     bool programChangeEnabled() override { return p_.synth().programChangeEnabled(); }
     void setProgramChangeEnabled(bool on) override { p_.synth().setProgramChangeEnabled(on); }
+    bool pageMemory() override { return p_.synth().pageMemory(); }
+    void setPageMemory(bool on) override { p_.synth().setPageMemory(on); }
+    const sq8l::EditorPlace& editorPlace() override { return p_.synth().editorPlace(); }
+    void setEditorPlace(const sq8l::EditorPlace& place) override { p_.synth().setEditorPlace(place); }
     // The scale name of the connected master, refreshed per audio block.
     std::string mtsScaleName() override { return p_.mtsScaleName(); }
 

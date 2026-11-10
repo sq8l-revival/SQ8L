@@ -31,6 +31,8 @@ jobs:
         run: ./build/sq8l_render_check --output-gain tests/regression
       - name: LFO tempo sync (port addition)
         run: ./build/sq8l_render_check --tempo-sync
+      - name: Editor page memory in the chunk (port addition)
+        run: ./build/sq8l_render_check --editor-place
       - name: Editor additions of the port
         run: SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib python3 tests/test_gui_extensions.py
       - name: HD graphics
@@ -98,6 +100,8 @@ jobs:
         run: ./build/sq8l_render_check.exe --output-gain tests/regression
       - name: LFO tempo sync on real Windows
         run: ./build/sq8l_render_check.exe --tempo-sync
+      - name: Editor page memory in the chunk (port addition)
+        run: ./build/sq8l_render_check.exe --editor-place
 
   linux:
     strategy:
@@ -130,6 +134,8 @@ jobs:
         run: ./build/sq8l_render_check --output-gain tests/regression
       - name: LFO tempo sync (port addition)
         run: ./build/sq8l_render_check --tempo-sync
+      - name: Editor page memory in the chunk (port addition)
+        run: ./build/sq8l_render_check --editor-place
       - name: Drawn menus and dialogs
         run: ./build/sq8l_drawn_check
       - name: HD graphics

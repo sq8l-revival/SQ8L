@@ -111,6 +111,14 @@ struct TestHost : EditorHost {
         outputCutDb = Settings::validOutputCut(db) ? db : 0;
         cfg.setPort(Settings::kPortOutputCut, outputCutDb);
     }
+    // (port, issue #45) OPTIONS -> Keyboard -> Page memory, per instance like the two above:
+    // the plugin keeps these in the engine and saves them in its chunk, the test in fields.
+    bool pageMem = true;
+    EditorPlace place;
+    bool pageMemory() override { return pageMem; }
+    void setPageMemory(bool on) override { pageMem = on; }
+    const EditorPlace& editorPlace() override { return place; }
+    void setEditorPlace(const EditorPlace& p) override { place = p; }
     void panic() override { log << "panic\n"; }
     int voicesUsed() override { return usedVoices; }
     int voicesMax() override { return maxVoices; }

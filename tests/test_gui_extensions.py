@@ -69,7 +69,7 @@ PORT_KEYBOARD = 3  # Settings::kPortKeys index of "keyboardControl"
 # Virtual keys and modifiers of EditorController::keyDown (Windows values, issue #45)
 VK_TAB, VK_PRIOR, VK_NEXT, VK_END, VK_HOME = 0x09, 0x21, 0x22, 0x23, 0x24
 VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_DELETE, VK_ESCAPE = 0x25, 0x26, 0x27, 0x28, 0x2E, 0x1B
-MOD_SHIFT, MOD_CTRL, MOD_ALT = 1, 2, 4
+MOD_SHIFT, MOD_CTRL, MOD_ALT, MOD_SUPER = 1, 2, 4, 8
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -1260,22 +1260,35 @@ def main():
     e.idle()
     check(e.page() == (lfo1[0], view[1]), f"and the LFOs kept their own ({e.page()})")
 
-    # Ctrl + the arrows move through the library (the program number reads "<bank><nnn>")
+    # Shift + the arrows move through the library (the program number reads "<bank><nnn>")
     prog = lambda: int(ed.program()[1:])
     bank = lambda: ed.program()[0]
     start, bank0 = prog(), bank()
-    check(ed.key(VK_RIGHT, MOD_CTRL), "Ctrl+Right is taken")
+    check(ed.key(VK_RIGHT, MOD_SHIFT), "Shift+Right is taken")
     check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
-    check(ed.key(VK_LEFT, MOD_CTRL), "Ctrl+Left is taken")
-    check(prog() == start, "and Ctrl+Left the previous one")
-    check(ed.key(VK_DOWN, MOD_CTRL), "Ctrl+Down is taken")
-    check(bank() != bank0, f"Ctrl+Down moves to another bank ({bank0} -> {bank()})")
-    check(ed.key(VK_UP, MOD_CTRL), "Ctrl+Up is taken")
-    check(bank() == bank0, "and Ctrl+Up comes back")
-    # ...and without Ctrl the same arrows edit the parameter, not the library
+    check(ed.key(VK_LEFT, MOD_SHIFT), "Shift+Left is taken")
+    check(prog() == start, "and Shift+Left the previous one")
+    check(ed.key(VK_DOWN, MOD_SHIFT), "Shift+Down is taken")
+    check(bank() != bank0, f"Shift+Down moves to another bank ({bank0} -> {bank()})")
+    check(ed.key(VK_UP, MOD_SHIFT), "Shift+Up is taken")
+    check(bank() == bank0, "and Shift+Up comes back")
+    # ...and without Shift the same arrows edit the parameter, not the library
     was = ed.program()
     ed.key(VK_UP)
     check(ed.program() == was, "a bare arrow leaves the program alone")
+    # A modifier the editor has no chord for is not a bare key: the Mac user pressing Cmd+Up
+    # for the bank must not silently nudge a knob instead (Cmd is kKeyModSuper, issue #45).
+    # Ctrl is among them now that the library has moved to Shift - macOS spends all four
+    # Ctrl+arrows on Mission Control and Spaces, so they reached no application there.
+    knob = ed.focus_knob()
+    held = ed.knob(knob)
+    for mods, name in ((MOD_CTRL, "Ctrl"), (MOD_SUPER, "Cmd"), (MOD_CTRL | MOD_ALT, "Ctrl+Alt")):
+        check(not ed.key(VK_UP, mods), f"{name}+Up is left to the host")
+        check(ed.knob(knob) == held, f"and {name}+Up edits nothing")
+        check(not ed.key(VK_HOME, mods), f"{name}+Home is left to the host")
+        check(ed.knob(knob) == held, f"and {name}+Home edits nothing")
+    check(not ed.key(ord("V"), MOD_ALT | MOD_SUPER), "Cmd+Alt+V is not Alt+V")
+
 
     # 17. OPTIONS -> Keyboard -> Page memory (issue #45): per instance, on by default. With it
     # on, a sub-page you come back to focuses the parameter you last had focused there and a

@@ -1,0 +1,90 @@
+DGL: say whether a key was taken, so macOS can give back the ones that were not.
+
+An embedded plugin view is the host's first responder for as long as the plugin
+window has the focus - on VST3 DPF even asks for that itself, in
+DistrhoUIVST3.cpp's onFocus. Cocoa's keyDown: then ends at that view, and pugl's
+implementation of it neither consumed the key nor passed it on: it dispatched the
+event and returned. So every key reaching the plugin window died there, whether the
+plugin wanted it or not, and the host lost its own key commands and its on-screen
+keyboard for as long as the editor was in front. Reported against SQ8L in Cubase
+and REAPER on macOS, and true of any DPF plugin.
+
+Nothing below the widgets knew: Window::PrivateData::onPuglKey already had the
+answer - TopLevelWidget::onKeyboard returns whether the widget used the key - and
+threw it away. This returns it, and the pugl event callback turns "no widget took
+it" into PUGL_FAILURE, which the matching mac.m patch reads as "hand it to the next
+responder".
+
+PUGL_FAILURE is documented as a non-fatal failure and is the only status that
+carries that meaning, but it is also what puglUpdate hands back to its caller on
+X11, where a key event is dispatched through the same return path. So it is
+macOS-only here: Windows and X11 keep their status exactly as it was, and have
+their own routes for an unwanted key anyway (the host's own VST2/VST3 key channel,
+which DPF already answers from the return value of UI::onKeyboard).
+diff --git a/dgl/src/WindowPrivateData.cpp b/dgl/src/WindowPrivateData.cpp
+index 7198ca3..9df6e6b 100644
+--- a/dgl/src/WindowPrivateData.cpp
++++ b/dgl/src/WindowPrivateData.cpp
+@@ -769,12 +769,15 @@ void Window::PrivateData::onPuglFocus(const bool focus, const CrossingMode mode)
+     self->onFocus(focus, mode);
+ }
+ 
+-void Window::PrivateData::onPuglKey(const Widget::KeyboardEvent& ev)
++bool Window::PrivateData::onPuglKey(const Widget::KeyboardEvent& ev)
+ {
+     DGL_DBGp("onPuglKey : %i %u %u\n", ev.press, ev.key, ev.keycode);
+ 
+     if (modal.child != nullptr)
+-        return modal.child->focus();
++    {
++        modal.child->focus();
++        return true;
++    }
+ 
+ #ifndef DPF_TEST_WINDOW_CPP
+     FOR_EACH_TOP_LEVEL_WIDGET_INV(rit)
+@@ -782,9 +785,11 @@ void Window::PrivateData::onPuglKey(const Widget::KeyboardEvent& ev)
+         TopLevelWidget* const widget(*rit);
+ 
+         if (widget->isVisible() && widget->onKeyboard(ev))
+-            break;
++            return true;
+     }
+ #endif
++
++    return false;
+ }
+ 
+ void Window::PrivateData::onPuglText(const Widget::CharacterInputEvent& ev)
+@@ -1053,7 +1058,16 @@ PuglStatus Window::PrivateData::puglEventCallback(PuglView* const view, const Pu
+             ev.mod |= kModifierShift;
+         }
+ 
++       #ifdef DISTRHO_OS_MAC
++        // A key no widget took is the host's. Only macOS routes it back from here: the Cocoa
++        // view is the first responder and nothing above it ever sees the event, so PUGL_FAILURE
++        // is how mac.m is told to hand it on (see the keyDown: patch). Windows and X11 keep
++        // their own paths and their own status, which callers of puglUpdate do read.
++        if (! pData->onPuglKey(ev))
++            return PUGL_FAILURE;
++       #else
+         pData->onPuglKey(ev);
++       #endif
+         break;
+     }
+ 
+diff --git a/dgl/src/WindowPrivateData.hpp b/dgl/src/WindowPrivateData.hpp
+index 3883184..d566a2d 100644
+--- a/dgl/src/WindowPrivateData.hpp
++++ b/dgl/src/WindowPrivateData.hpp
+@@ -200,7 +200,9 @@ struct Window::PrivateData : IdleCallback {
+     void onPuglExpose();
+     void onPuglClose();
+     void onPuglFocus(bool focus, CrossingMode mode);
+-    void onPuglKey(const Widget::KeyboardEvent& ev);
++    // true if a widget took the key. macOS needs to know: a key no widget wanted has to go
++    // back up the responder chain to the host, and nothing below this can tell.
++    bool onPuglKey(const Widget::KeyboardEvent& ev);
+     void onPuglText(const Widget::CharacterInputEvent& ev);
+     void onPuglMouse(const Widget::MouseEvent& ev);
+     void onPuglMotion(const Widget::MotionEvent& ev);

@@ -194,15 +194,27 @@ always shows one parameter underlined, where the original only did after a click
 | Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
 | Alt+V | `nextSubPage()` |
 | Alt+L / E / M | the next page of the LFO / envelope / matrix group |
-| Ctrl+Left / Right | the previous / next program |
-| Ctrl+Up / Down | the previous / next bank |
+| Shift+Left / Right | the previous / next program |
+| Shift+Up / Down | the previous / next bank |
 
 A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
 the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the
 chord against the click, not against a page number. The group chords are the exception, since
 no single button walks a group; `cycle` is false there, so Alt+V stays the way to the views.
-Ctrl+arrows ignore *Down arrow loads next program*: that setting exists because a button with
+Shift+arrows ignore *Down arrow loads next program*: that setting exists because a button with
 an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
+
+**The library is on Shift and not on Ctrl or Alt**, which both looked more natural and are
+both unusable. macOS spends all four Ctrl+arrows on Mission Control and Spaces, so they are
+taken before any application sees them; Cmd is no answer either, since a Cmd chord is offered
+to the menu bar first and the host wins. Alt fails on the hardware instead: the right Alt of
+many layouts is AltGr, which sends Ctrl+Alt. Shift is the one modifier that is the same key on
+both sides of every keyboard and claimed by nobody.
+
+**A modifier with no chord is not a bare key.** `keyDown` takes the bare keys only when `mods`
+is empty, so Cmd+Up - a Mac user reaching for the bank - is refused and left to the host rather
+than quietly stepping the focused parameter. `kKeyModSuper` exists for no other reason: no
+chord uses it, but the platform layer has to translate it or it reads as no modifier at all.
 
 **A key the editor does not use is not consumed**, and the host keeps it. For VST2 and VST3
 that is the whole of the pass-through, since "not handled" is the return value of the host's own
@@ -210,6 +222,17 @@ key channel. CLAP has no such channel in DPF, so there a key arrives only while 
 the platform focus and anything unconsumed dies in it; see the spec for the forwarding that
 needs. Which keys reach a plugin at all is the host's decision either way - REAPER keeps the
 ones bound to its own actions unless *Send all keyboard input to plug-in* is on for that FX.
+
+On **macOS** none of that was true of any format, including VST3, and the switch made no
+difference: an embedded view is the host's first responder (DPF asks for that itself in
+`DistrhoUIVST3.cpp`'s `onFocus`), Cocoa delivers the key to `-[PuglWrapperView keyDown:]`, and
+pugl neither consumed it nor passed it on. Every key reaching the plugin window died there, so
+the host lost its own key commands and its on-screen keyboard for as long as the editor was in
+front - the Cubase and REAPER reports behind this. `patches/dpf-mac-key-passthrough.patch` and
+`patches/pugl-mac-key-next-responder.patch` fix it between them: DGL returns whether a widget
+took the key, the event callback turns "no" into `PUGL_FAILURE` (macOS only - X11 hands that
+same status back out of `puglUpdate`), and `keyDown:` sends an unwanted key on to the next
+responder, which is the host. Both are worth upstreaming; they are not SQ8L-specific.
 
 **The LFO pages share one view and the envelope pages another** (`groupSub_`, `pageGroup`):
 opening any page of a group puts it on the group's view rather than the page's own, because

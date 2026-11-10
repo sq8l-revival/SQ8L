@@ -23,12 +23,7 @@
 
 namespace sq8l::gui {
 
-// Virtual-key codes used by the drawn controls (Windows values, like the editor logic).
-enum : int {
-    kVkBack = 0x08, kVkReturn = 0x0d, kVkEscape = 0x1b, kVkPrior = 0x21, kVkNext = 0x22,
-    kVkEnd = 0x23, kVkHome = 0x24, kVkLeft = 0x25, kVkUp = 0x26, kVkRight = 0x27, kVkDown = 0x28,
-    kVkDelete = 0x2e,
-};
+// The virtual-key codes the drawn controls work in are the editor logic's (logic/PlatformUi.h).
 
 class PlatformUiDrawn final : public PlatformUi {
 public:

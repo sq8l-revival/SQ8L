@@ -338,6 +338,45 @@ void EditorView::render(Bitmap& out) {
     // windowed control: the form's own graphic children are never painted (see above), and a
     // Panel to hold it would fill its rectangle flat and lose the grain of the artwork there.
     drawMtsLabel(out, Rect{0, 0, out.width(), out.height()});
+    drawFocusRect(out, Rect{0, 0, out.width(), out.height()});
+}
+
+// (port, issue #45) The focused slot's widget, fitted to what it actually draws rather than to
+// the slot it sits in.
+//
+// A knob fills little of its 40 x 40 slot. It turns about (20.17, 22.10) and the ink to fit is
+// the ring of nine rays, which reach 17.8 + 0.62 from that centre (the measurements the HD
+// renderer draws from, see hd/HdRenderer.cpp); the body's shading is inside them and is not
+// what the eye measures the marker against. The rays span -135 to +135 degrees, so the ring
+// reaches 18.42 straight up but only 13.02 to the sides and below - its ink is 26 wide and 31.4
+// tall, centred on (20.17, 19.40) rather than on the slot.
+//
+// The marker is square, because a knob is round and an oblong around it reads as a mistake:
+// 37 a side, which is the ray ring plus a little air, sitting 3 below the top of the slot and
+// filling it to the bottom. Settled by eye against the artwork - the arithmetic alone gives a
+// tighter square, and the knob reads better with the room.
+//
+// The soft button of a two-state slot (issue #43) takes its own 44 x 22 bounds, grown a pixel
+// at the top and moved a pixel up: its artwork sits high in the cell, so the bounds as they
+// are crowd the top edge while leaving a gap below.
+Rect EditorView::focusRect() const {
+    if (focusKnob_ < 0 || focusKnob_ >= int(knobs_.size())) return Rect{0, 0, 0, 0};
+    const GraphButton* t = toggles_[size_t(focusKnob_)];
+    if (t && t->visible()) {
+        const Rect b = t->bounds();
+        return Rect{b.left, b.top - 2, b.right, b.bottom - 1};
+    }
+    const Rect b = knobs_[size_t(focusKnob_)]->bounds();
+    return Rect{b.left + 2, b.top + 3, b.left + 39, b.top + 40};
+}
+
+void EditorView::drawFocusRect(Bitmap& out, const Rect& clip) const {
+    const Rect r = focusRect();
+    if (r.right <= r.left) return;
+    Canvas c(out, 0, 0, text_);
+    c.setClip(clip);
+    c.brushColor = kFocusColor;
+    c.frameRect(r);
 }
 
 std::string EditorView::fitMtsText(const std::string& text) const {

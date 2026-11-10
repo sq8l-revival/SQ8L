@@ -324,6 +324,28 @@ SQ8L_API int32_t sq8l_gl_toggle_shown(void* v, int32_t i) {
 SQ8L_API void sq8l_gl_wheel(void* v, int32_t x, int32_t y, double delta, int32_t keys) {
     B(v)->ctl->wheel(x, y, delta, uint32_t(keys));
 }
+// (port, issue #45) One key press: a virtual key and the kKeyMod* bits. True if the editor
+// used it, which is what the platform layer answers the host with.
+SQ8L_API int32_t sq8l_gl_key(void* v, int32_t vk, int32_t mods) {
+    return int32_t(B(v)->ctl->keyDown(vk, uint32_t(mods)));
+}
+// (port, issue #45) The knob slot the keys act on, or -1.
+SQ8L_API int32_t sq8l_gl_focus_knob(void* v) { return B(v)->ctl->focusKnob(); }
+// (port, issue #45) The focus rectangle in form coordinates, as both renderers draw it, and
+// the pixel the classic frame has at its top-left corner. 0 width = nothing is focused.
+SQ8L_API void sq8l_gl_focus_rect(void* v, int32_t* out) {
+    const Rect r = B(v)->view.focusRect();
+    out[0] = r.left;
+    out[1] = r.top;
+    out[2] = r.right;
+    out[3] = r.bottom;
+    Bitmap frame;
+    B(v)->view.render(frame);
+    out[4] = r.right > r.left && r.left >= 0 && r.top >= 0 && r.right <= frame.width() &&
+                     r.bottom <= frame.height()
+                 ? int32_t(frame.pixel(r.left, r.top))
+                 : -1;
+}
 SQ8L_API int32_t sq8l_gl_port_setting(void* v, int32_t i) {
     return i >= 0 && i < Settings::kNumPort ? B(v)->host.cfg.port[i] : -1;
 }

@@ -87,6 +87,15 @@ public:
     // matter, the smallest one ever seen is taken for a notch. Ctrl makes a notch a jump.
     // `keys` are the MK_* flags the view's mouse entry points take.
     void wheel(int x, int y, double delta, uint32_t keys);
+    // (port, issue #45) One key press: a virtual key (kVk*) and the modifiers held (kKeyMod*).
+    // Returns whether the editor used it; what it does not use belongs to the host, which is
+    // how the host's own shortcuts keep working while the editor holds the keyboard. Nothing
+    // is used unless OPTIONS -> Keyboard -> Enable keyboard control is on.
+    bool keyDown(int vk, uint32_t mods);
+    // (port, issue #45) The knob slot the keys act on - the one whose parameter is selected,
+    // which is the parameter the display underlines - or -1 when nothing is.
+    int focusKnob() const;
+
     // progNameEdit focus (WM_SETFOCUS / WM_KILLFOCUS through the hooked window procedure
     // FUN_004839a4) with the edit text, and its OnKeyDown (VK_RETURN ends editing).
     void nameEditFocus(bool focused, const std::string& text);
@@ -111,6 +120,9 @@ public:
     int midiOutPort() const { return midiOut_; }            // +0x4f4
     int sysexRequestPending() const { return sysexReq_; }   // +0x4ec
     bool keyboardCaptured() const { return keyCapture_; }
+    // (port, issue #45) Whether the editor answers keys at all. The platform layer asks before
+    // taking the keyboard focus from the host: with the switch off it never does.
+    bool keyboardControlEnabled() const { return keyboardControl_; }
 
     // LcdListener (ClcdCtr callbacks)
     void lcdKnobValue(int knob, int value) override;
@@ -159,6 +171,13 @@ private:
     void selectBank(int b);                   // FUN_0048496c
     // pages
     void pageButton(int tag, bool cycle);     // FUN_00484a10
+    // (port, issue #45) The page selections of LcdController, with the focus moved to the new
+    // page's first slot. Everything that changes the page goes through these.
+    void selectPage(int page);
+    void selectPageSub(int page, int sub);
+    void selectSubPage(int sub);
+    void nextSubPage();
+    void prevSubPage();
     void highlightParam(int param);           // SUB_00484800
     // popups
     void popup(PopupMenuDef& menu, int x, int y);
@@ -193,6 +212,10 @@ private:
     // (port, issue #45) Put it back to what INIT would give it: what a double click on the
     // knob does, and what the Del key will.
     void resetKnobParam(int knob);
+    // (port, issue #45) The slots the current sub-page gives a parameter, in Tab's order.
+    std::vector<int> focusSlots() const;
+    void focusFirstKnob();      // a page change: focus the first slot the page uses
+    void focusStep(int dir);    // Tab / Shift+Tab
     void displayPanelContextPopup(int x, int y);
     // FILE menu
     void loadLibrary();
@@ -223,6 +246,7 @@ private:
     void confirmLoadClick(MenuNode& item);   // port addition
     void programChangeClick(MenuNode& item); // port addition (issue #40)
     void naturalScrollClick(MenuNode& item); // port addition (issue #35)
+    void keyboardControlClick(MenuNode& item);  // port addition (issue #45)
     void polyphonyClick(MenuNode& item);     // port addition
     void outputCutClick(MenuNode& item);     // port addition (issue #52)
     void zoomClick(MenuNode& item);          // port addition
@@ -266,6 +290,9 @@ private:
     double wheelAccum_ = 0.0, wheelStep_ = 0.0;
     int wheelKnob_ = -1;
     bool naturalScroll_ = false;     // port addition (issue #35)
+    // (port, issue #45) OPTIONS -> Keyboard -> Enable keyboard control. Off: keyDown answers
+    // nothing, so the host keeps every key and the editor never asks for the focus.
+    bool keyboardControl_ = false;
     int keyCaptMode_ = 0;            // +0x50c
     bool swapProgUpDn_ = false;      // +0x510
     bool rmbScroll_ = false;         // +0x511
@@ -280,6 +307,7 @@ private:
     MenuNode* menuConfirmLoad_ = nullptr;   // port addition
     MenuNode* menuProgramChange_ = nullptr; // port addition (issue #40)
     MenuNode* menuNaturalScroll_ = nullptr; // port addition (issue #35)
+    MenuNode* menuKeyboardControl_ = nullptr;  // port addition (issue #45)
     MenuNode* menuOutputGain_ = nullptr;    // port addition (sub-menu, radio items tagged with the dB cut)
     MenuNode* menuPolyphony_ = nullptr;     // port addition (sub-menu, radio items tagged with the voices)
     MenuNode* menuZoom_ = nullptr;          // port addition (sub-menu, radio items tagged with the percent)

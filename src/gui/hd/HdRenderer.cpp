@@ -815,6 +815,29 @@ void HdRenderer::capture(const EditorView& v) {
                               });
         }
     }
+    // (port, issue #45) The keyboard focus rectangle, around the knob or the soft button of
+    // the focused slot. Exactly one *window* pixel wide at every zoom, not one form pixel
+    // scaled up: it marks where the keys will land rather than belonging to the artwork, and a
+    // hairline reads as a marker at every size where a scaled line would thicken into a border.
+    // The geometry is EditorView's, so this cannot drift from the classic frame - which matters
+    // doubly here, because the HD repaint is driven by diffing that frame.
+    {
+        const Rect r = view.focusRect();
+        if (!r.empty()) {
+            add(r, [=](Hd& hd, float S) {
+                // Rounded to whole window pixels, not toWindow's floor/ceil: that grows a
+                // rectangle outwards by up to a pixel a side to cover what it maps to, which
+                // is right for artwork and wrong for a marker, whose edges should land where
+                // the widget's edges land.
+                const Rect w{int(std::lround(r.left * S)), int(std::lround(r.top * S)),
+                             int(std::lround(r.right * S)), int(std::lround(r.bottom * S))};
+                hd.fill(Rect{w.left, w.top, w.right, w.top + 1}, EditorView::kFocusColor);
+                hd.fill(Rect{w.left, w.bottom - 1, w.right, w.bottom}, EditorView::kFocusColor);
+                hd.fill(Rect{w.left, w.top + 1, w.left + 1, w.bottom - 1}, EditorView::kFocusColor);
+                hd.fill(Rect{w.right - 1, w.top + 1, w.right, w.bottom - 1}, EditorView::kFocusColor);
+            });
+        }
+    }
     const NameEdit& e = view.progNameEdit();
     if (e.visible()) {
         const Rect r = absRect(e, 0, 0, e.width(), e.height());

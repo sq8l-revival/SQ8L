@@ -64,6 +64,12 @@ UP, DOWN = (296, 48), (296, 67)
 OPTIONS, FILE = (105, 12), (37, 12)
 INIT = (454, 63)  # initButton (432, 52, 44 x 22)
 HIDE_CURSOR, NATURAL_SCROLL = "Hide cursor when editing", "Natural scrolling"
+ENABLE_KEYS = "Enable keyboard control"
+PORT_KEYBOARD = 3  # Settings::kPortKeys index of "keyboardControl"
+# Virtual keys and modifiers of EditorController::keyDown (Windows values, issue #45)
+VK_TAB, VK_PRIOR, VK_NEXT, VK_END, VK_HOME = 0x09, 0x21, 0x22, 0x23, 0x24
+VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_DELETE, VK_ESCAPE = 0x25, 0x26, 0x27, 0x28, 0x2E, 0x1B
+MOD_SHIFT, MOD_CTRL, MOD_ALT = 1, 2, 4
 # FILE items: 0 load library, 1 save library, 2 init library, 3 line, 4 load bank, 5 save bank
 FILE_LOAD_LIB, FILE_SAVE_LIB, FILE_LOAD_BANK, FILE_SAVE_BANK = 0, 1, 4, 5
 
@@ -204,6 +210,22 @@ class Editor:
         """Whether knob slot i shows its soft button instead of the knob (issue #43)."""
         return bool(self.L.sq8l_gl_toggle_shown(self.v, i))
 
+    def key(self, vk, mods=0):
+        """One key press (issue #45); True if the editor used it, False if the host keeps it."""
+        used = bool(self.L.sq8l_gl_key(self.v, vk, mods))
+        self.idle()
+        return used
+
+    def focus_rect(self):
+        """(left, top, right, bottom, pixel at the top-left corner of the drawn frame)."""
+        buf = (ctypes.c_int32 * 5)()
+        self.L.sq8l_gl_focus_rect(self.v, buf)
+        return tuple(buf)
+
+    def focus_knob(self):
+        """The knob slot the keys act on: the one whose parameter is selected, or -1."""
+        return self.L.sq8l_gl_focus_knob(self.v)
+
     def wheel(self, xy, delta, keys=0):
         """One wheel event at xy, `delta` as the platform would report it (issue #35)."""
         x, y = xy
@@ -260,6 +282,24 @@ def text(item):
     return item["text"].replace("&", "")
 
 
+def tab_to(ed, knob):
+    """Tab until `knob` has the focus. Bounded: a focus that never moves must fail, not hang."""
+    for _ in range(11):
+        if ed.focus_knob() == knob:
+            return True
+        ed.key(VK_TAB)
+    return False
+
+
+def enable_keys(ed):
+    """OPTIONS -> Keyboard -> Enable keyboard control (issue #45)."""
+    opts = ed.menu(OPTIONS)
+    keyb = opt_index(opts, "Keyboard")
+    ed.choose([keyb, sub_index(opts[keyb], ENABLE_KEYS)])
+    ed.click(OPTIONS)
+    ed.events()
+
+
 def param_of(sub, name):
     """A parameter of a sub-page of the pages dump, by name."""
     for p in sub["params"]:
@@ -288,6 +328,9 @@ def main():
         ("sq8l_gl_knob_active", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_toggle_shown", [vp, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_wheel", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_double, ctypes.c_int32], None),
+        ("sq8l_gl_key", [vp, ctypes.c_int32, ctypes.c_int32], ctypes.c_int32),
+        ("sq8l_gl_focus_knob", [vp], ctypes.c_int32),
+        ("sq8l_gl_focus_rect", [vp, ctypes.POINTER(ctypes.c_int32)], None),
         ("sq8l_gl_pages", [vp, ctypes.c_char_p, ctypes.c_int32], ctypes.c_int32),
         ("sq8l_gl_ctr", [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int], None),
         ("sq8l_gl_context_menu", [vp, ctypes.c_int32, ctypes.c_int32], None),
@@ -985,6 +1028,132 @@ def main():
     ed.events()
     ed.double_click(knob_xy(faded))
     check(ed.knob(glide["knob"]) == before, f"a double click on a faded slot ({faded}) changes nothing")
+
+    # 14. OPTIONS -> Keyboard -> "Enable keyboard control" ([port] keyboardControl), off by
+    # default: the switch everything else of issue #45 hangs on.
+    print("Keyboard control switch:")
+    ed = Editor(L)
+    opts = ed.menu(OPTIONS)
+    OPT_KEYB = opt_index(opts, "Keyboard")
+    check(OPT_KEYB == opt_index(opts, "Mouse") + 1, "the Keyboard submenu sits below Mouse")
+    KEYB_ENABLE = sub_index(opts[OPT_KEYB], ENABLE_KEYS)
+    check(not opts[OPT_KEYB]["sub"][KEYB_ENABLE]["checked"],
+          "off by default, so nothing takes the host's keys unless it is asked to")
+    check(L.sq8l_gl_port_setting(ed.v, PORT_KEYBOARD) == 0,
+          f"port[{PORT_KEYBOARD}] starts at 0 ({L.sq8l_gl_port_setting(ed.v, PORT_KEYBOARD)})")
+    ed.choose([OPT_KEYB, KEYB_ENABLE])
+    ed.click(OPTIONS)
+    check(L.sq8l_gl_port_setting(ed.v, PORT_KEYBOARD) == 1,
+          f"switching it on writes port[{PORT_KEYBOARD}] ({L.sq8l_gl_port_setting(ed.v, PORT_KEYBOARD)})")
+    check(ed.menu(OPTIONS)[OPT_KEYB]["sub"][KEYB_ENABLE]["checked"], "and the item shows it")
+
+    # 15. the keys themselves (issue #45). Focus is the selected parameter - the underline the
+    # display already draws - so a click, a turn and the wheel all move it, and so does Tab.
+    print("Keyboard control:")
+    ed = Editor(L)
+    L.sq8l_gl_ctr(ed.v, 0, MODE_PAGE, MODE_SUB)
+    ed.idle(2000)
+    sub = ed.pages()[MODE_PAGE]["subs"][MODE_SUB]
+    glide = param_of(sub, "GLIDE")
+    slots = sorted({p["knob"] for p in sub["params"] if p["knob"] >= 0})
+
+    # off by default: the keys do nothing at all and nothing is focused
+    check(ed.focus_knob() == -1, f"nothing is focused while the switch is off ({ed.focus_knob()})")
+    before = ed.knob(glide["knob"])
+    ed.key(VK_UP)
+    check(ed.knob(glide["knob"]) == before, "and a key moves nothing")
+
+    enable_keys(ed)
+    check(ed.focus_knob() == slots[0],
+          f"switching it on focuses the first slot the page uses ({ed.focus_knob()} vs {slots[0]})")
+
+    # Tab walks the slots the page uses, and wraps
+    ed.key(VK_TAB)
+    check(ed.focus_knob() == slots[1], f"Tab moves to the next slot ({ed.focus_knob()})")
+    ed.key(VK_TAB, MOD_SHIFT)
+    check(ed.focus_knob() == slots[0], "Shift+Tab moves back")
+    ed.key(VK_TAB, MOD_SHIFT)
+    check(ed.focus_knob() == slots[-1], f"and wraps round to the last ({ed.focus_knob()})")
+    for _ in slots:
+        ed.key(VK_TAB)
+    check(ed.focus_knob() == slots[-1], "a full lap comes back to where it started")
+
+    # the value keys, on GLIDE
+    check(tab_to(ed, glide["knob"]), f"Tab reaches GLIDE's slot ({glide['knob']})")
+    lo, hi = glide["min"], glide["max"]
+    default = ed.knob(glide["knob"])
+    ed.key(VK_UP)
+    check(ed.knob(glide["knob"]) == default + 1, f"Up adds one ({ed.knob(glide['knob'])})")
+    ed.key(VK_DOWN)
+    check(ed.knob(glide["knob"]) == default, "Down takes it off again")
+    ed.key(VK_PRIOR)
+    check(ed.knob(glide["knob"]) == default + 10, f"Page Up adds ten ({ed.knob(glide['knob'])})")
+    ed.key(VK_NEXT)
+    check(ed.knob(glide["knob"]) == default, "Page Down takes ten off")
+    ed.key(VK_END)
+    check(ed.knob(glide["knob"]) == hi, f"End is the top of the range ({ed.knob(glide['knob'])} vs {hi})")
+    ed.key(VK_UP)
+    check(ed.knob(glide["knob"]) == hi, "and Up at the top stays there")
+    ed.key(VK_HOME)
+    check(ed.knob(glide["knob"]) == lo, f"Home is the bottom ({ed.knob(glide['knob'])} vs {lo})")
+    ed.key(VK_DOWN)
+    check(ed.knob(glide["knob"]) == lo, "and Down at the bottom stays there")
+    ed.key(VK_PRIOR)
+    ed.key(VK_DELETE)
+    check(ed.knob(glide["knob"]) == default,
+          f"Del is the value INIT would give it ({ed.knob(glide['knob'])} vs {default})")
+
+    # a click on a knob focuses it, which is what the issue asks for
+    other = next(i for i in slots if i != glide["knob"])
+    ed.click(knob_xy(other))
+    check(ed.focus_knob() == other, f"a click on a knob takes the focus ({ed.focus_knob()})")
+    # ...and the wheel moves it too, so the underline and the keys never disagree
+    ed.wheel(knob_xy(glide["knob"]), 1.0)
+    check(ed.focus_knob() == glide["knob"], f"so does a wheel notch ({ed.focus_knob()})")
+    # a two-state slot is a button, and the keys still work its parameter
+    sync = param_of(sub, "SYNC")
+    check(tab_to(ed, sync["knob"]), f"Tab reaches SYNC's two-state slot ({sync['knob']})")
+    was = ed.knob(sync["knob"])
+    # whichever way it can go from where it stands: a range of two is all clamp otherwise
+    away, back = (VK_DOWN, VK_UP) if was == sync["max"] else (VK_UP, VK_DOWN)
+    ed.key(away)
+    check(ed.knob(sync["knob"]) != was,
+          f"a step flips a two-state parameter ({was} -> {ed.knob(sync['knob'])})")
+    ed.key(back)
+    check(ed.knob(sync["knob"]) == was, "and a step back flips it again")
+    # a key the editor has no use for is not consumed, so the host keeps it
+    check(not ed.key(VK_ESCAPE), "a key the editor does not use is left to the host")
+    check(ed.key(VK_UP), "and one it does use is taken")
+
+    # the focus rectangle: a pixel around the widget of the focused slot, in the VFD's colour.
+    # Its geometry is EditorView's for both renderers, so the HD path cannot drift from this.
+    check(tab_to(ed, glide["knob"]), "back to GLIDE's slot")
+    kx, ky = knob_xy(glide["knob"])
+    r = ed.focus_rect()
+    # fitted to the knob's rays - the ring about (20.17, 22.10) - not to its 40x40 slot
+    check(r[:4] == (kx - 18, ky - 17, kx + 19, ky + 20),
+          f"the rectangle is fitted to the knob's rays ({r[:4]})")
+    check(r[2] - r[0] == r[3] - r[1], f"and is square ({r[2] - r[0]} x {r[3] - r[1]})")
+    check(kx - 20 <= r[0] and r[2] <= kx + 20 and ky - 20 <= r[1] and r[3] <= ky + 20,
+          "within the slot, on every side")
+    check(r[4] == 0x1DFDC2, f"drawn in the VFD's colour ({r[4]:#08x})")
+    # a two-state slot shows its soft button, which is wider than the knob behind it
+    # (the button is 44 x 22 with 2 pixels of overhang each side, and sits 13 below the slot's
+    # top rather than centred in it: it lines up with the knob's body, not with the slot)
+    check(tab_to(ed, sync["knob"]), "and on to SYNC's")
+    sx, sy = knob_xy(sync["knob"])
+    left, top = sx - 20, sy - 20
+    r = ed.focus_rect()
+    check(r[:4] == (left - 2, top + 11, left + 42, top + 34),
+          f"the soft button's 44 wide and a row taller, to sit even round it ({r[:4]})")
+    check(r[2] - r[0] > 42, "wider than the knob it stands in for")
+    # nothing is focused with the switch off, so nothing is drawn
+    off = Editor(L)
+    L.sq8l_gl_ctr(off.v, 0, MODE_PAGE, MODE_SUB)
+    off.idle(2000)
+    off.click(knob_xy(glide["knob"]))
+    check(off.focus_rect()[:4] == (0, 0, 0, 0),
+          f"no rectangle while the switch is off ({off.focus_rect()[:4]})")
 
     print(f"{'FAILED' if failures else 'OK'}: {len(failures)} failure(s)")
     return 1 if failures else 0

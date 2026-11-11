@@ -201,8 +201,8 @@ always shows one parameter underlined, where the original only did after a click
 | Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
 | Alt+V | `nextSubPage()` |
 | Alt+L / E / M | the next page of the LFO / envelope / matrix group |
-| Shift / Ctrl / Cmd + Left / Right | the previous / next program, wrapping inside the bank |
-| Shift / Ctrl / Cmd + Up / Down | the previous / next bank, wrapping |
+| Shift or Ctrl (Cmd on macOS) + Left / Right | the previous / next program, wrapping inside the bank |
+| Shift or Ctrl (Cmd on macOS) + Up / Down | the previous / next bank, wrapping |
 
 A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
 the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the
@@ -211,15 +211,21 @@ no single button walks a group; `cycle` is false there, so Alt+V stays the way t
 The library arrows ignore *Down arrow loads next program*: that setting exists because a button
 with an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
 
-**The library takes three modifiers for one job**, which is deliberate and meant to be
+**The library takes two modifiers for one job**, which is deliberate and meant to be
 temporary. Alt was never a candidate - the right Alt of many layouts is AltGr, which sends
 Ctrl+Alt - so Shift was chosen first: it is the same key on both sides of every keyboard and
-claimed by nobody, and it is confirmed to arrive on all three platforms. Ctrl and Cmd are what
-most people reach for, and each had a reason not to arrive: macOS spends all four Ctrl+arrows
-on Mission Control and Spaces, and a Cmd chord reaches a view only through
-`performKeyEquivalent:`, which pugl did not answer until `patches/pugl-mac-keyboard.patch`
-(below). Both are accepted while users confirm which of them land in which host; when that is
-settled, the losing group goes and the rows above lose a column. Only the four arrows are a chord - anything wider and Cmd+Q would be
+claimed by nobody, and it is confirmed to arrive on all three platforms. The command key is
+what most people reach for, and it had a reason not to arrive: a Cmd chord reaches a view only
+through `performKeyEquivalent:`, which pugl did not answer until
+`patches/pugl-mac-keyboard.patch` (below). Both are accepted while users confirm which of them
+land in which host; when that is settled, the loser goes.
+
+`kKeyModCommand` is Ctrl, or Cmd on macOS - **never both**. Each system spends the other one on
+itself: macOS gives all four Ctrl+arrows to Mission Control and Spaces, Windows gives Win+arrows
+to snapping windows, and in each case the system takes the chord before the application is
+offered it. So a chord on the wrong one of the two would not work anyway, and claiming it would
+only take it from the user who had turned those system shortcuts off. `sq8l_gl_command_mod`
+hands the constant to the tests rather than letting them assume a platform. Only the four arrows are a chord - anything wider and Cmd+Q would be
 ours too.
 
 **A modifier with no chord is not a bare key.** `keyDown` takes the bare keys only when `mods`

@@ -827,8 +827,11 @@ void PlatformUiDrawn::runModal(ModalDialog& dialog) {
     if (dialog.modalResult == 0) dialog.clickCancel();  // the loop could not run
 }
 
-void PlatformUiDrawn::showModInfo(const std::vector<std::string>& lines) {
-    InfoLayer l(text_, "Modulation sources", lines, false, true);
+void PlatformUiDrawn::showInfo(const std::string& caption, const std::vector<std::string>& lines) {
+    // InfoLayer measures the widest line and grows the box to it, so nothing is wrapped, and it
+    // closes on Enter as well as on any other key or a click - no button of its own, as About
+    // has none and as the original's TModInfoForm had none.
+    InfoLayer l(text_, caption, lines, false, true);
     runLoop(l);
 }
 

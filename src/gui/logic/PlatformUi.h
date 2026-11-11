@@ -39,6 +39,26 @@ inline constexpr uint32_t kKeyModCommand = kKeyModSuper;
 inline constexpr uint32_t kKeyModCommand = kKeyModCtrl;
 #endif
 
+// (port, issue #45) How a chord is written for the reader, modifier first. Each carries its own
+// separator, because the two conventions differ in more than the word: macOS runs the symbols of
+// a chord together (Alt+1 is written there as the two characters U+2325 U+0031), every other
+// platform spells the modifier out and joins it with a plus.
+//
+// The symbols are UTF-8, and they are the only strings the editor hands a platform that are
+// not CP1252 - which is what the original's data is, what the platforms decode, and what has
+// no spelling for any of these characters. `showInfo` is where they go and the one call whose
+// text may be UTF-8, which its contract says. (With the drawn UI forced on macOS by
+// SQ8L_DRAWN_UI they are mojibake - a debug path, and Linux spells the words.)
+#ifdef __APPLE__
+inline constexpr const char* kKeyShiftPrefix = "\xE2\x87\xA7";    // U+21E7
+inline constexpr const char* kKeyAltPrefix = "\xE2\x8C\xA5";      // U+2325, the key says "alt"
+inline constexpr const char* kKeyCommandPrefix = "\xE2\x8C\x98";  // U+2318
+#else
+inline constexpr const char* kKeyShiftPrefix = "Shift+";
+inline constexpr const char* kKeyAltPrefix = "Alt+";
+inline constexpr const char* kKeyCommandPrefix = "Ctrl+";
+#endif
+
 // One entry of a popup menu, in the shape the VCL creates for TrackPopupMenu (and the oracle
 // captures in oracle/gui.py menu_tree): caption (with '&' hotkey markers where the VCL adds them),
 // flags and sub-menu.
@@ -113,9 +133,18 @@ public:
 
     // TModInfoForm / TAboutForm: also shown modally (ShowModal) and closed by a click (both)
     // or a key (ModInfo); nothing is returned to the editor.
-    //   showModInfo: the lines of the TMemo (FUN_0047cb80);
-    //   showAbout:   the TMemo text (DFM lines, each ending with CR LF), centred, no border.
-    virtual void showModInfo(const std::vector<std::string>& lines) = 0;
+    //   showInfo:  a caption and the lines of the TMemo (FUN_0047cb80). The caption is the
+    //              editor's, not the platform's - the port shows the key bindings through the
+    //              same window. **No line may be wrapped**: these are lists whose shape is
+    //              their meaning, and a native dialog that sizes itself to its text has to be
+    //              made to size itself to the longest line. Its text is the editor's own and
+    //              is **UTF-8**, not the CP1252 the original's data is in, because the macOS
+    //              key bindings are written with the keys' own symbols. Everything in
+    //              it is ASCII otherwise - the modulation lines are generated name tables -
+    //              so a platform may decode UTF-8 and fall back to CP1252 and be right both
+    //              ways round.
+    //   showAbout: the TMemo text (DFM lines, each ending with CR LF), centred, no border.
+    virtual void showInfo(const std::string& caption, const std::vector<std::string>& lines) = 0;
     virtual void showAbout(const std::string& text) = 0;
 };
 

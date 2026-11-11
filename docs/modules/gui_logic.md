@@ -201,8 +201,8 @@ always shows one parameter underlined, where the original only did after a click
 | Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
 | Alt+V | `nextSubPage()` |
 | Alt+L / E / M | the next page of the LFO / envelope / matrix group |
-| Shift or Ctrl (Cmd on macOS) + Left / Right | the previous / next program, wrapping inside the bank |
-| Shift or Ctrl (Cmd on macOS) + Up / Down | the previous / next bank, wrapping |
+| Ctrl (Cmd on macOS) + Left / Right | the previous / next program, wrapping inside the bank |
+| Ctrl (Cmd on macOS) + Up / Down | the previous / next bank, wrapping |
 
 A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
 the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the
@@ -211,14 +211,12 @@ no single button walks a group; `cycle` is false there, so Alt+V stays the way t
 The library arrows ignore *Down arrow loads next program*: that setting exists because a button
 with an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
 
-**The library takes two modifiers for one job**, which is deliberate and meant to be
-temporary. Alt was never a candidate - the right Alt of many layouts is AltGr, which sends
-Ctrl+Alt - so Shift was chosen first: it is the same key on both sides of every keyboard and
-claimed by nobody, and it is confirmed to arrive on all three platforms. The command key is
-what most people reach for, and it had a reason not to arrive: a Cmd chord reaches a view only
-through `performKeyEquivalent:`, which pugl did not answer until
-`patches/pugl-mac-keyboard.patch` (below). Both are accepted while users confirm which of them
-land in which host; when that is settled, the loser goes.
+**The library is on the command key.** Shift carried it for a while and no longer does: a Cmd
+chord reaches a view only through `performKeyEquivalent:`, which pugl did not answer until
+`patches/pugl-mac-keyboard.patch` (below), so Shift was the one modifier known to arrive
+everywhere while that was unproven. It is proven - confirmed by the user who reported it, in
+Cubase on macOS - so Shift went back to being Tab's alone. Alt was never a candidate for the
+library either way: the right Alt of many layouts is AltGr, which sends Ctrl+Alt.
 
 `kKeyModCommand` is Ctrl, or Cmd on macOS - **never both**. Each system spends the other one on
 itself: macOS gives all four Ctrl+arrows to Mission Control and Spaces, Windows gives Win+arrows
@@ -288,6 +286,25 @@ opening any page of a group puts it on the group's view rather than the page's o
 LFO2's second view answers the same question as LFO1's and moving to the next LFO should not
 also change the subject. A button that names its own view (buttDca1 and the rest) is
 unaffected. This is the mouse's behaviour too, not only the keyboard's.
+
+**Show key bindings...** (OPTIONS -> Keyboard, last, after a separator) lists what `keyDown`
+answers to, through the same `PlatformUi::showInfo` the modulation window uses - which is why
+that call took a caption: the title is the editor's business, not the platform's.
+`keyBindingsText` builds the lines and names the modifier with `kKeyCommandName`, so the list
+says the key that is really pressed. The item is never greyed, unlike the two above it: it is
+what tells a user what the switch above would give them, so it has to be readable before they
+turn it on.
+
+**No line of an info window may be wrapped** - these are lists whose shape is their meaning,
+and a wrapped line reads as two bindings. Each platform needs its own care for that: a Windows
+message box sizes itself to its text and only wraps past a width none of our lists approaches,
+the drawn `InfoLayer` measures the widest line and grows its box to it, but macOS needed real
+work. `NSAlert.informativeText` is laid out at the alert's own width, about 360 points, which
+the longest binding line exceeds - so the lines go in an accessory `NSTextField` instead, which
+is measured first and which the alert then grows to hold. It is monospaced so the dash columns
+line up, and sized from the widest line rather than from `fittingSize`, which is not reliable
+for a multi-line label. Enter closes all three: the OK button is the default button of the two
+native dialogs, and `InfoLayer` already closed on any key.
 
 **Page memory** (OPTIONS -> Keyboard -> *Page memory*, on) is per instance and travels in the
 plugin's state, not in `SQ8L.ini`: a project opens each instance where it was left, and two

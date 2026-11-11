@@ -36,7 +36,7 @@ public:
     void setCursorVisible(bool visible) override;
     void focusForm() override;
     void runModal(ModalDialog& dialog) override;
-    void showModInfo(const std::vector<std::string>& lines) override;
+    void showInfo(const std::string& caption, const std::vector<std::string>& lines) override;
     void showAbout(const std::string& text) override;
 
     void beginNameEdit(int left, int top, int width, int height, const std::string& text);

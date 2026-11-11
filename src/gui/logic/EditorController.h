@@ -263,6 +263,8 @@ private:
     void mtsCorrectPitchClick(MenuNode& item);  // port addition
     void showModInfo();         // FUN_0047c9c0
     void showAbout();           // 0x47d260
+    void showKeyBindings();     // (port, issue #45) OPTIONS -> Keyboard -> Show key bindings...
+    std::vector<std::string> keyBindingsText() const;
     // dialogs
     bool selectProgramDialog(const std::string& caption, const std::string& okCaption,
                              const std::string& cancelCaption, int& bank, int& prog);  // 0x47dd28

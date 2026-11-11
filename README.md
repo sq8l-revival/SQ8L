@@ -64,12 +64,12 @@ code and verified against the original plugin running inside an x86 emulator.
   **Tab** and **Shift+Tab** move between the knobs the page uses. **Alt+1/2/3**, **Alt+F**,
   **Alt+A**, **Alt+X** and **Alt+U** are the page buttons they stand for, pressed again to
   cycle that page's views as clicking the button does, **Alt+V** cycles the views on its own,
-  and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Shift** or **Ctrl**
+  and **Alt+L**, **Alt+E** and **Alt+M** walk the LFO, envelope and matrix pages. **Ctrl**
   (**Cmd** on macOS) with the left and right arrows steps through the programs, and with up and
-  down through the banks; both wrap round, as the on-screen UP/DOWN arrows now do too. (Two
-  modifiers for one job is temporary: Shift is the one confirmed to reach a plugin everywhere,
-  and the command key is what most people reach for, so both work until that is settled. The
-  other system's command key is left alone — Ctrl+arrows stay Mission Control's on macOS.)
+  down through the banks; both wrap round, as the on-screen UP/DOWN arrows now do too. The other
+  system's command key is left alone — Ctrl+arrows stay Mission Control's on macOS, and
+  Windows keeps Win+arrows for snapping. The whole list is in OPTIONS → *Keyboard → Show key
+  bindings...*.
   Anything else is left to the host, so its own shortcuts keep working — though *which* keys
   reach a plugin at all is the host's decision, and REAPER for one keeps those bound to its own
   actions unless *Send all keyboard input to plug-in* is on for the instance. A click anywhere

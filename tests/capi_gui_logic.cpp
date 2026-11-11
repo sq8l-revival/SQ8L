@@ -258,10 +258,10 @@ struct TestUi : PlatformUi {
             d.clickCancel();  // closed (WM_CLOSE)
         }
     }
-    void showModInfo(const std::vector<std::string>& lines) override {
+    void showInfo(const std::string& caption, const std::vector<std::string>& lines) override {
         std::string s = "[";
         for (size_t i = 0; i < lines.size(); i++) s += (i ? "," : "") + jstr(lines[i]);
-        events << "{\"ev\":\"modinfo\",\"lines\":" << s << "]}\n";
+        events << "{\"ev\":\"modinfo\",\"caption\":" << jstr(caption) << ",\"lines\":" << s << "]}\n";
     }
     void showAbout(const std::string& text) override {
         events << "{\"ev\":\"about\",\"text\":" << jstr(text) << "}\n";

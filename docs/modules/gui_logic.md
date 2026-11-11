@@ -201,22 +201,26 @@ always shows one parameter underlined, where the original only did after a click
 | Alt+1 / 2 / 3 / F / A / X / U | `pageButton(tag, true)` of buttOsc1-3, buttFilt, buttDca4, buttWav, buttModes |
 | Alt+V | `nextSubPage()` |
 | Alt+L / E / M | the next page of the LFO / envelope / matrix group |
-| Shift+Left / Right | the previous / next program, wrapping inside the bank |
-| Shift+Up / Down | the previous / next bank, wrapping |
+| Shift / Ctrl / Cmd + Left / Right | the previous / next program, wrapping inside the bank |
+| Shift / Ctrl / Cmd + Up / Down | the previous / next bank, wrapping |
 
 A chord that stands for a page button **is** that button, `cycle` and all: Alt+1 twice cycles
 the page's views exactly as clicking buttOsc1 twice does, which is what the test asserts - the
 chord against the click, not against a page number. The group chords are the exception, since
 no single button walks a group; `cycle` is false there, so Alt+V stays the way to the views.
-Shift+arrows ignore *Down arrow loads next program*: that setting exists because a button with
-an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
+The library arrows ignore *Down arrow loads next program*: that setting exists because a button
+with an arrow drawn on it is ambiguous about which way is "next", and an arrow key is not.
 
-**The library is on Shift and not on Ctrl or Alt**, which both looked more natural and are
-both unusable. macOS spends all four Ctrl+arrows on Mission Control and Spaces, so they are
-taken before any application sees them; Cmd is no answer either, since a Cmd chord is offered
-to the menu bar first and the host wins. Alt fails on the hardware instead: the right Alt of
-many layouts is AltGr, which sends Ctrl+Alt. Shift is the one modifier that is the same key on
-both sides of every keyboard and claimed by nobody.
+**The library takes three modifiers for one job**, which is deliberate and meant to be
+temporary. Alt was never a candidate - the right Alt of many layouts is AltGr, which sends
+Ctrl+Alt - so Shift was chosen first: it is the same key on both sides of every keyboard and
+claimed by nobody, and it is confirmed to arrive on all three platforms. Ctrl and Cmd are what
+most people reach for, and each has a reason it might not arrive: macOS spends all four
+Ctrl+arrows on Mission Control and Spaces, and a Cmd chord reaches a view through
+`performKeyEquivalent:`, which pugl does not answer (see below). Both are accepted while that
+is settled by users rather than by reasoning; when it is, one of the two groups goes and the
+rows above lose a column. Only the four arrows are a chord - anything wider and Cmd+Q would be
+ours too.
 
 **A modifier with no chord is not a bare key.** `keyDown` takes the bare keys only when `mods`
 is empty, so Cmd+Up - a Mac user reaching for the bank - is refused and left to the host rather
@@ -239,7 +243,32 @@ front - the Cubase and REAPER reports behind this. `patches/dpf-mac-key-passthro
 `patches/pugl-mac-key-next-responder.patch` fix it between them: DGL returns whether a widget
 took the key, the event callback turns "no" into `PUGL_FAILURE` (macOS only - X11 hands that
 same status back out of `puglUpdate`), and `keyDown:` sends an unwanted key on to the next
-responder, which is the host. Both are worth upstreaming; they are not SQ8L-specific.
+responder, which is the host. Both are worth upstreaming; they are not SQ8L-specific - JUCE's
+`keyDown:` is the same shape (`juce_NSViewComponentPeer_mac.mm`: handle it, else
+`sendSuperclassMessage`), which is why a JUCE plugin never had the problem. **Confirmed fixed**
+by the user who reported it, in Cubase on macOS.
+
+**What the next report settled, and what reasoning got wrong.** Shift+Tab was then reported
+dead on macOS while Tab worked, and JUCE has a translation for exactly that shape of bug:
+`-[NSEvent charactersIgnoringModifiers]` does not ignore shift, whatever its name says, so
+shift+tab can read as the back-tab character 0x19, which `vkOf` has no name for. The theory fit
+the symptom perfectly and was wrong - the host's own virtual keyboard was open and eating the
+keys before any reached the plugin, and Shift+Tab works once it is closed. So the back-tab
+translation is **not** carried: nothing here has ever been shown to produce 0x19. A mechanism
+that explains a symptom is not evidence that it caused it, least of all on a platform we cannot
+run.
+
+The same report is why the **Cmd chords are unproven rather than broken**. A Cmd chord is a
+"key equivalent": the system offers it to the views of the key window through
+`performKeyEquivalent:` and then to the main menu, with only what nobody claimed reaching
+`keyDown:`. pugl does not answer that method and JUCE does, so in theory a host's menu takes
+every Cmd chord before a DPF plugin sees it. But no Cmd chord has been shown failing to arrive
+- the report that suggested it came from the same session as the virtual keyboard - and they
+are now bound (above) so that a user can settle it. The patch is written and parked on the
+`wip/mac-key-equivalent` branch rather than carried here. Note if it ever lands: the macOS key
+patches have to become one file, because they rewrite the same lines of `keyDown:`, and a patch
+whose context a later one moved stops reverse-applying - which this CMakeLists reads as "not
+yet applied" and then fails to apply forward.
 
 **The LFO pages share one view and the envelope pages another** (`groupSub_`, `pageGroup`):
 opening any page of a group puts it on the group's view rather than the page's own, because

@@ -215,11 +215,11 @@ with an arrow drawn on it is ambiguous about which way is "next", and an arrow k
 temporary. Alt was never a candidate - the right Alt of many layouts is AltGr, which sends
 Ctrl+Alt - so Shift was chosen first: it is the same key on both sides of every keyboard and
 claimed by nobody, and it is confirmed to arrive on all three platforms. Ctrl and Cmd are what
-most people reach for, and each has a reason it might not arrive: macOS spends all four
-Ctrl+arrows on Mission Control and Spaces, and a Cmd chord reaches a view through
-`performKeyEquivalent:`, which pugl does not answer (see below). Both are accepted while that
-is settled by users rather than by reasoning; when it is, one of the two groups goes and the
-rows above lose a column. Only the four arrows are a chord - anything wider and Cmd+Q would be
+most people reach for, and each had a reason not to arrive: macOS spends all four Ctrl+arrows
+on Mission Control and Spaces, and a Cmd chord reaches a view only through
+`performKeyEquivalent:`, which pugl did not answer until `patches/pugl-mac-keyboard.patch`
+(below). Both are accepted while users confirm which of them land in which host; when that is
+settled, the losing group goes and the rows above lose a column. Only the four arrows are a chord - anything wider and Cmd+Q would be
 ours too.
 
 **A modifier with no chord is not a bare key.** `keyDown` takes the bare keys only when `mods`
@@ -258,17 +258,24 @@ translation is **not** carried: nothing here has ever been shown to produce 0x19
 that explains a symptom is not evidence that it caused it, least of all on a platform we cannot
 run.
 
-The same report is why the **Cmd chords are unproven rather than broken**. A Cmd chord is a
-"key equivalent": the system offers it to the views of the key window through
-`performKeyEquivalent:` and then to the main menu, with only what nobody claimed reaching
-`keyDown:`. pugl does not answer that method and JUCE does, so in theory a host's menu takes
-every Cmd chord before a DPF plugin sees it. But no Cmd chord has been shown failing to arrive
-- the report that suggested it came from the same session as the virtual keyboard - and they
-are now bound (above) so that a user can settle it. The patch is written and parked on the
-`wip/mac-key-equivalent` branch rather than carried here. Note if it ever lands: the macOS key
-patches have to become one file, because they rewrite the same lines of `keyDown:`, and a patch
-whose context a later one moved stops reverse-applying - which this CMakeLists reads as "not
-yet applied" and then fails to apply forward.
+**A Cmd chord reached no DPF plugin at all**, which is the second thing
+`patches/pugl-mac-keyboard.patch` fixes and why that file replaced the
+next-responder one. A Cmd chord is a *key equivalent*, and the system routes those its own
+way: it offers the event to the views of the key window through `performKeyEquivalent:`, then
+to the main menu, and only what nobody claimed reaches `keyDown:`. pugl does not answer that
+method, so a host's menu bar - which wants nearly every Cmd chord there is - took them all
+first. JUCE answers it, which is why the same chord works in a JUCE plugin in the same host;
+reported against SQ8L as Cmd+arrow doing nothing in Cubase on macOS. Answering it has two
+consequences the routing forces, both handled in the patch: only the first responder may
+answer (every view of the key window is offered the chord, so a background answer would take
+Cmd keys out of the host's hands), and a refused event has to be remembered, because the
+system then delivers it to `keyDown:` as well and the application would otherwise see one
+press twice.
+
+The two macOS key changes are **one patch file** because they rewrite the same lines of
+`keyDown:`. As separate files the earlier one stops reverse-applying once the later one lands,
+and the configure step reads a failed reverse-apply as "not yet applied" and then fails to
+apply it forward.
 
 **The LFO pages share one view and the envelope pages another** (`groupSub_`, `pageGroup`):
 opening any page of a group puts it on the group's view rather than the page's own, because

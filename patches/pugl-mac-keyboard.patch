@@ -1,0 +1,153 @@
+mac: let a key reach the application, and let one it refuses leave again.
+
+Two faults of the macOS backend, in one patch because they rewrite the same few
+lines of keyDown:. Both are the difference between a pugl plugin and a JUCE one
+on this platform, which is where both were found - juce_NSViewComponentPeer_mac.mm
+has the matching code for each, in one case with the matching comment.
+
+1. A key the application did not take died in the view. keyDown: dispatched the
+event and returned, so an embedded view - which is the host's first responder for
+as long as its window has the focus - swallowed every key it was handed, wanted
+or not. The host lost its own key commands and its on-screen keyboard while the
+plugin was in front. PUGL_FAILURE from the event handler now means "not mine" and
+the event goes on to [super keyDown:], which is Cocoa's way of passing one along.
+
+The status answers "is this keystroke mine", not "did this handler act on it".
+A view with a text field must claim a printable key even though the work is done
+by the PUGL_TEXT event, because the unhandled path hands the key on instead of
+calling interpretKeyEvents: - a key the application refused is not text it is
+composing, and the responder it goes to will do its own interpreting.
+
+2. A command chord never arrived at all. Such a chord is a "key equivalent", and
+the system routes those its own way: it offers the event to the views of the key
+window through performKeyEquivalent:, then to the main menu, and only what nobody
+claimed reaches keyDown:. A view that does not answer the method therefore never
+sees one the menu wants, which for a plugin embedded in a host means nearly all
+of them. Reported against SQ8L as command+arrow doing nothing in Cubase on macOS
+while the same chord works in a JUCE plugin there. The dispatch is the one
+keyDown: already did, factored out, so a key equivalent and an ordinary press
+reach the application identically and PUGL_FAILURE keeps its meaning in both.
+
+Two things that routing forces:
+
+Every view of the key window is offered the chord, whether it has the keyboard or
+not, so answering from the background would take command keys out of the host's
+hands while the user worked somewhere else. Only the first responder answers.
+
+An event refused here is delivered a second time, to keyDown:, once the menu has
+passed on it. Dispatching it again would show the application one press twice, so
+the refused event is remembered - timestamp and hardware key code, unique to one
+press between them - and keyDown: goes straight to its superclass when it sees
+that event again. JUCE guards the same way, over a wider set of fields.
+diff --git a/src/mac.h b/src/mac.h
+index 305cf30..a7b412b 100644
+--- a/src/mac.h
++++ b/src/mac.h
+@@ -37,6 +37,12 @@ struct PuglInternalsImpl {
+   PuglWindow*      window;
+   uint32_t         mods;
+   bool             mouseTracked;
++  // The last key equivalent performKeyEquivalent: refused, which the system delivers a
++  // second time to keyDown: once the menu has had its turn (identified by timestamp and
++  // hardware key code, which together are unique to one press).
++  double           keyEquivTime;
++  unsigned short   keyEquivCode;
++  bool             keyEquivValid;
+ };
+ 
+ #endif // PUGL_SRC_MAC_H
+diff --git a/src/mac.m b/src/mac.m
+index 977cd7e..c362830 100644
+--- a/src/mac.m
++++ b/src/mac.m
+@@ -664,12 +664,8 @@ handleCrossing(PuglWrapperView* view, NSEvent* event, const PuglEventType type)
+   puglDispatchEvent(puglview, &scrollEvent);
+ }
+ 
+-- (void)keyDown:(NSEvent*)event
++- (PuglStatus)dispatchKeyPress:(NSEvent*)event
+ {
+-  if (puglview->hints[PUGL_IGNORE_KEY_REPEAT] && [event isARepeat]) {
+-    return;
+-  }
+-
+   const NSPoint   wloc  = [self eventLocation:event];
+   const NSPoint   rloc  = [NSEvent mouseLocation];
+   const PuglKey   spec  = keySymToSpecial(event);
+@@ -692,13 +688,63 @@ handleCrossing(PuglWrapperView* view, NSEvent* event, const PuglEventType type)
+ 
+   PuglEvent pressEvent;
+   pressEvent.key = ev;
+-  puglDispatchEvent(puglview, &pressEvent);
++  return puglDispatchEvent(puglview, &pressEvent);
++}
++
++- (void)keyDown:(NSEvent*)event
++{
++  if (puglview->hints[PUGL_IGNORE_KEY_REPEAT] && [event isARepeat]) {
++    return;
++  }
++
++  // A key equivalent that performKeyEquivalent: refused arrives here a second time, once the
++  // menu has had its turn, and dispatching it again would show the application one press
++  // twice. It has seen this one: all that is left is to let the responder chain have it.
++  if (puglview->impl->keyEquivValid &&
++      puglview->impl->keyEquivTime == [event timestamp] &&
++      puglview->impl->keyEquivCode == [event keyCode]) {
++    puglview->impl->keyEquivValid = false;
++    [super keyDown:event];
++    return;
++  }
+ 
+-  if (!spec) {
++  // PUGL_FAILURE means the application did not take the key. Hand it on, or it dies here:
++  // an embedded view is the host's first responder while its window has the focus, so
++  // swallowing every key costs the host its own shortcuts and its virtual keyboard.
++  if ([self dispatchKeyPress:event] == PUGL_FAILURE) {
++    [super keyDown:event];
++    return;
++  }
++
++  if (!keySymToSpecial(event)) {
+     [self interpretKeyEvents:@[event]];
+   }
+ }
+ 
++// A chord with command held is a "key equivalent", which the system routes its own way: it
++// offers the event to the views of the key window through this method, then to the main menu,
++// and only what nobody claimed reaches keyDown:. A view that does not answer never sees one
++// the menu wants - and for a plugin embedded in a host, the menu bar wants nearly all of them.
++//
++// Answered only while the keyboard is actually ours. Every view of the key window is offered
++// the chord, focused or not, so a plugin that answered from the background would pull command
++// keys out of the host's hands while the user was working somewhere else entirely.
++- (BOOL)performKeyEquivalent:(NSEvent*)event
++{
++  if ([[self window] firstResponder] != self) {
++    return [super performKeyEquivalent:event];
++  }
++
++  if ([self dispatchKeyPress:event] != PUGL_FAILURE) {
++    return YES;
++  }
++
++  puglview->impl->keyEquivTime  = [event timestamp];
++  puglview->impl->keyEquivCode  = [event keyCode];
++  puglview->impl->keyEquivValid = true;
++  return [super performKeyEquivalent:event];
++}
++
+ - (void)keyUp:(NSEvent*)event
+ {
+   const NSPoint   wloc  = [self eventLocation:event];
+@@ -723,7 +769,9 @@ handleCrossing(PuglWrapperView* view, NSEvent* event, const PuglEventType type)
+ 
+   PuglEvent releaseEvent;
+   releaseEvent.key = ev;
+-  puglDispatchEvent(puglview, &releaseEvent);
++  if (puglDispatchEvent(puglview, &releaseEvent) == PUGL_FAILURE) {
++    [super keyUp:event];  // as in keyDown:, and in pairs: a host that saw the press wants it
++  }
+ }
+ 
+ - (BOOL)hasMarkedText

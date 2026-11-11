@@ -342,6 +342,7 @@ def main():
         ("sq8l_gl_editbuffer", [vp, ctypes.c_char_p], None),
         ("sq8l_gl_write_dotted", [vp, ctypes.c_int32, ctypes.c_int32, ctypes.c_char_p, ctypes.c_int32],
          ctypes.c_int32),
+        ("sq8l_gl_command_mod", [], ctypes.c_int32),
         ("sq8l_gl_version", [], ctypes.c_char_p),
     ]:
         getattr(L, name).argtypes = args
@@ -1265,7 +1266,11 @@ def main():
     # the wild: Shift is the one that is known to arrive everywhere.
     prog = lambda: int(ed.program()[1:])
     bank = lambda: ed.program()[0]
-    for mod, name in ((MOD_SHIFT, "Shift"), (MOD_CTRL, "Ctrl"), (MOD_SUPER, "Cmd")):
+    cmd_mod = L.sq8l_gl_command_mod()
+    cmd_name = {MOD_CTRL: "Ctrl", MOD_SUPER: "Cmd"}[cmd_mod]
+    other_mod = MOD_SUPER if cmd_mod == MOD_CTRL else MOD_CTRL
+    other_name = {MOD_CTRL: "Ctrl", MOD_SUPER: "Cmd"}[other_mod]
+    for mod, name in ((MOD_SHIFT, "Shift"), (cmd_mod, cmd_name)):
         start, bank0 = prog(), bank()
         check(ed.key(VK_RIGHT, mod), f"{name}+Right is taken")
         check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
@@ -1290,6 +1295,14 @@ def main():
         check(not ed.key(ord("Q"), mods), f"{name}+Q is left to the host")
     check(not ed.key(VK_UP, MOD_CTRL | MOD_ALT), "Ctrl+Alt+Up is left to the host")
     check(ed.knob(knob) == held, "and edits nothing")
+    # The other system's command key is that system's, not ours: macOS spends Ctrl+arrows on
+    # Mission Control and Windows spends Win+arrows on snapping, and each is taken before the
+    # application sees it - so claiming it would only take it from someone who turned those off.
+    was = ed.program()
+    check(not ed.key(VK_UP, other_mod), f"{other_name}+Up is not a chord on this platform")
+    check(not ed.key(VK_RIGHT, other_mod), f"nor is {other_name}+Right")
+    check(ed.program() == was, f"and {other_name}+arrows move nothing ({ed.program()})")
+    check(ed.knob(knob) == held, "and edit nothing")
     check(not ed.key(ord("V"), MOD_ALT | MOD_SUPER), "Cmd+Alt+V is not Alt+V")
     # Tab belongs to the slots, and only bare or with Shift: Ctrl+Tab and Cmd+Tab are the
     # host's and the OS's, and a library modifier does not make them ours.

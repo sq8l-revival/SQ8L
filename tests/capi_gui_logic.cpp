@@ -337,6 +337,9 @@ SQ8L_API void sq8l_gl_wheel(void* v, int32_t x, int32_t y, double delta, int32_t
 SQ8L_API int32_t sq8l_gl_key(void* v, int32_t vk, int32_t mods) {
     return int32_t(B(v)->ctl->keyDown(vk, uint32_t(mods)));
 }
+// (port, issue #45) Which of kKeyModCtrl / kKeyModSuper is the command key here. Asked rather
+// than assumed, so the test and the chord cannot grow different ideas of what the platform is.
+SQ8L_API int32_t sq8l_gl_command_mod(void) { return int32_t(sq8l::gui::kKeyModCommand); }
 // (port, issue #45) The knob slot the keys act on, or -1.
 SQ8L_API int32_t sq8l_gl_focus_knob(void* v) { return B(v)->ctl->focusKnob(); }
 // (port, issue #45) The focus rectangle in form coordinates, as both renderers draw it, and

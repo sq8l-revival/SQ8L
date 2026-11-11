@@ -24,9 +24,20 @@ enum : int {
 
 // (port, issue #45) Modifiers held with a key. Not the view's MK_* mouse flags, which have no
 // Alt bit: Windows never reports Alt with a mouse message, and the chords need it.
-// kKeyModSuper is the Command key on macOS and the Windows key elsewhere. No chord uses it;
-// it is here so that it is visible to `keyDown`, which refuses a modifier it has no chord for.
+// kKeyModSuper is the Command key on macOS and the Windows key elsewhere. It is translated
+// whether or not a chord wants it, so that `keyDown` can refuse what it has no chord for.
 enum : uint32_t { kKeyModShift = 1, kKeyModCtrl = 2, kKeyModAlt = 4, kKeyModSuper = 8 };
+
+// (port, issue #45) The modifier a user means by "the command key" on this platform. Each
+// system keeps the other one for itself: macOS spends all four Ctrl+arrows on Mission Control
+// and Spaces, Windows spends Win+arrows on snapping windows. Whichever it is, it is taken
+// before the application sees it - so a chord on the wrong one of the two would not work
+// anyway, and claiming it would only take it from a user who had turned those shortcuts off.
+#ifdef __APPLE__
+inline constexpr uint32_t kKeyModCommand = kKeyModSuper;
+#else
+inline constexpr uint32_t kKeyModCommand = kKeyModCtrl;
+#endif
 
 // One entry of a popup menu, in the shape the VCL creates for TrackPopupMenu (and the oracle
 // captures in oracle/gui.py menu_tree): caption (with '&' hotkey markers where the VCL adds them),

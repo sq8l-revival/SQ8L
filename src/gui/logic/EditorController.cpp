@@ -267,6 +267,10 @@ void EditorController::buildMenus() {
     // hidden while keyboard control is off - a submenu should show what it holds.
     size_t iKeyMemory = keyb.items.size();
     keyb.items.push_back(item("Page memory", 0, [this](MenuNode& n) { pageMemoryClick(n); }));
+    // Never greyed, unlike the two above: it is what tells a user what the switch above would
+    // give them, so it has to be readable before they turn it on.
+    keyb.items.push_back(line());
+    keyb.items.push_back(item("Show key bindings...", 0, [this](MenuNode&) { showKeyBindings(); }));
     iKeyboard = o.size();
     o.push_back(keyb);
     // Port additions: the original's hidden swapProgUpDn ini key, the load prompts, MTS-ESP
@@ -1458,17 +1462,16 @@ bool EditorController::keyDown(int vk, uint32_t mods) {
   // (port, issue #45) Shift and the arrows move through the library. The on-screen UP/DOWN
   // buttons have "Down arrow loads next program" to say which way they go, because a button
   // with an arrow on it is ambiguous; an arrow key is not, so it ignores that setting.
-  // The platform's command key does the same job - Ctrl, or Cmd on macOS, never both: each
-  // system keeps the other for itself (`kKeyModCommand`). Shift is the one modifier known to
-  // arrive everywhere, which is why it came first and why it stays for now.
-  // Only the four arrows: a chord any wider and Cmd+Q would be ours too.
-  if (mods == kKeyModShift || mods == kKeyModCommand) {
+  // The platform's command key - Ctrl, or Cmd on macOS, never both: each system keeps the
+  // other for itself (`kKeyModCommand`). Only the four arrows answer to it: a chord any wider
+  // and Cmd+Q would be ours too.
+  if (mods == kKeyModCommand) {
     switch (vk) {
     case kVkRight: selectProgram(prog() + 1); return true;
     case kVkLeft: selectProgram(prog() - 1); return true;
     case kVkDown: selectBank(bank() + 1); return true;
     case kVkUp: selectBank(bank() - 1); return true;
-    default: break;  // Shift+Tab is below; Ctrl+Tab and the rest fall through to the host
+    default: break;  // Ctrl+Tab, Cmd+Q and the rest fall through to the host below
     }
   }
   if (vk == kVkTab && (mods & ~kKeyModShift) == 0) {
@@ -1707,8 +1710,40 @@ void EditorController::pageMemoryClick(MenuNode& item) {  // (port, issue #45)
 }
 
 void EditorController::showModInfo() {  // FUN_0047c9c0
-    ui_.showModInfo(modulationUsage(host_.editBuffer().current()));
+    ui_.showInfo("Modulation sources", modulationUsage(host_.editBuffer().current()));
 }
+
+// (port, issue #45) What `keyDown` answers to, in the order a player meets it: the pages, then
+// the library, then the parameter under the focus. The `kKey*Prefix` strings write the chord
+// the way the platform does - the words and a plus, or the symbols of the keys themselves run
+// together on macOS - so the list names the keys that are really pressed, and Ctrl/Cmd is the
+// one the editor actually answers to there.
+std::vector<std::string> EditorController::keyBindingsText() const {
+    const std::string alt = kKeyAltPrefix, cmd = kKeyCommandPrefix, shift = kKeyShiftPrefix;
+    return {
+        alt + "1 - OSC 1/DCA 1",
+        alt + "2 - OSC 2/DCA 2",
+        alt + "3 - OSC 3/DCA 3",
+        alt + "F - Filter",
+        alt + "A - DCA 4 (Amp)",
+        alt + "X - Mixer",
+        alt + "U - Modes/Emulation",
+        alt + "L - LFO1/2/3/4 (cycle)",
+        alt + "E - ENV1/2/3/4 (cycle)",
+        alt + "M - MAT1/2/3 (cycle)",
+        alt + "V - Cycle through subpages",
+        cmd + "Up/Down - Cycle through banks",
+        cmd + "Left/Right - Cycle through programs in current bank",
+        "Tab/" + shift + "Tab - Focus next/previous parameter on current page",
+        "Up/Down - Increase/decrease parameter value by 1",
+        "Page Up/Page Down - Increase/decrease parameter value by 10",
+        "Home - Set parameter value to minimum",
+        "End - Set parameter value to maximum",
+        "Del - Set parameter value to default",
+    };
+}
+
+void EditorController::showKeyBindings() { ui_.showInfo("Key bindings", keyBindingsText()); }
 
 void EditorController::showAbout() { ui_.showAbout(aboutText()); }  // 0x47d260
 

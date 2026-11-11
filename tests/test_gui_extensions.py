@@ -1270,7 +1270,7 @@ def main():
     cmd_name = {MOD_CTRL: "Ctrl", MOD_SUPER: "Cmd"}[cmd_mod]
     other_mod = MOD_SUPER if cmd_mod == MOD_CTRL else MOD_CTRL
     other_name = {MOD_CTRL: "Ctrl", MOD_SUPER: "Cmd"}[other_mod]
-    for mod, name in ((MOD_SHIFT, "Shift"), (cmd_mod, cmd_name)):
+    for mod, name in ((cmd_mod, cmd_name),):
         start, bank0 = prog(), bank()
         check(ed.key(VK_RIGHT, mod), f"{name}+Right is taken")
         check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
@@ -1281,10 +1281,18 @@ def main():
         check(ed.key(VK_UP, mod), f"{name}+Up is taken")
         check(bank() == bank0, f"and {name}+Up comes back")
     bank0 = bank()
-    # ...and without one of them the same arrows edit the parameter, not the library
+    # ...and without it the same arrows edit the parameter, not the library
     was = ed.program()
     ed.key(VK_UP)
     check(ed.program() == was, "a bare arrow leaves the program alone")
+    # Shift carried the library while the command key was unproven on macOS. It is proven, so
+    # Shift is only Tab's now and a Shift+arrow is the host's again.
+    knob0 = ed.focus_knob()
+    held0 = ed.knob(knob0)
+    check(not ed.key(VK_RIGHT, MOD_SHIFT), "Shift+Right is no longer a chord")
+    check(not ed.key(VK_UP, MOD_SHIFT), "nor is Shift+Up")
+    check(ed.program() == was, f"and Shift+arrows move nothing ({ed.program()})")
+    check(ed.knob(knob0) == held0, "and edit nothing")
     # A modifier the editor has no chord for is still not a bare key, and a chord is only the
     # four arrows: Cmd+Home is the host's, or Cmd+Q would be ours too (issue #45).
     knob = ed.focus_knob()
@@ -1314,20 +1322,20 @@ def main():
     # Both ends wrap: the library is a ring, not a line. A program wraps inside its bank, so
     # the two chords stay orthogonal - Shift+Left/Right never changes the bank.
     while prog() != 0:
-        ed.key(VK_LEFT, MOD_SHIFT)
-    check(ed.key(VK_LEFT, MOD_SHIFT), "Shift+Left at program 000 is taken")
+        ed.key(VK_LEFT, cmd_mod)
+    check(ed.key(VK_LEFT, cmd_mod), f"{cmd_name}+Left at program 000 is taken")
     check(prog() == 127, f"and wraps to the last program of the bank ({prog()})")
     check(bank() == bank0, f"without changing bank ({bank()})")
-    ed.key(VK_RIGHT, MOD_SHIFT)
-    check(prog() == 0 and bank() == bank0, f"Shift+Right wraps back to 000 ({ed.program()})")
+    ed.key(VK_RIGHT, cmd_mod)
+    check(prog() == 0 and bank() == bank0, f"and wraps back to 000 ({ed.program()})")
     # The bank wraps the same way. Its button already did going up (4 mod 4 = 0); going down it
     # did not, because Delphi's mod keeps the sign of the dividend and setBank clamped the -1.
     while bank() != "A":
-        ed.key(VK_UP, MOD_SHIFT)
-    check(ed.key(VK_UP, MOD_SHIFT), "Shift+Up at bank A is taken")
+        ed.key(VK_UP, cmd_mod)
+    check(ed.key(VK_UP, cmd_mod), f"{cmd_name}+Up at bank A is taken")
     check(bank() == "D", f"and wraps to bank D ({bank()})")
-    ed.key(VK_DOWN, MOD_SHIFT)
-    check(bank() == "A", f"Shift+Down wraps back to A ({bank()})")
+    ed.key(VK_DOWN, cmd_mod)
+    check(bank() == "A", f"and wraps back to A ({bank()})")
     # The on-screen arrows go through the same selectProgram, and wrap with it
     check(prog() == 0, f"at program 000 for the arrow check ({prog()})")
     ed.click(DOWN)

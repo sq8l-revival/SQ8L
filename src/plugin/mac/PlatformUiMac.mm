@@ -5,6 +5,8 @@
 
 #include "PlatformUiMac.h"
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 
@@ -17,6 +19,14 @@ namespace {
 constexpr double kFormW = 626.0, kFormH = 430.0;
 NSString* ns(const std::string& s) {
     return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSWindowsCP1252StringEncoding] ?: @"";
+}
+// (port, issue #45) The one place a string from the editor is not CP1252: showInfo's lines are
+// the editor's own text and carry the Command symbol, which CP1252 cannot spell. UTF-8 first,
+// CP1252 if those bytes are not valid UTF-8 - and anything ASCII, which is the rest of what
+// that window shows, decodes the same either way.
+NSString* nsInfo(const std::string& s) {
+    NSString* u = [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding];
+    return u ?: ns(s);
 }
 std::string cpp(NSString* s) {
     NSData* d = [s dataUsingEncoding:NSWindowsCP1252StringEncoding allowLossyConversion:YES];
@@ -488,13 +498,36 @@ void PlatformUiMac::runModal(ModalDialog& dialog) {
     [panel close];
 }
 
-void PlatformUiMac::showModInfo(const std::vector<std::string>& lines) {
-    std::string text;
-    for (const std::string& l : lines) text += l + "\n";
+void PlatformUiMac::showInfo(const std::string& caption, const std::vector<std::string>& lines) {
     NSAlert* a = [NSAlert new];
-    a.messageText = @"Modulation sources";
-    a.informativeText = ns(text);
-    [a addButtonWithTitle:@"OK"];
+    a.messageText = nsInfo(caption);
+    // Not informativeText: that is laid out at the alert's own width (about 360 points of
+    // text) and wraps anything longer, which breaks a list in the middle of a line. An
+    // accessory view is measured first and the alert grows to hold it, so every line stays
+    // whole. Monospaced so that the dash columns line up, and sized from the widest line
+    // rather than from fittingSize, which is not reliable for a multi-line label.
+    NSFont* font = [NSFont monospacedSystemFontOfSize:[NSFont smallSystemFontSize]
+                                               weight:NSFontWeightRegular];
+    NSDictionary* attrs = @{NSFontAttributeName : font};
+    std::string text;
+    CGFloat width = 0;
+    for (size_t i = 0; i < lines.size(); i++) {
+        if (i) text += "\n";
+        text += lines[i];
+        width = std::max(width, [nsInfo(lines[i]) sizeWithAttributes:attrs].width);
+    }
+    const CGFloat lineH = std::ceil(font.ascender - font.descender + font.leading);
+    NSTextField* label = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    label.editable = NO;
+    label.selectable = YES;
+    label.bordered = NO;
+    label.drawsBackground = NO;
+    label.font = font;
+    label.stringValue = nsInfo(text);
+    label.maximumNumberOfLines = 0;
+    label.frame = NSMakeRect(0, 0, std::ceil(width) + 4, lineH * CGFloat(lines.size()) + 4);
+    a.accessoryView = label;
+    [a addButtonWithTitle:@"OK"];  // the only button, so it is the default one: Enter closes
     Impl::Released unlocked(impl_->hooks);
     [a runModal];
 }

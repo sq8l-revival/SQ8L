@@ -59,7 +59,7 @@ public:
     void setCursorVisible(bool visible) override;
     void focusForm() override;
     void runModal(ModalDialog& dialog) override;
-    void showModInfo(const std::vector<std::string>& lines) override;
+    void showInfo(const std::string& caption, const std::vector<std::string>& lines) override;
     void showAbout(const std::string& text) override;
 
     // Program name box: edit the text in place over the form rectangle.

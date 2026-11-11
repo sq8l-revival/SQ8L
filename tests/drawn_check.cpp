@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 40; i++) mod.push_back("LFO" + std::to_string(i % 4 + 1) + " -> OSC" + std::to_string(i % 3 + 1));
     H.shot("modinfo");
     H.key('A');
-    ui.showModInfo(mod);
+    ui.showInfo("Modulation sources", mod);
     check(!ui.modal(), "Modulation sources closes with a key");
 
     std::printf("program name box:\n");

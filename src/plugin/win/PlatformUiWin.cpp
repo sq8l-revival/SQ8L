@@ -388,11 +388,13 @@ void PlatformUiWin::runModal(ModalDialog& dialog) {
     SetActiveWindow(owner);
 }
 
-void PlatformUiWin::showModInfo(const std::vector<std::string>& lines) {
+void PlatformUiWin::showInfo(const std::string& caption, const std::vector<std::string>& lines) {
     std::string text;
     for (const std::string& l : lines) text += l + "\r\n";
     Impl::Released unlocked(impl_->hooks);
-    MessageBoxA(impl_->hwnd, text.c_str(), "Modulation sources", MB_OK);
+    // A message box sizes itself to its text and only wraps past a width no list of ours comes
+    // near, so the lines stay whole. Its OK button is the default one, so Enter closes it.
+    MessageBoxA(impl_->hwnd, text.c_str(), caption.c_str(), MB_OK);
 }
 
 void PlatformUiWin::showAbout(const std::string& text) {

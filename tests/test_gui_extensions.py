@@ -1260,34 +1260,43 @@ def main():
     e.idle()
     check(e.page() == (lfo1[0], view[1]), f"and the LFOs kept their own ({e.page()})")
 
-    # Shift + the arrows move through the library (the program number reads "<bank><nnn>")
+    # Shift, Ctrl and Cmd + the arrows all move through the library (the program number reads
+    # "<bank><nnn>"). Three modifiers for one job while the Ctrl/Cmd pair is being proven in
+    # the wild: Shift is the one that is known to arrive everywhere.
     prog = lambda: int(ed.program()[1:])
     bank = lambda: ed.program()[0]
-    start, bank0 = prog(), bank()
-    check(ed.key(VK_RIGHT, MOD_SHIFT), "Shift+Right is taken")
-    check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
-    check(ed.key(VK_LEFT, MOD_SHIFT), "Shift+Left is taken")
-    check(prog() == start, "and Shift+Left the previous one")
-    check(ed.key(VK_DOWN, MOD_SHIFT), "Shift+Down is taken")
-    check(bank() != bank0, f"Shift+Down moves to another bank ({bank0} -> {bank()})")
-    check(ed.key(VK_UP, MOD_SHIFT), "Shift+Up is taken")
-    check(bank() == bank0, "and Shift+Up comes back")
-    # ...and without Shift the same arrows edit the parameter, not the library
+    for mod, name in ((MOD_SHIFT, "Shift"), (MOD_CTRL, "Ctrl"), (MOD_SUPER, "Cmd")):
+        start, bank0 = prog(), bank()
+        check(ed.key(VK_RIGHT, mod), f"{name}+Right is taken")
+        check(prog() == start + 1, f"and loads the next program ({start} -> {prog()})")
+        check(ed.key(VK_LEFT, mod), f"{name}+Left is taken")
+        check(prog() == start, f"and {name}+Left the previous one")
+        check(ed.key(VK_DOWN, mod), f"{name}+Down is taken")
+        check(bank() != bank0, f"{name}+Down moves to another bank ({bank0} -> {bank()})")
+        check(ed.key(VK_UP, mod), f"{name}+Up is taken")
+        check(bank() == bank0, f"and {name}+Up comes back")
+    bank0 = bank()
+    # ...and without one of them the same arrows edit the parameter, not the library
     was = ed.program()
     ed.key(VK_UP)
     check(ed.program() == was, "a bare arrow leaves the program alone")
-    # A modifier the editor has no chord for is not a bare key: the Mac user pressing Cmd+Up
-    # for the bank must not silently nudge a knob instead (Cmd is kKeyModSuper, issue #45).
-    # Ctrl is among them now that the library has moved to Shift - macOS spends all four
-    # Ctrl+arrows on Mission Control and Spaces, so they reached no application there.
+    # A modifier the editor has no chord for is still not a bare key, and a chord is only the
+    # four arrows: Cmd+Home is the host's, or Cmd+Q would be ours too (issue #45).
     knob = ed.focus_knob()
     held = ed.knob(knob)
     for mods, name in ((MOD_CTRL, "Ctrl"), (MOD_SUPER, "Cmd"), (MOD_CTRL | MOD_ALT, "Ctrl+Alt")):
-        check(not ed.key(VK_UP, mods), f"{name}+Up is left to the host")
-        check(ed.knob(knob) == held, f"and {name}+Up edits nothing")
         check(not ed.key(VK_HOME, mods), f"{name}+Home is left to the host")
         check(ed.knob(knob) == held, f"and {name}+Home edits nothing")
+        check(not ed.key(ord("Q"), mods), f"{name}+Q is left to the host")
+    check(not ed.key(VK_UP, MOD_CTRL | MOD_ALT), "Ctrl+Alt+Up is left to the host")
+    check(ed.knob(knob) == held, "and edits nothing")
     check(not ed.key(ord("V"), MOD_ALT | MOD_SUPER), "Cmd+Alt+V is not Alt+V")
+    # Tab belongs to the slots, and only bare or with Shift: Ctrl+Tab and Cmd+Tab are the
+    # host's and the OS's, and a library modifier does not make them ours.
+    focus0 = ed.focus_knob()
+    check(not ed.key(VK_TAB, MOD_CTRL), "Ctrl+Tab is left to the host")
+    check(not ed.key(VK_TAB, MOD_SUPER), "Cmd+Tab is left to the OS")
+    check(ed.focus_knob() == focus0, f"and neither moves the focus ({ed.focus_knob()})")
 
     # Both ends wrap: the library is a ring, not a line. A program wraps inside its bank, so
     # the two chords stay orthogonal - Shift+Left/Right never changes the bank.

@@ -1458,15 +1458,18 @@ bool EditorController::keyDown(int vk, uint32_t mods) {
   // (port, issue #45) Shift and the arrows move through the library. The on-screen UP/DOWN
   // buttons have "Down arrow loads next program" to say which way they go, because a button
   // with an arrow on it is ambiguous; an arrow key is not, so it ignores that setting.
-  // Shift, not Ctrl: macOS spends all four Ctrl+arrows on Mission Control and Spaces, so no
-  // application sees them there. Not Alt either - the right Alt of many layouts is AltGr.
-  if (mods == kKeyModShift) {
+  // Ctrl and Cmd do the same job. Shift is the one modifier known to arrive everywhere: the
+  // other two are what a user reaches for first, but macOS spends all four Ctrl+arrows on
+  // Mission Control and takes a Cmd chord through a path of its own (`performKeyEquivalent:`,
+  // which is why Shift came first). Both are kept until the pair is proven in the wild.
+  // Only the four arrows: a chord any wider and Cmd+Q would be ours too.
+  if (mods == kKeyModShift || mods == kKeyModCtrl || mods == kKeyModSuper) {
     switch (vk) {
     case kVkRight: selectProgram(prog() + 1); return true;
     case kVkLeft: selectProgram(prog() - 1); return true;
     case kVkDown: selectBank(bank() + 1); return true;
     case kVkUp: selectBank(bank() - 1); return true;
-    default: break;  // Shift+Tab is below
+    default: break;  // Shift+Tab is below; Ctrl+Tab and the rest fall through to the host
     }
   }
   if (vk == kVkTab && (mods & ~kKeyModShift) == 0) {
